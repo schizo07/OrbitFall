@@ -1,0 +1,104 @@
+"""COLOSSUS, rig v2: same geometry as colossus.py, split into articulated limbs (see rigkit.py).
+Leg_n / Joint_n use the old Joint numbering: 1 = right front, 2 = left front, 3 = right rear, 4 = left rear (left = +X)."""
+import sys, os, math
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from mathutils import Vector, Matrix
+import kit
+import rigkit
+from kit import GUNMETAL, DARK, RUST, AMBER
+
+VENT = (255, 105, 28)
+
+
+def build(ox=0.0, oy=0.0):
+    rig = rigkit.Rig("colossus", "cog")
+    body = rig.colour("metal", GUNMETAL, "Metal")
+    plates = rig.colour("rust", RUST)
+    dark = rig.colour("dark", DARK)
+    names = {(-1, -1): 1, (1, -1): 2, (-1, 1): 3, (1, 1): 4}
+
+    # ---- Body (root): foundry box, glacis, side armour, cab, chimneys, reactor housing and fins
+    rig.limb("Body", "body", None, pivot=(0, 0, 13.0))
+    zb, zt = 12.4, 19.0
+    body.hull([(-6.8, -7.6, zb), (6.8, -7.6, zb), (-6.8, 8.2, zb), (6.8, 8.2, zb),
+               (-6.0, -6.9, zt), (6.0, -6.9, zt), (-6.0, 7.6, zt), (6.0, 7.6, zt)], bevel=1.0, seg=3)
+    dark.box((10.0, 12.0, 1.0), (0, 0.3, 12.1), bevel=0.3, seg=1)
+
+    def fy(z):
+        return -7.6 + 0.7 * (z - zb) / (zt - zb)
+    pz0, pz1, hw = 13.4, 18.2, 5.6
+    d = 0.7
+    plates.hull([(-hw, fy(pz0) - d, pz0), (hw, fy(pz0) - d, pz0), (-hw, fy(pz1) - d, pz1), (hw, fy(pz1) - d, pz1),
+                 (-hw, fy(pz0) + 0.3, pz0), (hw, fy(pz0) + 0.3, pz0), (-hw, fy(pz1) + 0.3, pz1), (hw, fy(pz1) + 0.3, pz1)],
+                bevel=0.35, seg=2)
+    pts = [(x, fy(z) - d, z) for z in (14.2, 17.4) for x in (-4.2, -1.4, 1.4, 4.2)]
+    plates.rivets(pts, r=0.32, normal=(0, -1, 0.08))
+    dark.gear(2.0, 1.6, 12, 0.4, (0, fy(15.8) - d - 0.1, 15.8), rot=(90, 0, 0), bevel=0)
+    dark.cyl(0.7, 0.6, (0, fy(15.8) - d - 0.2, 15.8), rot=(90, 0, 0), verts=8, bevel=0)
+    for sx in (-1, 1):
+        plates.box((0.7, 11.0, 4.0), (sx * 6.4, 0.3, 16.0), rot=(0, -sx * 5.5, 0), bevel=0.25, seg=2)
+        for yy in (-4.2, -1.4, 1.4, 4.2):
+            plates.rivets([(sx * 6.8, yy, 14.3), (sx * 6.8, yy, 17.7)], r=0.28, normal=(sx, 0, 0.1))
+        dark.gear(2.2, 1.8, 12, 0.4, (sx * 6.95, 0.3, 16.0), rot=(0, 90, 0), bevel=0)
+        dark.cyl(0.7, 0.6, (sx * 7.05, 0.3, 16.0), rot=(0, 90, 0), verts=8, bevel=0)
+    body.box((8.0, 6.8, 2.8), (0, -1.6, 20.2), bevel=0.65, seg=3, taper=(0.88, 0.9))
+    dark.box((6.0, 0.5, 0.8), (0, -4.7, 20.4), bevel=0.15, seg=2)
+    plates.box((5.6, 0.4, 0.5), (0, -4.85, 19.5), bevel=0.12, seg=2)
+    plates.box((6.0, 3.6, 0.4), (0, -1.2, 21.7), bevel=0.15, seg=2)
+    for sx in (-1, 1):
+        dark.cyl(0.95, 3.4, (sx * 3.0, 4.6, 20.6), r2=1.1, verts=12, bevel=0.1)
+        plates.cyl(1.3, 0.4, (sx * 3.0, 4.6, 22.35), verts=12, bevel=0.1)
+    dark.box((8.0, 1.0, 4.2), (0, 8.1, 16.0), bevel=0.3, seg=2)                         # reactor housing frame
+    for i in range(4):
+        dark.box((6.8, 0.45, 0.22), (0, 9.05, 15.0 + i * 0.7), bevel=0.04, seg=1)        # louvres over the glow
+    for i in range(9):
+        dark.box((0.35, 1.8, 2.2), (-4.0 + i * 1.0, 8.5, 18.1), bevel=0.05, seg=1)
+    for sx in (-1, 1):
+        for i in range(4):
+            dark.box((0.3, 2.6, 1.3), (sx * 4.1, 3.0 - i * 1.0 - 4.0 * 0 + 0.0, 19.9), bevel=0.04, seg=1)
+
+    core = rig.solid("Core", VENT, "Neon", "weak", parent="Body")
+    core.box((6.6, 0.6, 2.9), (0, 8.65, 16.0), bevel=0.25, seg=2)                         # glowing reactor vent
+
+    # ---- four walking legs: Upper (hip -> knee), Lower (knee -> foot); glowing knee = separate weak object
+    for (sx, sy), n in sorted(names.items(), key=lambda kv: kv[1]):
+        hip = Vector((sx * 5.2, sy * 5.8, 13.0))
+        knee = Vector((sx * 8.3, sy * 8.9, 8.0))
+        ankle = Vector((sx * 9.2, sy * 9.9, 1.7))
+        ax = Vector((-sy, sx, 0)).normalized()
+        rig.limb("Leg_%d_Upper" % n, "limb", "Body", pivot=tuple(hip))
+        dark.ball(2.5, tuple(hip), segs=12)
+        body.tube(tuple(hip), tuple(knee), 2.1, r2=1.9, verts=10, bevel=0.2)               # thigh
+        dark.tube(tuple(knee - ax * 0.45), tuple(knee + ax * 0.45), 3.0, verts=14, bevel=0)   # equator band
+        plates.tube(tuple(hip + (knee - hip) * 0.16), tuple(hip + (knee - hip) * 0.68), 2.5, r2=2.3, verts=10, bevel=0.15)  # sleeve
+        joint = rig.solid("Joint_%d" % n, AMBER, "Neon", "weak", parent="Leg_%d_Upper" % n, pivot=tuple(knee))
+        joint.ball(2.75, tuple(knee), segs=16)                                              # glowing knee
+        rig.limb("Leg_%d_Lower" % n, "limb", "Leg_%d_Upper" % n, pivot=tuple(knee))
+        body.tube(tuple(knee), tuple(ankle), 2.0, r2=1.6, verts=10, bevel=0.2)             # shin
+        dark.cyl(2.1, 0.9, (ankle.x, ankle.y, 2.0), verts=12, bevel=0.1, seg=1)               # ankle
+        body.box((5.8, 6.6, 1.5), (ankle.x, ankle.y + 0.2, 0.75), bevel=0.55, seg=3)        # foot pad
+        plates.box((5.9, 1.7, 1.3), (ankle.x, ankle.y - 3.0, 0.7), bevel=0.5, seg=3)    # toe cap
+
+    rig.build(ox, oy)
+    return rig
+
+
+def _pose():
+    p = {}
+    # diagonal gait: legs 1 (R front) + 4 (L rear) swing forward & lift; 2 + 3 push back
+    for n, s, fwd in ((1, -1, True), (2, 1, False), (3, -1, False), (4, 1, True)):
+        if fwd:
+            p["Leg_%d_Upper" % n] = (0, -s * 10, -s * 14)
+            p["Leg_%d_Lower" % n] = (0, -s * 14, 0)
+        else:
+            p["Leg_%d_Upper" % n] = (0, 0, s * 12)
+            p["Leg_%d_Lower" % n] = (0, s * 6, 0)
+    return p
+
+
+POSE = _pose()
+
+if __name__ == "__main__":
+    kit.reset()
+    rig = build()
+    rigkit.finish(rig, dict(target=(0, 0, 10.5), dist=62, height=20, yaw=-35, floor=40, lens=50), POSE, budget=(4000, 16000))

@@ -1,0 +1,11 @@
+/build/
+*.rbxl.lock
+*.rbxlx.lock
+.DS_Store
+/art/out/
+/.rojo-mirror/
+__pycache__/
+*.pyc
+
+# Not for the repo: internal notes and docs (game files only)
+/docs/

@@ -1,0 +1,9137 @@
+{
+  "tinker": {
+    "rigVersion": 2,
+    "fbx": "fbx/tinker_rig.fbx",
+    "texture": "textures/cog_palette.png",
+    "size_studs_roblox_xyz": [
+      4.88,
+      4.56,
+      4.29
+    ],
+    "bbox_center_roblox": [
+      -0.19,
+      2.28,
+      -0.896
+    ],
+    "weak_spots": [
+      "Eye"
+    ],
+    "triangles_total": 9580,
+    "palette": [
+      {
+        "index": 0,
+        "name": "GUNMETAL",
+        "rgb": [
+          96,
+          110,
+          132
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "DARK",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "RUST",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "YELLOW",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          1.7,
+          0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1812
+      },
+      {
+        "name": "Head",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          3.05,
+          -0.55
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1800
+      },
+      {
+        "name": "Eye",
+        "role": "weak",
+        "parent": "Head",
+        "pivot": [
+          -0.0,
+          3.55,
+          -1.62
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 440,
+        "rgb": [
+          255,
+          150,
+          25
+        ]
+      },
+      {
+        "name": "Leg_L_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.95,
+          1.7,
+          0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 776
+      },
+      {
+        "name": "Leg_L_Lower",
+        "role": "limb",
+        "parent": "Leg_L_Upper",
+        "pivot": [
+          -0.95,
+          1.1,
+          0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 732
+      },
+      {
+        "name": "Leg_R_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.95,
+          1.7,
+          0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 776
+      },
+      {
+        "name": "Leg_R_Lower",
+        "role": "limb",
+        "parent": "Leg_R_Upper",
+        "pivot": [
+          0.95,
+          1.1,
+          0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 732
+      },
+      {
+        "name": "Arm_R",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          1.5,
+          3.0,
+          -0.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1216
+      },
+      {
+        "name": "Arm_L",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -1.5,
+          3.0,
+          -0.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1296
+      }
+    ],
+    "assetId": "77274895704849",
+    "legacyParts": [
+      {
+        "name": "Body",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 1192
+      },
+      {
+        "name": "Legs",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 704
+      },
+      {
+        "name": "Arm_R",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 352
+      },
+      {
+        "name": "Plates",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 2340
+      },
+      {
+        "name": "Dark",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 3748
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 356
+      },
+      {
+        "name": "Eye",
+        "rgb": [
+          255,
+          150,
+          25
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 440
+      }
+    ],
+    "rigAssetId": "119878870001998"
+  },
+  "rivet": {
+    "rigVersion": 2,
+    "fbx": "fbx/rivet_rig.fbx",
+    "texture": "textures/cog_palette.png",
+    "size_studs_roblox_xyz": [
+      6.07,
+      6.97,
+      6.22
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      3.485,
+      -0.79
+    ],
+    "weak_spots": [
+      "Eye"
+    ],
+    "triangles_total": 9124,
+    "palette": [
+      {
+        "index": 0,
+        "name": "GUNMETAL",
+        "rgb": [
+          96,
+          110,
+          132
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "DARK",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "RUST",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "YELLOW",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          3.4,
+          -0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 2548
+      },
+      {
+        "name": "Head",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          5.85,
+          -0.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 620
+      },
+      {
+        "name": "Eye",
+        "role": "weak",
+        "parent": "Head",
+        "pivot": [
+          -0.0,
+          6.1,
+          -1.2
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          255,
+          70,
+          45
+        ]
+      },
+      {
+        "name": "Leg_L_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -1.15,
+          3.4,
+          -0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 604
+      },
+      {
+        "name": "Leg_L_Lower",
+        "role": "limb",
+        "parent": "Leg_L_Upper",
+        "pivot": [
+          -1.15,
+          2.2,
+          -0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 892
+      },
+      {
+        "name": "Leg_R_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          1.15,
+          3.4,
+          -0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 604
+      },
+      {
+        "name": "Leg_R_Lower",
+        "role": "limb",
+        "parent": "Leg_R_Upper",
+        "pivot": [
+          1.15,
+          2.2,
+          -0.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 892
+      },
+      {
+        "name": "Arm_R",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.2,
+          5.0,
+          -0.15
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1428
+      },
+      {
+        "name": "Arm_L",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -2.2,
+          5.0,
+          -0.15
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1428
+      }
+    ],
+    "assetId": "91801305641542",
+    "legacyParts": [
+      {
+        "name": "Body",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 484
+      },
+      {
+        "name": "Legs",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 808
+      },
+      {
+        "name": "Arm_L",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 564
+      },
+      {
+        "name": "Arm_R",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 564
+      },
+      {
+        "name": "Plates",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 2392
+      },
+      {
+        "name": "Dark",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 3308
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 456
+      },
+      {
+        "name": "Eye",
+        "rgb": [
+          255,
+          70,
+          45
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 108
+      }
+    ],
+    "rigAssetId": "130021338060457"
+  },
+  "bulwark": {
+    "rigVersion": 2,
+    "fbx": "fbx/bulwark_rig.fbx",
+    "texture": "textures/cog_palette.png",
+    "size_studs_roblox_xyz": [
+      9.56,
+      6.6,
+      9.1
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      3.3,
+      -1.15
+    ],
+    "weak_spots": [
+      "Core"
+    ],
+    "triangles_total": 9420,
+    "palette": [
+      {
+        "index": 0,
+        "name": "GUNMETAL",
+        "rgb": [
+          96,
+          110,
+          132
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "DARK",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "RUST",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "YELLOW",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          3.05,
+          1.05
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 3240
+      },
+      {
+        "name": "Core",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          5.55,
+          0.8
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 440,
+        "rgb": [
+          255,
+          150,
+          25
+        ]
+      },
+      {
+        "name": "Shield",
+        "role": "armor",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          2.65,
+          -2.207
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1500
+      },
+      {
+        "name": "Leg_1",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -2.5,
+          3.05,
+          -0.1
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 652
+      },
+      {
+        "name": "Leg_2",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.5,
+          3.05,
+          -0.1
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 652
+      },
+      {
+        "name": "Leg_3",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -2.5,
+          3.05,
+          2.2
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 652
+      },
+      {
+        "name": "Leg_4",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.5,
+          3.05,
+          2.2
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 652
+      },
+      {
+        "name": "Arm_R",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.85,
+          3.0,
+          -1.5
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 816
+      },
+      {
+        "name": "Arm_L",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -2.85,
+          3.0,
+          -1.5
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 816
+      }
+    ],
+    "assetId": "74947540705546",
+    "legacyParts": [
+      {
+        "name": "Body",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 504
+      },
+      {
+        "name": "Legs",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 1612
+      },
+      {
+        "name": "Arm_L",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 568
+      },
+      {
+        "name": "Arm_R",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 568
+      },
+      {
+        "name": "Shield",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 2188
+      },
+      {
+        "name": "Dark",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 3316
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 220
+      },
+      {
+        "name": "Core",
+        "rgb": [
+          255,
+          150,
+          25
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 440
+      }
+    ],
+    "rigAssetId": "121709771310785"
+  },
+  "colossus": {
+    "rigVersion": 2,
+    "fbx": "fbx/colossus_rig.fbx",
+    "texture": "textures/cog_palette.png",
+    "size_studs_roblox_xyz": [
+      24.3,
+      22.55,
+      27.15
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      11.275,
+      -0.175
+    ],
+    "weak_spots": [
+      "Core",
+      "Joint_1",
+      "Joint_2",
+      "Joint_3",
+      "Joint_4"
+    ],
+    "triangles_total": 8936,
+    "palette": [
+      {
+        "index": 0,
+        "name": "GUNMETAL",
+        "rgb": [
+          96,
+          110,
+          132
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "DARK",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "RUST",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "YELLOW",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          13.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 3980
+      },
+      {
+        "name": "Core",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          16.0,
+          8.65
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          255,
+          105,
+          28
+        ]
+      },
+      {
+        "name": "Leg_1_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          5.2,
+          13.0,
+          -5.8
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 404
+      },
+      {
+        "name": "Joint_1",
+        "role": "weak",
+        "parent": "Leg_1_Upper",
+        "pivot": [
+          8.3,
+          8.0,
+          -8.9
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 224,
+        "rgb": [
+          255,
+          150,
+          25
+        ]
+      },
+      {
+        "name": "Leg_1_Lower",
+        "role": "limb",
+        "parent": "Leg_1_Upper",
+        "pivot": [
+          8.3,
+          8.0,
+          -8.9
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 584
+      },
+      {
+        "name": "Leg_2_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -5.2,
+          13.0,
+          -5.8
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 404
+      },
+      {
+        "name": "Joint_2",
+        "role": "weak",
+        "parent": "Leg_2_Upper",
+        "pivot": [
+          -8.3,
+          8.0,
+          -8.9
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 224,
+        "rgb": [
+          255,
+          150,
+          25
+        ]
+      },
+      {
+        "name": "Leg_2_Lower",
+        "role": "limb",
+        "parent": "Leg_2_Upper",
+        "pivot": [
+          -8.3,
+          8.0,
+          -8.9
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 584
+      },
+      {
+        "name": "Leg_3_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          5.2,
+          13.0,
+          5.8
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 404
+      },
+      {
+        "name": "Joint_3",
+        "role": "weak",
+        "parent": "Leg_3_Upper",
+        "pivot": [
+          8.3,
+          8.0,
+          8.9
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 224,
+        "rgb": [
+          255,
+          150,
+          25
+        ]
+      },
+      {
+        "name": "Leg_3_Lower",
+        "role": "limb",
+        "parent": "Leg_3_Upper",
+        "pivot": [
+          8.3,
+          8.0,
+          8.9
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 584
+      },
+      {
+        "name": "Leg_4_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -5.2,
+          13.0,
+          5.8
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 404
+      },
+      {
+        "name": "Joint_4",
+        "role": "weak",
+        "parent": "Leg_4_Upper",
+        "pivot": [
+          -8.3,
+          8.0,
+          8.9
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 224,
+        "rgb": [
+          255,
+          150,
+          25
+        ]
+      },
+      {
+        "name": "Leg_4_Lower",
+        "role": "limb",
+        "parent": "Leg_4_Upper",
+        "pivot": [
+          -8.3,
+          8.0,
+          8.9
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 584
+      }
+    ],
+    "assetId": "101653672107449",
+    "legacyParts": [
+      {
+        "name": "Body",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 2056
+      },
+      {
+        "name": "Plates",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 2708
+      },
+      {
+        "name": "Dark",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 3192
+      },
+      {
+        "name": "Core",
+        "rgb": [
+          255,
+          105,
+          28
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 108
+      },
+      {
+        "name": "Joint_1",
+        "rgb": [
+          255,
+          150,
+          25
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 224
+      },
+      {
+        "name": "Joint_2",
+        "rgb": [
+          255,
+          150,
+          25
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 224
+      },
+      {
+        "name": "Joint_3",
+        "rgb": [
+          255,
+          150,
+          25
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 224
+      },
+      {
+        "name": "Joint_4",
+        "rgb": [
+          255,
+          150,
+          25
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 224
+      }
+    ],
+    "rigAssetId": "85131836535522"
+  },
+  "skitter": {
+    "rigVersion": 2,
+    "fbx": "fbx/skitter_rig.fbx",
+    "texture": "textures/brood_palette.png",
+    "size_studs_roblox_xyz": [
+      5.48,
+      2.8,
+      5.53
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      1.4,
+      -0.526
+    ],
+    "weak_spots": [
+      "Eye"
+    ],
+    "triangles_total": 9564,
+    "palette": [
+      {
+        "index": 0,
+        "name": "CARAPACE",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "CARAPACE_DK",
+        "rgb": [
+          62,
+          36,
+          92
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "CARAPACE_LT",
+        "rgb": [
+          112,
+          70,
+          150
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "LILAC",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "BONE",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "DARK_BROOD",
+        "rgb": [
+          34,
+          20,
+          48
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          1.05,
+          0.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 3884
+      },
+      {
+        "name": "Eye",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          1.643,
+          -1.98
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 1040,
+        "rgb": [
+          140,
+          255,
+          60
+        ]
+      },
+      {
+        "name": "Mandible_L",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.4,
+          1.2,
+          -1.95
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1148
+      },
+      {
+        "name": "Mandible_R",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.4,
+          1.2,
+          -1.95
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1148
+      },
+      {
+        "name": "Leg_1",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.75,
+          1.05,
+          -0.55
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_2",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.75,
+          1.05,
+          -0.55
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_3",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.75,
+          1.05,
+          0.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_4",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.75,
+          1.05,
+          0.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_5",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.75,
+          1.05,
+          0.95
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372
+      },
+      {
+        "name": "Leg_6",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.75,
+          1.05,
+          0.95
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372
+      }
+    ],
+    "assetId": "85046420294159",
+    "legacyParts": [
+      {
+        "name": "Body",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 2840
+      },
+      {
+        "name": "Legs",
+        "rgb": [
+          62,
+          36,
+          92
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 1488
+      },
+      {
+        "name": "Belly",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 1128
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 3236
+      },
+      {
+        "name": "Eye",
+        "rgb": [
+          140,
+          255,
+          60
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 1040
+      }
+    ],
+    "rigAssetId": "114456623516922"
+  },
+  "spitter": {
+    "rigVersion": 2,
+    "fbx": "fbx/spitter_rig.fbx",
+    "texture": "textures/brood_palette.png",
+    "size_studs_roblox_xyz": [
+      5.1,
+      6.02,
+      7.41
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      3.011,
+      -0.674
+    ],
+    "weak_spots": [
+      "Sac"
+    ],
+    "triangles_total": 9328,
+    "palette": [
+      {
+        "index": 0,
+        "name": "CARAPACE",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "CARAPACE_DK",
+        "rgb": [
+          62,
+          36,
+          92
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "CARAPACE_LT",
+        "rgb": [
+          112,
+          70,
+          150
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "LILAC",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "BONE",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "DARK_BROOD",
+        "rgb": [
+          34,
+          20,
+          48
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          1.92,
+          0.4
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1880
+      },
+      {
+        "name": "Sac",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          3.92,
+          1.274
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 1020,
+        "rgb": [
+          140,
+          255,
+          60
+        ]
+      },
+      {
+        "name": "Neck",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          2.56,
+          -1.28
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1560
+      },
+      {
+        "name": "Head",
+        "role": "limb",
+        "parent": "Neck",
+        "pivot": [
+          -0.0,
+          4.88,
+          -2.12
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 2636
+      },
+      {
+        "name": "Leg_1",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.72,
+          1.92,
+          -0.8
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372
+      },
+      {
+        "name": "Leg_2",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.72,
+          1.92,
+          -0.8
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372
+      },
+      {
+        "name": "Leg_3",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.72,
+          1.92,
+          0.4
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372
+      },
+      {
+        "name": "Leg_4",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.72,
+          1.92,
+          0.4
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372
+      },
+      {
+        "name": "Leg_5",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.72,
+          1.92,
+          1.6
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372
+      },
+      {
+        "name": "Leg_6",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.72,
+          1.92,
+          1.6
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372
+      }
+    ],
+    "assetId": "103230482198511",
+    "legacyParts": [
+      {
+        "name": "Body",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 2632
+      },
+      {
+        "name": "Legs",
+        "rgb": [
+          62,
+          36,
+          92
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 1488
+      },
+      {
+        "name": "Belly",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 1168
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 2816
+      },
+      {
+        "name": "Dark",
+        "rgb": [
+          34,
+          20,
+          48
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 204
+      },
+      {
+        "name": "Sac",
+        "rgb": [
+          140,
+          255,
+          60
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 1020
+      }
+    ],
+    "rigAssetId": "138886118135859"
+  },
+  "charger": {
+    "rigVersion": 2,
+    "fbx": "fbx/charger_rig.fbx",
+    "texture": "textures/brood_palette.png",
+    "size_studs_roblox_xyz": [
+      9.79,
+      8.44,
+      12.07
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      4.219,
+      0.214
+    ],
+    "weak_spots": [
+      "Abdomen"
+    ],
+    "triangles_total": 8960,
+    "palette": [
+      {
+        "index": 0,
+        "name": "CARAPACE",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "CARAPACE_DK",
+        "rgb": [
+          62,
+          36,
+          92
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "CARAPACE_LT",
+        "rgb": [
+          112,
+          70,
+          150
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "LILAC",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "BONE",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "DARK_BROOD",
+        "rgb": [
+          34,
+          20,
+          48
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          3.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 3640
+      },
+      {
+        "name": "Abdomen",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          4.9,
+          2.888
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 360,
+        "rgb": [
+          140,
+          255,
+          60
+        ]
+      },
+      {
+        "name": "Ram",
+        "role": "armor",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          3.4,
+          -2.584
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 2560
+      },
+      {
+        "name": "Leg_1",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -2.4,
+          3.0,
+          -1.672
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_2",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.4,
+          3.0,
+          -1.672
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_3",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -2.4,
+          3.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_4",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.4,
+          3.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_5",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -2.4,
+          3.0,
+          1.824
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      },
+      {
+        "name": "Leg_6",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.4,
+          3.0,
+          1.824
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 400
+      }
+    ],
+    "assetId": "80736585931411",
+    "legacyParts": [
+      {
+        "name": "Body",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 2448
+      },
+      {
+        "name": "Legs",
+        "rgb": [
+          62,
+          36,
+          92
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 1488
+      },
+      {
+        "name": "Belly",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 1080
+      },
+      {
+        "name": "Ram",
+        "rgb": [
+          112,
+          70,
+          150
+        ],
+        "material": "SmoothPlastic",
+        "role": "armor",
+        "triangles": 944
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 2640
+      },
+      {
+        "name": "Abdomen",
+        "rgb": [
+          140,
+          255,
+          60
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 360
+      }
+    ],
+    "rigAssetId": "99813280871128"
+  },
+  "titan": {
+    "rigVersion": 2,
+    "fbx": "fbx/titan_rig.fbx",
+    "texture": "textures/brood_palette.png",
+    "size_studs_roblox_xyz": [
+      20.77,
+      20.74,
+      29.6
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      10.371,
+      -1.139
+    ],
+    "weak_spots": [
+      "Vent_1",
+      "Vent_2",
+      "Vent_3",
+      "Vent_4"
+    ],
+    "triangles_total": 14328,
+    "palette": [
+      {
+        "index": 0,
+        "name": "CARAPACE",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "CARAPACE_DK",
+        "rgb": [
+          62,
+          36,
+          92
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "CARAPACE_LT",
+        "rgb": [
+          112,
+          70,
+          150
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "LILAC",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "BONE",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "DARK_BROOD",
+        "rgb": [
+          34,
+          20,
+          48
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Vent_1",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          18.012,
+          -3.79
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 704,
+        "rgb": [
+          140,
+          255,
+          60
+        ]
+      },
+      {
+        "name": "Vent_2",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          17.161,
+          0.518
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 1408,
+        "rgb": [
+          140,
+          255,
+          60
+        ]
+      },
+      {
+        "name": "Vent_3",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          15.384,
+          5.174
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 1408,
+        "rgb": [
+          140,
+          255,
+          60
+        ]
+      },
+      {
+        "name": "Vent_4",
+        "role": "weak",
+        "parent": "Abdomen",
+        "pivot": [
+          0.0,
+          16.38,
+          9.502
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 704,
+        "rgb": [
+          140,
+          255,
+          60
+        ]
+      },
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          7.2,
+          0.54
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1816
+      },
+      {
+        "name": "Abdomen",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          9.0,
+          3.78
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1812
+      },
+      {
+        "name": "Head",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          7.74,
+          -7.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1580
+      },
+      {
+        "name": "Mandible_L",
+        "role": "limb",
+        "parent": "Head",
+        "pivot": [
+          -1.71,
+          7.2,
+          -10.44
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 348
+      },
+      {
+        "name": "Mandible_R",
+        "role": "limb",
+        "parent": "Head",
+        "pivot": [
+          1.71,
+          7.2,
+          -10.44
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 348
+      },
+      {
+        "name": "Leg_1_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -4.32,
+          7.2,
+          -5.04
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 432
+      },
+      {
+        "name": "Leg_1_Lower",
+        "role": "limb",
+        "parent": "Leg_1_Upper",
+        "pivot": [
+          -7.92,
+          9.36,
+          -6.3
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 268
+      },
+      {
+        "name": "Leg_2_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          4.32,
+          7.2,
+          -5.04
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 432
+      },
+      {
+        "name": "Leg_2_Lower",
+        "role": "limb",
+        "parent": "Leg_2_Upper",
+        "pivot": [
+          7.92,
+          9.36,
+          -6.3
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 268
+      },
+      {
+        "name": "Leg_3_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -4.32,
+          7.2,
+          0.54
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 432
+      },
+      {
+        "name": "Leg_3_Lower",
+        "role": "limb",
+        "parent": "Leg_3_Upper",
+        "pivot": [
+          -7.92,
+          9.36,
+          0.72
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 268
+      },
+      {
+        "name": "Leg_4_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          4.32,
+          7.2,
+          0.54
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 432
+      },
+      {
+        "name": "Leg_4_Lower",
+        "role": "limb",
+        "parent": "Leg_4_Upper",
+        "pivot": [
+          7.92,
+          9.36,
+          0.72
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 268
+      },
+      {
+        "name": "Leg_5_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -4.32,
+          7.2,
+          5.94
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 432
+      },
+      {
+        "name": "Leg_5_Lower",
+        "role": "limb",
+        "parent": "Leg_5_Upper",
+        "pivot": [
+          -7.92,
+          9.36,
+          7.38
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 268
+      },
+      {
+        "name": "Leg_6_Upper",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          4.32,
+          7.2,
+          5.94
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 432
+      },
+      {
+        "name": "Leg_6_Lower",
+        "role": "limb",
+        "parent": "Leg_6_Upper",
+        "pivot": [
+          7.92,
+          9.36,
+          7.38
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 268
+      }
+    ],
+    "assetId": "90092272292203",
+    "legacyParts": [
+      {
+        "name": "Body",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 3880
+      },
+      {
+        "name": "Legs",
+        "rgb": [
+          62,
+          36,
+          92
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 1488
+      },
+      {
+        "name": "Belly",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 2036
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 2700
+      },
+      {
+        "name": "Vent_1",
+        "rgb": [
+          140,
+          255,
+          60
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 704
+      },
+      {
+        "name": "Vent_2",
+        "rgb": [
+          140,
+          255,
+          60
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 1408
+      },
+      {
+        "name": "Vent_3",
+        "rgb": [
+          140,
+          255,
+          60
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 1408
+      },
+      {
+        "name": "Vent_4",
+        "rgb": [
+          140,
+          255,
+          60
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 704
+      }
+    ],
+    "rigAssetId": "112677500199427"
+  },
+  "env_rock_a": {
+    "size_studs_roblox_xyz": [
+      12.97,
+      6.86,
+      10.23
+    ],
+    "weak_spots": [],
+    "triangles_total": 352,
+    "parts": [
+      {
+        "name": "Rock",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Slate",
+        "role": "body",
+        "triangles": 352
+      }
+    ],
+    "assetId": "116802756173826"
+  },
+  "env_rock_b": {
+    "size_studs_roblox_xyz": [
+      13.13,
+      14.22,
+      10.35
+    ],
+    "weak_spots": [],
+    "triangles_total": 384,
+    "parts": [
+      {
+        "name": "Rock",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Slate",
+        "role": "body",
+        "triangles": 384
+      }
+    ],
+    "assetId": "124802072047906"
+  },
+  "env_rock_c": {
+    "size_studs_roblox_xyz": [
+      16.49,
+      7.23,
+      11.78
+    ],
+    "weak_spots": [],
+    "triangles_total": 404,
+    "parts": [
+      {
+        "name": "Rock",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Slate",
+        "role": "body",
+        "triangles": 404
+      }
+    ],
+    "assetId": "107062841093560"
+  },
+  "env_spire_a": {
+    "size_studs_roblox_xyz": [
+      32.13,
+      42.51,
+      28.88
+    ],
+    "weak_spots": [],
+    "triangles_total": 810,
+    "parts": [
+      {
+        "name": "Rock",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Slate",
+        "role": "body",
+        "triangles": 810
+      }
+    ],
+    "assetId": "72616549175323"
+  },
+  "env_spire_b": {
+    "size_studs_roblox_xyz": [
+      30.99,
+      48.5,
+      25.34
+    ],
+    "weak_spots": [],
+    "triangles_total": 880,
+    "parts": [
+      {
+        "name": "Rock",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Slate",
+        "role": "body",
+        "triangles": 880
+      }
+    ],
+    "assetId": "87844329539373"
+  },
+  "env_crystal_cluster": {
+    "size_studs_roblox_xyz": [
+      8.88,
+      6.7,
+      7.66
+    ],
+    "weak_spots": [
+      "Crystal"
+    ],
+    "triangles_total": 444,
+    "parts": [
+      {
+        "name": "Base",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Slate",
+        "role": "body",
+        "triangles": 268
+      },
+      {
+        "name": "Crystal",
+        "rgb": [
+          140,
+          225,
+          255
+        ],
+        "material": "Neon",
+        "role": "weak",
+        "triangles": 176
+      }
+    ],
+    "assetId": "94987672994637"
+  },
+  "env_supply_crate": {
+    "size_studs_roblox_xyz": [
+      4.36,
+      3.21,
+      2.94
+    ],
+    "weak_spots": [],
+    "triangles_total": 2848,
+    "parts": [
+      {
+        "name": "Body",
+        "rgb": [
+          96,
+          110,
+          70
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 108
+      },
+      {
+        "name": "Frame",
+        "rgb": [
+          62,
+          72,
+          46
+        ],
+        "material": "Metal",
+        "role": "trim",
+        "triangles": 2092
+      },
+      {
+        "name": "Stencil",
+        "rgb": [
+          240,
+          205,
+          50
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 528
+      },
+      {
+        "name": "Light",
+        "rgb": [
+          90,
+          225,
+          255
+        ],
+        "material": "Neon",
+        "role": "glow",
+        "triangles": 120
+      }
+    ],
+    "assetId": "93369381849725"
+  },
+  "env_cog_barricade": {
+    "size_studs_roblox_xyz": [
+      10.4,
+      4.75,
+      5.06
+    ],
+    "weak_spots": [],
+    "triangles_total": 2836,
+    "parts": [
+      {
+        "name": "Body",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 648
+      },
+      {
+        "name": "Plates",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 856
+      },
+      {
+        "name": "Dark",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 1072
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 260
+      }
+    ],
+    "assetId": "134940430851243"
+  },
+  "env_cog_pylon": {
+    "size_studs_roblox_xyz": [
+      6.54,
+      15.72,
+      7.47
+    ],
+    "weak_spots": [],
+    "triangles_total": 4472,
+    "parts": [
+      {
+        "name": "Body",
+        "rgb": [
+          74,
+          85,
+          104
+        ],
+        "material": "Metal",
+        "role": "body",
+        "triangles": 908
+      },
+      {
+        "name": "Plates",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 1256
+      },
+      {
+        "name": "Dark",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 1432
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 572
+      },
+      {
+        "name": "Beacon",
+        "rgb": [
+          255,
+          150,
+          25
+        ],
+        "material": "Neon",
+        "role": "glow",
+        "triangles": 304
+      }
+    ],
+    "assetId": "135484296109601"
+  },
+  "env_hive_mound": {
+    "size_studs_roblox_xyz": [
+      10.53,
+      9.2,
+      11.75
+    ],
+    "weak_spots": [],
+    "triangles_total": 8124,
+    "parts": [
+      {
+        "name": "Body",
+        "rgb": [
+          88,
+          52,
+          120
+        ],
+        "material": "SmoothPlastic",
+        "role": "body",
+        "triangles": 2020
+      },
+      {
+        "name": "Belly",
+        "rgb": [
+          170,
+          130,
+          200
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 2924
+      },
+      {
+        "name": "Dark",
+        "rgb": [
+          22,
+          12,
+          34
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 1680
+      },
+      {
+        "name": "Trim",
+        "rgb": [
+          235,
+          220,
+          190
+        ],
+        "material": "SmoothPlastic",
+        "role": "trim",
+        "triangles": 312
+      },
+      {
+        "name": "Slime",
+        "rgb": [
+          140,
+          255,
+          60
+        ],
+        "material": "Neon",
+        "role": "glow",
+        "triangles": 1188
+      }
+    ],
+    "assetId": "138550986642384"
+  },
+  "courier_wreck": {
+    "rigVersion": 2,
+    "kind": "setpiece",
+    "fbx": "fbx/courier_wreck.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      17.45,
+      8.66,
+      23.61
+    ],
+    "bbox_center_roblox": [
+      1.877,
+      3.329,
+      0.406
+    ],
+    "weak_spots": [],
+    "triangles_total": 6000,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Hull",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 4748
+      },
+      {
+        "name": "DataCase",
+        "role": "interact",
+        "parent": "Hull",
+        "pivot": [
+          6.9,
+          0.0,
+          -5.6
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 504
+      },
+      {
+        "name": "Ground",
+        "role": "decor",
+        "parent": "Hull",
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 524
+      },
+      {
+        "name": "Debris",
+        "role": "decor",
+        "parent": "Hull",
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 224
+      }
+    ],
+    "notes": "Origin at ground centre, nose toward -Y. Interactable: DataCase. Decor parts (Ground, Debris) can be dropped.",
+    "assetId": "127486894262442"
+  },
+  "armor_kit": {
+    "rigVersion": 2,
+    "kind": "armor",
+    "fbx": "fbx/armor_kit.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      4.37,
+      6.45,
+      2.76
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      3.455,
+      0.359
+    ],
+    "weak_spots": [],
+    "triangles_total": 5348,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Helmet",
+        "role": "armor",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          5.18,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1344,
+        "attach": {
+          "bodyPart": "Head",
+          "attachment": "HatAttachment",
+          "note": "origin = head centre; HatAttachment sits ~0.6 above it"
+        }
+      },
+      {
+        "name": "Visor",
+        "role": "glow",
+        "parent": "Helmet",
+        "pivot": [
+          -0.0,
+          5.18,
+          -0.8
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          80,
+          230,
+          220
+        ],
+        "attach": {
+          "bodyPart": "Head",
+          "note": "weld to Helmet; glow"
+        }
+      },
+      {
+        "name": "ChestPlate",
+        "role": "armor",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          3.7,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 812,
+        "attach": {
+          "bodyPart": "UpperTorso",
+          "attachment": "BodyFrontAttachment",
+          "note": "origin = UpperTorso centre"
+        }
+      },
+      {
+        "name": "Backpack",
+        "role": "armor",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          3.75,
+          0.5
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1156,
+        "attach": {
+          "bodyPart": "UpperTorso",
+          "attachment": "BodyBackAttachment",
+          "note": "origin = UpperTorso back surface"
+        }
+      },
+      {
+        "name": "Thruster_L",
+        "role": "glow",
+        "parent": "Backpack",
+        "pivot": [
+          -0.45,
+          2.35,
+          1.2
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          80,
+          230,
+          220
+        ],
+        "attach": {
+          "bodyPart": "UpperTorso",
+          "note": "weld to Backpack; glow"
+        }
+      },
+      {
+        "name": "Thruster_R",
+        "role": "glow",
+        "parent": "Backpack",
+        "pivot": [
+          0.45,
+          2.35,
+          1.2
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          80,
+          230,
+          220
+        ],
+        "attach": {
+          "bodyPart": "UpperTorso",
+          "note": "weld to Backpack; glow"
+        }
+      },
+      {
+        "name": "Pauldron_L",
+        "role": "armor",
+        "parent": null,
+        "pivot": [
+          -1.5,
+          3.9,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 484,
+        "attach": {
+          "bodyPart": "LeftUpperArm",
+          "attachment": "LeftShoulderAttachment",
+          "note": "origin = LeftUpperArm centre"
+        }
+      },
+      {
+        "name": "Pauldron_R",
+        "role": "armor",
+        "parent": null,
+        "pivot": [
+          1.5,
+          3.9,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 484,
+        "attach": {
+          "bodyPart": "RightUpperArm",
+          "attachment": "RightShoulderAttachment",
+          "note": "origin = RightUpperArm centre"
+        }
+      },
+      {
+        "name": "Shin_L",
+        "role": "armor",
+        "parent": null,
+        "pivot": [
+          -0.5,
+          0.85,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372,
+        "attach": {
+          "bodyPart": "LeftLowerLeg",
+          "note": "origin = LeftLowerLeg centre"
+        }
+      },
+      {
+        "name": "Shin_R",
+        "role": "armor",
+        "parent": null,
+        "pivot": [
+          0.5,
+          0.85,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 372,
+        "attach": {
+          "bodyPart": "RightLowerLeg",
+          "note": "origin = RightLowerLeg centre"
+        }
+      }
+    ],
+    "dummy_part_centres_roblox": {
+      "Head": [
+        -0.0,
+        5.18,
+        0.0
+      ],
+      "UpperTorso": [
+        -0.0,
+        3.7,
+        0.0
+      ],
+      "LowerTorso": [
+        -0.0,
+        2.7,
+        0.0
+      ],
+      "LeftUpperArm": [
+        -1.5,
+        3.9,
+        0.0
+      ],
+      "LeftLowerArm": [
+        -1.5,
+        2.8,
+        0.0
+      ],
+      "LeftHand": [
+        -1.5,
+        2.1,
+        0.0
+      ],
+      "RightUpperArm": [
+        1.5,
+        3.9,
+        0.0
+      ],
+      "RightLowerArm": [
+        1.5,
+        2.8,
+        0.0
+      ],
+      "RightHand": [
+        1.5,
+        2.1,
+        0.0
+      ],
+      "LeftUpperLeg": [
+        -0.5,
+        1.9,
+        0.0
+      ],
+      "LeftLowerLeg": [
+        -0.5,
+        0.85,
+        0.0
+      ],
+      "LeftFoot": [
+        -0.5,
+        0.15,
+        0.0
+      ],
+      "RightUpperLeg": [
+        0.5,
+        1.9,
+        0.0
+      ],
+      "RightLowerLeg": [
+        0.5,
+        0.85,
+        0.0
+      ],
+      "RightFoot": [
+        0.5,
+        0.15,
+        0.0
+      ]
+    },
+    "notes": "Fitted to an R15 dummy (never exported). Each part origin is the centre of the body part it welds to (Backpack: back surface).",
+    "assetId": "92036103613572"
+  },
+  "wpn_carbine": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_carbine.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.56,
+      2.07,
+      4.94
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.186,
+      -0.83
+    ],
+    "weak_spots": [],
+    "triangles_total": 1140,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1128
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.5,
+          -3.25
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "80872698651280"
+  },
+  "wpn_shotgun": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_shotgun.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.56,
+      1.67,
+      5.6
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.127,
+      -0.97
+    ],
+    "weak_spots": [],
+    "triangles_total": 1292,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1280
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.55,
+          -3.72
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "135644673144755"
+  },
+  "wpn_marksman": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_marksman.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.79,
+      2.19,
+      8.24
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.406,
+      -1.88
+    ],
+    "weak_spots": [],
+    "triangles_total": 1552,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1540
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.5,
+          -5.95
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "85833854532097"
+  },
+  "wpn_smg": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_smg.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.56,
+      2.13,
+      4.0
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      -0.155,
+      -0.6
+    ],
+    "weak_spots": [],
+    "triangles_total": 896,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 884
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.5,
+          -2.55
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "89683669688440"
+  },
+  "wpn_rocket_tube": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_rocket_tube.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      1.24,
+      2.47,
+      7.1
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.605,
+      -0.95
+    ],
+    "weak_spots": [],
+    "triangles_total": 1920,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1908
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.95,
+          -4.45
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "136919350226826"
+  },
+  "wpn_gatling": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_gatling.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      1.26,
+      2.77,
+      5.55
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.185,
+      -1.725
+    ],
+    "weak_spots": [],
+    "triangles_total": 2688,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1316
+      },
+      {
+        "name": "Barrels",
+        "role": "spin",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.75,
+          -2.9
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1360
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.75,
+          -4.45
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "109914899062566"
+  },
+  "wpn_rail_lance": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_rail_lance.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.84,
+      2.03,
+      7.44
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.315,
+      -2.08
+    ],
+    "weak_spots": [],
+    "triangles_total": 1412,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1180
+      },
+      {
+        "name": "Coils",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.65,
+          -3.5
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 220,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.65,
+          -5.75
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "131212962213709"
+  },
+  "wpn_pistol": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_pistol.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.48,
+      1.4,
+      2.34
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.019,
+      -0.828
+    ],
+    "weak_spots": [],
+    "triangles_total": 612,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 600
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.3,
+          -1.95
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "132966157292833"
+  },
+  "wpn_frag_grenade": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_frag_grenade.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.97,
+      1.27,
+      1.19
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.113,
+      -0.095
+    ],
+    "weak_spots": [],
+    "triangles_total": 724,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 712
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.0,
+          -0.55
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "132719768588830"
+  },
+  "wpn_impact_grenade": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_impact_grenade.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.93,
+      0.88,
+      1.91
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.0,
+      -0.227
+    ],
+    "weak_spots": [],
+    "triangles_total": 892,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 880
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.0,
+          -1.1
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "121315399793345"
+  },
+  "wpn_stun_grenade": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_stun_grenade.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.8,
+      0.95,
+      1.47
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.075,
+      -0.035
+    ],
+    "weak_spots": [],
+    "triangles_total": 708,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 572
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 124,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.0,
+          -0.72
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "103216335806256"
+  },
+  "wpn_beacon": {
+    "rigVersion": 2,
+    "kind": "weapon",
+    "fbx": "fbx/wpn_beacon.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      0.72,
+      0.78,
+      3.14
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      -0.01,
+      -0.2
+    ],
+    "weak_spots": [],
+    "triangles_total": 852,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 672
+      },
+      {
+        "name": "Head",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.0,
+          1.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 168,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      },
+      {
+        "name": "Muzzle",
+        "role": "muzzle",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          0.0,
+          -1.72
+        ],
+        "material": "SmoothPlastic",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          40,
+          44,
+          52
+        ]
+      }
+    ],
+    "notes": "Right-hand grip at origin, pointing -Y. Muzzle = tip object.",
+    "assetId": "89163226356407"
+  },
+  "generator": {
+    "rigVersion": 2,
+    "kind": "setpiece",
+    "fbx": "fbx/generator.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      6.35,
+      5.0,
+      6.55
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      2.5,
+      -0.125
+    ],
+    "weak_spots": [],
+    "triangles_total": 4652,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 3596
+      },
+      {
+        "name": "Switch",
+        "role": "interact",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          1.65,
+          -1.42
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 656
+      },
+      {
+        "name": "Core",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.4,
+          3.75,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 400,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      }
+    ],
+    "assetId": "104047872090725"
+  },
+  "trajectory_console": {
+    "rigVersion": 2,
+    "kind": "setpiece",
+    "fbx": "fbx/trajectory_console.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      4.3,
+      2.93,
+      2.8
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      1.465,
+      0.0
+    ],
+    "weak_spots": [],
+    "triangles_total": 2720,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1664
+      },
+      {
+        "name": "Keyboard",
+        "role": "interact",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          1.18,
+          -0.3
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1012
+      },
+      {
+        "name": "Screen",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          2.0,
+          0.62
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 44,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      }
+    ],
+    "assetId": "74219538249886"
+  },
+  "missile_silo": {
+    "rigVersion": 2,
+    "kind": "setpiece",
+    "fbx": "fbx/missile_silo.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      14.0,
+      15.97,
+      16.3
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      -4.865,
+      -1.15
+    ],
+    "weak_spots": [],
+    "triangles_total": 5012,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 2852
+      },
+      {
+        "name": "Door_L",
+        "role": "door",
+        "parent": "Body",
+        "pivot": [
+          -5.5,
+          0.62,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 420
+      },
+      {
+        "name": "Door_R",
+        "role": "door",
+        "parent": "Body",
+        "pivot": [
+          5.5,
+          0.62,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 420
+      },
+      {
+        "name": "Lever_L",
+        "role": "interact",
+        "parent": "Body",
+        "pivot": [
+          -3.4,
+          1.2,
+          -8.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 204
+      },
+      {
+        "name": "Lever_R",
+        "role": "interact",
+        "parent": "Body",
+        "pivot": [
+          3.4,
+          1.2,
+          -8.2
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 204
+      },
+      {
+        "name": "Missile",
+        "role": "missile",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          -12.8,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 912
+      }
+    ],
+    "pose_open": {
+      "Door_L": "rotate +72 deg about Y (hinge)",
+      "Door_R": "rotate -72 deg about Y (hinge)",
+      "Lever_L/R": "rotate -28 deg about X (pivot)",
+      "Missile": "raise by +12.8 studs on Y (Roblox) to stand at the pit plate"
+    },
+    "note": "Rest pose = doors closed, Missile fully lowered (base 12.8 below ground). Size excludes Missile.",
+    "assetId": "93435215770414"
+  },
+  "uplink_dish": {
+    "rigVersion": 2,
+    "kind": "setpiece",
+    "fbx": "fbx/uplink_dish.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      7.44,
+      7.7,
+      6.16
+    ],
+    "bbox_center_roblox": [
+      -0.571,
+      3.852,
+      0.018
+    ],
+    "weak_spots": [],
+    "triangles_total": 3808,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1896
+      },
+      {
+        "name": "Terminal",
+        "role": "interact",
+        "parent": "Body",
+        "pivot": [
+          -3.4,
+          0.0,
+          -1.6
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 416
+      },
+      {
+        "name": "Dish",
+        "role": "dish",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          5.2,
+          0.55
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1496
+      }
+    ],
+    "assetId": "126448135730881"
+  },
+  "extraction_pad": {
+    "rigVersion": 2,
+    "kind": "setpiece",
+    "fbx": "fbx/extraction_pad.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      15.88,
+      3.7,
+      13.8
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      1.85,
+      0.0
+    ],
+    "weak_spots": [],
+    "triangles_total": 3940,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 3508
+      },
+      {
+        "name": "Light_1",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -3.45,
+          3.45,
+          5.976
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      },
+      {
+        "name": "Light_2",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          3.45,
+          3.45,
+          5.976
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      },
+      {
+        "name": "Light_3",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          3.45,
+          3.45,
+          -5.976
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      },
+      {
+        "name": "Light_4",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -3.45,
+          3.45,
+          -5.976
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      }
+    ],
+    "assetId": "133229090853106"
+  },
+  "skiff": {
+    "rigVersion": 2,
+    "kind": "setpiece",
+    "fbx": "fbx/skiff.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      11.24,
+      7.7,
+      25.81
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      3.578,
+      1.907
+    ],
+    "weak_spots": [],
+    "triangles_total": 3990,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 3750
+      },
+      {
+        "name": "Ramp",
+        "role": "ramp",
+        "parent": "Body",
+        "pivot": [
+          -0.0,
+          1.55,
+          10.8
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 120
+      },
+      {
+        "name": "Engine_L",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -4.4,
+          2.2,
+          5.8
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 60,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      },
+      {
+        "name": "Engine_R",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          4.4,
+          2.2,
+          5.8
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 60,
+        "rgb": [
+          80,
+          230,
+          220
+        ]
+      }
+    ],
+    "assetId": "93047515023412"
+  },
+  "fabricator": {
+    "rigVersion": 2,
+    "kind": "enemy_building",
+    "fbx": "fbx/fabricator.fbx",
+    "texture": "textures/cog_palette.png",
+    "size_studs_roblox_xyz": [
+      16.4,
+      10.15,
+      17.8
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      5.075,
+      -2.7
+    ],
+    "weak_spots": [
+      "Vent"
+    ],
+    "triangles_total": 4460,
+    "palette": [
+      {
+        "index": 0,
+        "name": "GUNMETAL",
+        "rgb": [
+          96,
+          110,
+          132
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "DARK",
+        "rgb": [
+          30,
+          34,
+          42
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "RUST",
+        "rgb": [
+          217,
+          100,
+          43
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "YELLOW",
+        "rgb": [
+          240,
+          190,
+          40
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 4416
+      },
+      {
+        "name": "Vent",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          -4.4,
+          8.15,
+          -2.2
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 44,
+        "rgb": [
+          255,
+          150,
+          25
+        ]
+      }
+    ],
+    "assetId": "105820892122776"
+  },
+  "sample_pod": {
+    "rigVersion": 2,
+    "kind": "setpiece",
+    "fbx": "fbx/sample_pod.fbx",
+    "texture": "textures/halcyon_palette.png",
+    "size_studs_roblox_xyz": [
+      1.1,
+      1.94,
+      1.1
+    ],
+    "bbox_center_roblox": [
+      -0.0,
+      0.969,
+      0.0
+    ],
+    "weak_spots": [],
+    "triangles_total": 2048,
+    "palette": [
+      {
+        "index": 0,
+        "name": "WHITE",
+        "rgb": [
+          232,
+          228,
+          218
+        ],
+        "uv": [
+          0.125,
+          0.875
+        ]
+      },
+      {
+        "index": 1,
+        "name": "NAVY",
+        "rgb": [
+          44,
+          52,
+          70
+        ],
+        "uv": [
+          0.375,
+          0.875
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ORANGE",
+        "rgb": [
+          240,
+          120,
+          40
+        ],
+        "uv": [
+          0.625,
+          0.875
+        ]
+      },
+      {
+        "index": 3,
+        "name": "METAL",
+        "rgb": [
+          40,
+          44,
+          52
+        ],
+        "uv": [
+          0.875,
+          0.875
+        ]
+      },
+      {
+        "index": 4,
+        "name": "WHITE_SH",
+        "rgb": [
+          188,
+          184,
+          176
+        ],
+        "uv": [
+          0.125,
+          0.625
+        ]
+      },
+      {
+        "index": 5,
+        "name": "NAVY_LT",
+        "rgb": [
+          74,
+          88,
+          116
+        ],
+        "uv": [
+          0.375,
+          0.625
+        ]
+      },
+      {
+        "index": 6,
+        "name": "ORANGE_DK",
+        "rgb": [
+          186,
+          84,
+          30
+        ],
+        "uv": [
+          0.625,
+          0.625
+        ]
+      },
+      {
+        "index": 7,
+        "name": "SCORCH",
+        "rgb": [
+          26,
+          24,
+          26
+        ],
+        "uv": [
+          0.875,
+          0.625
+        ]
+      },
+      {
+        "index": 8,
+        "name": "STEEL",
+        "rgb": [
+          128,
+          136,
+          150
+        ],
+        "uv": [
+          0.125,
+          0.375
+        ]
+      },
+      {
+        "index": 9,
+        "name": "DIRT",
+        "rgb": [
+          112,
+          94,
+          78
+        ],
+        "uv": [
+          0.375,
+          0.375
+        ]
+      },
+      {
+        "index": 10,
+        "name": "SOOT",
+        "rgb": [
+          146,
+          138,
+          126
+        ],
+        "uv": [
+          0.625,
+          0.375
+        ]
+      },
+      {
+        "index": 11,
+        "name": "SAND",
+        "rgb": [
+          196,
+          176,
+          138
+        ],
+        "uv": [
+          0.875,
+          0.375
+        ]
+      },
+      {
+        "index": 12,
+        "name": "GLASS",
+        "rgb": [
+          26,
+          58,
+          80
+        ],
+        "uv": [
+          0.125,
+          0.125
+        ]
+      },
+      {
+        "index": 13,
+        "name": "NAVY_DK",
+        "rgb": [
+          26,
+          32,
+          46
+        ],
+        "uv": [
+          0.375,
+          0.125
+        ]
+      },
+      {
+        "index": 14,
+        "name": "SLATE",
+        "rgb": [
+          92,
+          100,
+          116
+        ],
+        "uv": [
+          0.625,
+          0.125
+        ]
+      },
+      {
+        "index": 15,
+        "name": "ASH",
+        "rgb": [
+          68,
+          66,
+          66
+        ],
+        "uv": [
+          0.875,
+          0.125
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "name": "Casing",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1880
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Casing",
+        "pivot": [
+          -0.0,
+          0.82,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 168,
+        "rgb": [
+          190,
+          110,
+          255
+        ]
+      }
+    ],
+    "assetId": "82417762160519"
+  }
+}
