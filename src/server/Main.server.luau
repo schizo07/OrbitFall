@@ -141,6 +141,18 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 			h.Health = h.MaxHealth
 		end
 		return true
+	elseif cmd == "killnear" then -- killnear(radius): kill every enemy within radius of the first player (pacing tests)
+		local root = first and S.Players.getRoot(first)
+		local n = 0
+		if root then
+			for _, e in S.Enemies.getAll() do
+				if e.root and (e.root.Position - root.Position).Magnitude <= (a or 25) then
+					S.Enemies.damage(e, 1e6, 10, { player = first })
+					n += 1
+				end
+			end
+		end
+		return n
 	elseif cmd == "tp" then -- teleport next to a map site (or the extraction pad)
 		local m = S.Map.current
 		local c = first and first.Character
@@ -209,6 +221,15 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 		end
 		local ok, why = S.Director.debugSetIntensity(tostring(a))
 		return if ok then S.Director.getIntensity() else why
+	elseif cmd == "breach" then -- breach(): force a BREACH right now (opens 2-3 sources; during Active)
+		local ok, why = S.Director.debugBreach()
+		return if ok then S.Director.getIntensity() else why
+	elseif cmd == "sources" then -- sources(): open breach sources with hp / distance from the first player; sources("close"): close them all
+		if a == "close" then
+			return S.Director.debugCloseSources()
+		end
+		local root = first and S.Players.getRoot(first)
+		return S.Director.getSources(root and root.Position or nil)
 	elseif cmd == "extracthold" then -- extracthold(true|false): start / end the extraction hold-out without calling the Skiff
 		if a == false then
 			S.Director.endExtractHold()

@@ -275,6 +275,13 @@ local function registerBeacon(Fx: any)
 			Transparency = 0.88,
 			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
 		}, model)
+		-- wide, nearly invisible bloom sleeve: keeps the 700-stud beam readable from across the map
+		local bloomSleeve = mkPart({
+			Size = Vector3.new(10, HEIGHT, 10),
+			Color = main,
+			Transparency = 0.94,
+			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
+		}, model)
 		local lamp = light(base, main, 30, 3)
 		emitter(base, {
 			Texture = TEX_SPARK,
@@ -298,6 +305,7 @@ local function registerBeacon(Fx: any)
 			column.Transparency = 0.45 + 0.2 * k
 			column.Size = Vector3.new(1.2 + 0.4 * k, HEIGHT, 1.2 + 0.4 * k)
 			halo.Size = Vector3.new(3 + 1.2 * k, HEIGHT, 3 + 1.2 * k)
+			bloomSleeve.Size = Vector3.new(9 + 3 * k, HEIGHT, 9 + 3 * k)
 			lamp.Brightness = 2 + 2 * k
 			if t >= nextRing then
 				nextRing = t + 0.9
@@ -313,7 +321,7 @@ local function registerBeacon(Fx: any)
 		if d.callin == "LANCE" then
 			snd("LanceCharge", pos)
 		end
-		beacons[d.id] = { model = model, conn = conn, loop = loop, light = lamp, parts = { base, column, core, halo } }
+		beacons[d.id] = { model = model, conn = conn, loop = loop, light = lamp, parts = { base, column, core, halo, bloomSleeve } }
 	end)
 
 	Fx.register("BeaconEnd", function(d)

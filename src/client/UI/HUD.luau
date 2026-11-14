@@ -1,5 +1,16 @@
 -- All in-mission and ship HUD. Call HUD.init() once after Store/Input exist.
 -- Store keys read: me, mission, objectives, squad, profile, holding, menuOpen (all optional).
+-- Thin edge HUD (style kit: UI/HudStyle). Widgets:
+--   top-left   UI/CallInList (UPLINK list, icons only on touch) (+ ship info on the ship)  reads me.callins, me.reinforceReadyAt
+--   top-centre UI/Compass tape (+ markers) and UI/AlertBar stack (breach / notices)    reads camera, objectives, beacons, intensity
+--   top-right  UI/TopRight timer + reinforce tokens + resource chips                   reads mission.endsAt / lives, objectives, kills
+--   right      UI/ObjectiveList checklist (y 16 %), UI/PickupToast (y 55 %)            reads objectives; Notify pickup texts
+--   left       UI/SquadCards (y 58-78 %), one card per other squad member              reads squad, me.reinforceReadyAt, mission.lives
+--   bottom-left own card built here (weapon, mag segments, stim/grenade/mag counts, callsign + health)   reads me
+--                + UI/SquadComms tiny radio line above it                               reads me, Fx Breach / HeavyContact / Beacon
+--   bottom-right UI/EventFeed (5 lines, 8 s): DIED, streaks, objectives, call-in arrivals, chatter   reads Notify, Fx Death, objectives
+--   bottom-centre UI/StaminaBar (inited by Movement)
+-- On touch everything in the main gui is drawn at 0.8 x (Style.content); the event feed + resource summary sit behind a FEED button.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,6 +23,16 @@ local Weapons = require(Shared:WaitForChild("Data"):WaitForChild("Weapons"))
 local CallIns = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
 local Store = require(script.Parent.Parent.Store)
 local Theme = require(script.Parent.Theme)
+local Style = require(script.Parent.HudStyle)
+local AlertBar = require(script.Parent.AlertBar)
+local Compass = require(script.Parent.Compass)
+local ObjectiveList = require(script.Parent.ObjectiveList)
+local TopRight = require(script.Parent.TopRight)
+local CallInList = require(script.Parent.CallInList)
+local SquadCards = require(script.Parent.SquadCards)
+local EventFeed = require(script.Parent.EventFeed)
+local PickupToast = require(script.Parent.PickupToast)
+local SquadComms = require(script.Parent.SquadComms)
 
 local C = Theme.C
 local player = Players.LocalPlayer
@@ -37,11 +58,6 @@ local ammoFill: { from: number, to: number, t0: number }? = nil -- quick count-u
 local lastHp: number? = nil
 local markers: { [string]: any } = {}
 local beacons: { [string]: { pos: Vector3, color: Color3, label: string } } = {}
-local slotWidgets: { any } = {}
-local slotKey = ""
-local lastBannerTitle = ""
-local lastBannerAt = 0
-local prevDone: { [string]: boolean }? = nil
 local resultsShown: any = nil
 local resultsToken = 0
 local hmPool: { any } = {}
@@ -153,35 +169,25 @@ local function buildCrosshair()
 	end
 
 	-- reload bar under crosshair
-	local rb = Theme.panel({
+	local rb = Style.panel({
 		Name = "ReloadBar",
-		Color = C.Dark,
-		Transparency = 0.25,
-		Corner = 3,
-		Stroke = false,
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0.5, 44),
-		Size = UDim2.fromOffset(120, 8),
+		Size = UDim2.fromOffset(120, 6),
 		Visible = false,
 		Parent = gui,
 	})
-	local rf = Instance.new("Frame")
-	rf.Name = "Fill"
-	rf.BackgroundColor3 = C.Accent
-	rf.BorderSizePixel = 0
-	rf.Size = UDim2.fromScale(0, 1)
-	rf.Parent = rb
-	Theme.corner(rf, 3)
+	local rf = Style.rect({ Name = "Fill", Color = Style.Amber, Size = UDim2.fromScale(0, 1), Parent = rb })
 	ui.reloadBar = rb
 	ui.reloadFill = rf
-	ui.reloadLabel = Theme.label({
+	ui.reloadLabel = Style.label({
 		Text = "RELOADING",
-		Font = "Header",
-		TextSize = 11,
-		Color = C.Accent,
+		TextSize = 12,
+		Color = Style.Amber,
+		XAlign = Enum.TextXAlignment.Center,
 		Size = UDim2.fromOffset(140, 14),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0.5, 56),
+		Position = UDim2.new(0.5, 0, 0.5, 54),
 		Visible = false,
 		Parent = gui,
 	})
@@ -218,61 +224,6 @@ local function buildCrosshair()
 end
 
 -- Main HUD ----------------------------------------------------------------------------------------------------------
-local function buildObjectivePanel(parent: Instance)
-	local p = Theme.panel({
-		Name = "Objectives",
-		Color = C.Navy,
-		Transparency = 0.2,
-		Accent = true,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-		LayoutOrder = 1,
-		Parent = parent,
-	})
-	Theme.pad(p, 10, 8, 10, 10)
-	Theme.list(p, Enum.FillDirection.Vertical, 4)
-	Theme.label({
-		Name = "Header",
-		Text = "OBJECTIVES",
-		Font = "Header",
-		TextSize = 12,
-		Color = C.Accent,
-		XAlign = Enum.TextXAlignment.Left,
-		Size = UDim2.new(1, 0, 0, 16),
-		LayoutOrder = 0,
-		Parent = p,
-	})
-	ui.objPanel = p
-	p.Visible = false
-end
-
-local function buildSquadPanel(parent: Instance)
-	local p = Theme.panel({
-		Name = "Squad",
-		Color = C.Navy,
-		Transparency = 0.3,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-		LayoutOrder = 2,
-		Parent = parent,
-	})
-	Theme.pad(p, 8, 6, 8, 8)
-	Theme.list(p, Enum.FillDirection.Vertical, 4)
-	Theme.label({
-		Name = "Header",
-		Text = "SQUAD",
-		Font = "Header",
-		TextSize = 11,
-		Color = C.Friendly,
-		XAlign = Enum.TextXAlignment.Left,
-		Size = UDim2.new(1, 0, 0, 14),
-		LayoutOrder = 0,
-		Parent = p,
-	})
-	ui.squadPanel = p
-	p.Visible = false
-end
-
 local function buildShipPanel(parent: Instance)
 	local p = Theme.panel({
 		Name = "ShipInfo",
@@ -358,183 +309,6 @@ local function buildShipPanel(parent: Instance)
 	ui.shipPanel = p
 end
 
-local COMPASS_W = 520
-local COMPASS_SPAN = 150
-
-local function buildCompass(root: Instance)
-	local holder = Instance.new("Frame")
-	holder.Name = "CompassHolder"
-	holder.BackgroundTransparency = 1
-	holder.AnchorPoint = Vector2.new(0.5, 0)
-	holder.Position = UDim2.new(0.5, 0, 0, 8)
-	holder.Size = UDim2.fromOffset(touch and 400 or COMPASS_W, 64)
-	holder.Parent = root
-	ui.compassHolder = holder
-
-	local strip = Theme.panel({
-		Name = "Compass",
-		Color = C.Navy,
-		Transparency = 0.35,
-		Corner = 6,
-		StrokeTransparency = 0.6,
-		Size = UDim2.new(1, 0, 0, 30),
-		ClipsDescendants = true,
-		Parent = holder,
-	})
-	ui.compass = strip
-	ui.compassItems = {}
-	local cardinal = { [0] = "N", [90] = "E", [180] = "S", [270] = "W" }
-	for b = 0, 345, 15 do
-		local isCard = cardinal[b] ~= nil
-		local item = Theme.label({
-			Text = isCard and cardinal[b] or "",
-			Font = "Black",
-			TextSize = 17,
-			Color = b == 0 and C.Accent or C.Text,
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Size = UDim2.fromOffset(24, 26),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Parent = strip,
-		})
-		if not isCard then
-			local tick = Instance.new("Frame")
-			tick.AnchorPoint = Vector2.new(0.5, 0.5)
-			tick.Position = UDim2.fromScale(0.5, 0.5)
-			tick.Size = UDim2.fromOffset(2, (b % 45 == 0) and 12 or 8)
-			tick.BackgroundColor3 = C.Muted
-			tick.BorderSizePixel = 0
-			tick.Parent = item
-		end
-		table.insert(ui.compassItems, { bearing = b, item = item })
-	end
-	local center = Instance.new("Frame")
-	center.Name = "Center"
-	center.AnchorPoint = Vector2.new(0.5, 1)
-	center.Position = UDim2.fromScale(0.5, 1)
-	center.Size = UDim2.fromOffset(3, 8)
-	center.BackgroundColor3 = C.Accent
-	center.BorderSizePixel = 0
-	center.ZIndex = 5
-	center.Parent = strip
-	ui.compassMarkerLayer = Instance.new("Frame")
-	ui.compassMarkerLayer.BackgroundTransparency = 1
-	ui.compassMarkerLayer.Size = UDim2.fromScale(1, 1)
-	ui.compassMarkerLayer.ZIndex = 4
-	ui.compassMarkerLayer.Parent = strip
-
-	-- timer pill under compass
-	local pill = Theme.panel({
-		Name = "TimerPill",
-		Color = C.Navy,
-		Transparency = 0.25,
-		Corner = 12,
-		StrokeTransparency = 0.5,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 34),
-		Size = UDim2.fromOffset(230, 26),
-		Parent = holder,
-	})
-	ui.timerLabel = Theme.label({
-		Text = "",
-		Font = "Black",
-		TextSize = 15,
-		Rich = true,
-		Size = UDim2.fromScale(1, 1),
-		Parent = pill,
-	})
-	ui.timerPill = pill
-end
-
-local function buildAmmo(root: Instance)
-	local w, h = 240, 98
-	if touch then
-		w, h = 200, 68
-	end
-	local panel = Theme.panel({
-		Name = "Ammo",
-		Color = C.Navy,
-		Transparency = 0.2,
-		Accent = true,
-		AnchorPoint = touch and Vector2.new(1, 0) or Vector2.new(1, 1),
-		Position = touch and UDim2.new(1, -12, 0, 8) or UDim2.new(1, -20, 1, -20),
-		Size = UDim2.fromOffset(w, h),
-		Parent = root,
-	})
-	ui.ammoPanel = panel
-	ui.ammoName = Theme.label({
-		Text = "",
-		Font = "Header",
-		TextSize = touch and 10 or 12,
-		Color = C.Accent,
-		XAlign = Enum.TextXAlignment.Right,
-		Size = UDim2.new(1, -16, 0, 16),
-		Position = UDim2.fromOffset(8, 6),
-		Parent = panel,
-	})
-	ui.ammoMag = Theme.label({
-		Text = "0",
-		Font = "Black",
-		TextSize = touch and 32 or 46,
-		XAlign = Enum.TextXAlignment.Right,
-		Size = UDim2.new(0.55, 0, 0, touch and 36 or 50),
-		Position = UDim2.fromOffset(8, touch and 20 or 24),
-		Parent = panel,
-	})
-	ui.ammoSpare = Theme.label({
-		Text = "/ 0",
-		Font = "Black",
-		TextSize = touch and 16 or 22,
-		Color = C.Muted,
-		XAlign = Enum.TextXAlignment.Left,
-		Size = UDim2.new(0.4, -8, 0, touch and 36 or 50),
-		Position = UDim2.new(0.55, 4, 0, touch and 20 or 24),
-		Parent = panel,
-	})
-	ui.ammoNades = Theme.label({
-		Text = "",
-		Font = "Black",
-		TextSize = touch and 12 or 15,
-		Color = C.Friendly,
-		Rich = true,
-		XAlign = Enum.TextXAlignment.Right,
-		Size = UDim2.new(1, -16, 0, 18),
-		Position = UDim2.new(0, 8, 1, -22),
-		Parent = panel,
-	})
-	ui.ammoState = Theme.label({
-		Text = "",
-		Font = "Header",
-		TextSize = 11,
-		Color = C.Danger,
-		XAlign = Enum.TextXAlignment.Left,
-		Size = UDim2.new(0.5, 0, 0, 18),
-		Position = UDim2.new(0, 10, 1, -22),
-		Parent = panel,
-	})
-	ui.ammoMagPos = ui.ammoMag.Position
-	-- magazine bar under the weapon name: drains per shot, refills in the accent colour while reloading
-	local track = Instance.new("Frame")
-	track.Name = "MagBar"
-	track.BackgroundColor3 = C.Black
-	track.BackgroundTransparency = 0.55
-	track.BorderSizePixel = 0
-	track.AnchorPoint = Vector2.new(1, 0)
-	track.Position = UDim2.new(1, -8, 0, touch and 19 or 23)
-	track.Size = UDim2.new(1, -16, 0, 3)
-	track.Parent = panel
-	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
-	fill.AnchorPoint = Vector2.new(1, 0)
-	fill.Position = UDim2.fromScale(1, 0)
-	fill.BackgroundColor3 = C.Text
-	fill.BackgroundTransparency = 0.15
-	fill.BorderSizePixel = 0
-	fill.Size = UDim2.fromScale(1, 1)
-	fill.Parent = track
-	ui.magTrack = track
-	ui.magFill = fill
-end
-
 -- predicted ammo (WeaponController): its local magazine table and a per-shot "tick" on the counter
 local localMags: { [number]: number }? = nil
 local magShown = 1 -- displayed bar fraction (eased)
@@ -542,129 +316,200 @@ local magTarget = 1
 local shotKick = 0 -- 1 right after a shot, decays to 0
 local jitterRng = Random.new()
 
-local function buildBottom(root: Instance)
-	local stack = Instance.new("Frame")
-	stack.Name = "BottomStack"
-	stack.BackgroundTransparency = 1
-	stack.AnchorPoint = Vector2.new(0.5, 1)
-	stack.Position = UDim2.new(0.5, touch and -150 or 0, 1, -12)
-	stack.Size = UDim2.fromOffset(touch and 270 or 420, 0)
-	stack.AutomaticSize = Enum.AutomaticSize.Y
-	stack.Parent = root
-	Theme.list(stack, Enum.FillDirection.Vertical, 8, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Bottom)
-	ui.bottomStack = stack
+local MAG_SEGS = 20
+local HP_BAR_W = 190
 
-	-- health
-	local hp = Theme.panel({
-		Name = "Health",
-		Color = C.Navy,
-		Transparency = 0.2,
-		Corner = 7,
-		Size = UDim2.new(1, 0, 0, touch and 20 or 26),
-		LayoutOrder = 1,
-		Parent = stack,
+-- Bottom-left own card: weapon name + mag counter, segmented magazine bar, stim / grenade / mag counts, callsign + health bar.
+local function buildOwnCard(parent: Instance)
+	local card = Style.panel({
+		Name = "OwnCard",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, Style.MARGIN, 1, -Style.MARGIN),
+		Size = UDim2.fromOffset(HP_BAR_W + 62, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = parent,
 	})
-	ui.hpPanel = hp
-	ui.hpStroke = hp:FindFirstChildOfClass("UIStroke")
-	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
-	fill.BackgroundColor3 = C.Friendly
-	fill.BorderSizePixel = 0
-	fill.Position = UDim2.fromOffset(3, 3)
-	fill.Size = UDim2.new(1, -6, 1, -6)
-	fill.Parent = hp
-	Theme.corner(fill, 5)
-	ui.hpFill = fill
-	ui.hpText = Theme.label({
+	ui.ownCard = card
+	Theme.pad(card, 8, 6, 8, 7)
+	Theme.list(card, Enum.FillDirection.Vertical, 4)
+
+	-- weapon name (left) + magazine / spare (right)
+	local top = Instance.new("Frame")
+	top.Name = "Weapon"
+	top.BackgroundTransparency = 1
+	top.Size = UDim2.new(1, 0, 0, 24)
+	top.LayoutOrder = 1
+	top.Parent = card
+	ui.ammoName = Style.label({
 		Text = "",
-		Font = "Black",
-		TextSize = touch and 12 or 15,
-		Size = UDim2.fromScale(1, 1),
-		Parent = hp,
+		Color = Style.Amber,
+		Size = UDim2.new(1, -78, 0, 14),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Parent = top,
 	})
+	ui.ammoState = Style.label({
+		Text = "",
+		TextSize = 12,
+		Color = Style.Red,
+		Size = UDim2.new(1, -78, 0, 12),
+		Position = UDim2.fromOffset(0, 12),
+		Parent = top,
+	})
+	ui.ammoMag = Style.label({
+		Text = "0",
+		TextSize = 24,
+		XAlign = Enum.TextXAlignment.Right,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -34, 0, -1),
+		Size = UDim2.fromOffset(44, 24),
+		Parent = top,
+	})
+	ui.ammoSpare = Style.label({
+		Text = "/ 0",
+		TextSize = 14,
+		Color = Style.Grey,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, 7),
+		Size = UDim2.fromOffset(32, 14),
+		Parent = top,
+	})
+	ui.ammoMagPos = ui.ammoMag.Position
 
-	-- call-in bar
-	local bar = Instance.new("Frame")
-	bar.Name = "CallInBar"
-	bar.BackgroundTransparency = 1
-	bar.Size = UDim2.new(1, 0, 0, touch and 58 or 80)
-	bar.LayoutOrder = 2
-	bar.Parent = stack
-	Theme.list(bar, Enum.FillDirection.Horizontal, touch and 5 or 8, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Bottom)
-	ui.callinBar = bar
+	-- magazine segments
+	local segs = Instance.new("Frame")
+	segs.Name = "MagBar"
+	segs.BackgroundTransparency = 1
+	segs.Size = UDim2.new(1, 0, 0, 5)
+	segs.LayoutOrder = 2
+	segs.Parent = card
+	Theme.list(segs, Enum.FillDirection.Horizontal, 1)
+	ui.magSegs = {}
+	for i = 1, MAG_SEGS do
+		local s = Style.rect({
+			Color = Style.White,
+			Transparency = 0.8,
+			Size = UDim2.new(1 / MAG_SEGS, -1, 1, 0),
+			LayoutOrder = i,
+			Parent = segs,
+		})
+		ui.magSegs[i] = s
+	end
+
+	-- counts: stims / grenades / spare magazines
+	local counts = Instance.new("Frame")
+	counts.Name = "Counts"
+	counts.BackgroundTransparency = 1
+	counts.Size = UDim2.new(1, 0, 0, 16)
+	counts.LayoutOrder = 3
+	counts.Parent = card
+	Theme.list(counts, Enum.FillDirection.Horizontal, 10, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+	local function countCell(name: string, glyph: string, order: number): TextLabel
+		local l = Style.label({
+			Name = name,
+			Text = glyph .. " 0",
+			Color = Style.Amber,
+			Size = UDim2.fromOffset(0, 16),
+			AutomaticSize = Enum.AutomaticSize.X,
+			LayoutOrder = order,
+			Parent = counts,
+		})
+		return l
+	end
+	ui.cntStim = countCell("Stims", "✚", 1)
+	ui.cntNade = countCell("Grenades", "●", 2)
+	ui.cntMags = countCell("Mags", "▮", 3)
+	ui.cntStim.Visible = false -- only shown when the server publishes me.stims
+
+	-- callsign + health
+	local hpRow = Instance.new("Frame")
+	hpRow.Name = "Health"
+	hpRow.BackgroundTransparency = 1
+	hpRow.Size = UDim2.new(1, 0, 0, 18)
+	hpRow.LayoutOrder = 4
+	hpRow.Parent = card
+	ui.callsign = Style.label({
+		Text = "A1",
+		Color = Style.Amber,
+		Size = UDim2.fromOffset(26, 18),
+		Parent = hpRow,
+	})
+	local track = Style.rect({
+		Name = "HpTrack",
+		Color = Style.Black,
+		Transparency = 0.4,
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 28, 0.5, 0),
+		Size = UDim2.fromOffset(HP_BAR_W, 8),
+		Parent = hpRow,
+	})
+	ui.hpPanel = track
+	ui.hpFill = Style.rect({ Name = "Fill", Color = Style.White, Size = UDim2.fromScale(1, 1), Parent = track })
+	local st = Instance.new("UIStroke")
+	st.Color = Style.White
+	st.Transparency = 0.7
+	st.Thickness = 1
+	st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	st.Parent = track
+	ui.hpStroke = st
+	ui.hpText = Style.label({
+		Text = "",
+		TextSize = 12,
+		Color = Style.Grey,
+		XAlign = Enum.TextXAlignment.Right,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, 0),
+		Size = UDim2.fromOffset(0, 18),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Parent = hpRow,
+	})
+	ui.hpText.Visible = false -- numbers live on the bar tooltip-free; kept for updateHealth()
 end
 
+-- Toasts: small flat lines low centre (the centre of the screen and the top alert stack stay clear)
 local function buildToasts(root: Instance)
 	local holder = Instance.new("Frame")
 	holder.Name = "Toasts"
 	holder.BackgroundTransparency = 1
-	holder.AnchorPoint = Vector2.new(0.5, 0)
-	holder.Position = UDim2.new(0.5, 0, 0, 100)
+	holder.AnchorPoint = Vector2.new(0.5, 1)
+	holder.Position = UDim2.new(0.5, 0, 0.8, 0)
 	holder.Size = UDim2.fromOffset(440, 0)
 	holder.AutomaticSize = Enum.AutomaticSize.Y
 	holder.Parent = root
-	Theme.list(holder, Enum.FillDirection.Vertical, 4, Enum.HorizontalAlignment.Center)
+	Theme.list(holder, Enum.FillDirection.Vertical, 4, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Bottom)
 	ui.toasts = holder
-
-	local banner = Instance.new("Frame")
-	banner.Name = "Banner"
-	banner.BackgroundTransparency = 1
-	banner.AnchorPoint = Vector2.new(0.5, 0.5)
-	banner.Position = UDim2.fromScale(0.5, 0.26)
-	banner.Size = UDim2.fromOffset(760, 110)
-	banner.Visible = false
-	banner.Parent = root
-	local bs = Instance.new("UIScale")
-	bs.Parent = banner
-	ui.bannerFrame = banner
-	ui.bannerScale = bs
-	ui.bannerTitle = Theme.label({
-		Text = "",
-		Font = "Header",
-		TextSize = touch and 30 or 40,
-		Size = UDim2.new(1, 0, 0, 52),
-		Parent = banner,
-	})
-	ui.bannerLine = Instance.new("Frame")
-	ui.bannerLine.BackgroundColor3 = C.Accent
-	ui.bannerLine.BorderSizePixel = 0
-	ui.bannerLine.AnchorPoint = Vector2.new(0.5, 0)
-	ui.bannerLine.Position = UDim2.new(0.5, 0, 0, 56)
-	ui.bannerLine.Size = UDim2.fromOffset(300, 4)
-	ui.bannerLine.Parent = banner
-	ui.bannerSub = Theme.label({
-		Text = "",
-		Font = "Body",
-		TextSize = touch and 16 or 20,
-		Color = C.Text,
-		Size = UDim2.new(1, 0, 0, 28),
-		Position = UDim2.fromOffset(0, 66),
-		Parent = banner,
-	})
 end
 
 local function buildMain()
 	local gui = Theme.gui("OrbitHUD", { DisplayOrder = 10, Insets = "CoreUISafeInsets" })
 	ui.mainGui = gui
-	local root = Theme.root(gui, "hud")
+	local screen = Theme.root(gui, "hud")
+	ui.screen = screen
+	local root = Style.content(screen, touch) -- 0.8 x on touch
 	ui.root = root
 
+	-- top-left column: ship info (lobby), uplink list (squad cards live on the left edge at y 58-78 %)
 	local left = Instance.new("Frame")
 	left.Name = "LeftColumn"
 	left.BackgroundTransparency = 1
-	left.Position = UDim2.fromOffset(12, 10)
-	left.Size = UDim2.fromOffset(touch and 220 or 300, 0)
+	left.Position = UDim2.fromOffset(Style.MARGIN, Style.MARGIN)
+	left.Size = UDim2.fromOffset(if touch then 190 else 230, 0)
 	left.AutomaticSize = Enum.AutomaticSize.Y
 	left.Parent = root
 	Theme.list(left, Enum.FillDirection.Vertical, 8)
 	ui.left = left
 
 	buildShipPanel(left)
-	buildObjectivePanel(left)
-	buildSquadPanel(left)
-	buildCompass(root)
-	buildAmmo(root)
-	buildBottom(root)
+	CallInList.build(left, touch, 2)
+
+	ui.compassMarkerLayer = Compass.build(root, touch)
+	TopRight.build(root, touch)
+	ObjectiveList.build(root, touch)
+	ui.objReady = true
+	buildOwnCard(root)
+	SquadCards.build(root, touch)
+	EventFeed.build(root, touch)
+	PickupToast.build(root, touch)
+	SquadComms.build(ui.ownCard, touch)
 	buildToasts(root)
 end
 
@@ -717,40 +562,29 @@ function HUD.toast(text: string, color: Color3?)
 	if #kids >= 5 then
 		kids[1]:Destroy()
 	end
-	local pill = Theme.panel({
-		Color = C.Navy,
-		Transparency = 0.15,
-		Corner = 8,
-		Stroke = col,
-		StrokeTransparency = 0.3,
-		Size = UDim2.fromOffset(0, 30),
+	local pill = Style.panel({
+		Size = UDim2.fromOffset(0, 24),
 		AutomaticSize = Enum.AutomaticSize.X,
 		LayoutOrder = math.floor(os.clock() * 1000),
 		Parent = ui.toasts,
 	})
-	Theme.pad(pill, 14, 0, 14, 0)
-	local lbl = Theme.label({
+	Theme.pad(pill, 10, 0, 10, 0)
+	local lbl = Style.label({
 		Text = text,
-		Font = "Body",
-		TextSize = touch and 14 or 16,
 		Color = col,
-		Size = UDim2.fromOffset(0, 30),
+		Size = UDim2.fromOffset(0, 24),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Parent = pill,
 	})
 	pill.BackgroundTransparency = 1
 	lbl.TextTransparency = 1
 	lbl.TextStrokeTransparency = 1
-	tw(pill, 0.18, { BackgroundTransparency = 0.15 })
-	tw(lbl, 0.18, { TextTransparency = 0, TextStrokeTransparency = 0.4 })
+	tw(pill, 0.18, { BackgroundTransparency = Style.PANEL_ALPHA })
+	tw(lbl, 0.18, { TextTransparency = 0, TextStrokeTransparency = 0.65 })
 	task.delay(3.6, function()
 		if pill.Parent then
 			tw(pill, 0.4, { BackgroundTransparency = 1 })
 			tw(lbl, 0.4, { TextTransparency = 1, TextStrokeTransparency = 1 })
-			local st = pill:FindFirstChildOfClass("UIStroke")
-			if st then
-				tw(st, 0.4, { Transparency = 1 })
-			end
 			task.delay(0.45, function()
 				pill:Destroy()
 			end)
@@ -758,56 +592,9 @@ function HUD.toast(text: string, color: Color3?)
 	end)
 end
 
-local bannerQueue: { { title: string, sub: string?, color: Color3 } } = {}
-local bannerBusy = false
-
-local function runBanners()
-	if bannerBusy then
-		return
-	end
-	bannerBusy = true
-	task.spawn(function()
-		while #bannerQueue > 0 do
-			local b = table.remove(bannerQueue, 1) :: any
-			ui.bannerTitle.Text = b.title
-			ui.bannerTitle.TextColor3 = b.color
-			ui.bannerSub.Text = b.sub or ""
-			ui.bannerLine.BackgroundColor3 = b.color
-			ui.bannerFrame.Visible = true
-			ui.bannerScale.Scale = 1.35
-			ui.bannerTitle.TextTransparency = 1
-			ui.bannerSub.TextTransparency = 1
-			ui.bannerLine.Size = UDim2.fromOffset(0, 4)
-			tw(ui.bannerScale, 0.28, { Scale = 1 }, Enum.EasingStyle.Back)
-			tw(ui.bannerTitle, 0.2, { TextTransparency = 0 })
-			tw(ui.bannerSub, 0.3, { TextTransparency = 0 })
-			tw(ui.bannerLine, 0.4, { Size = UDim2.fromOffset(300, 4) })
-			task.wait(2.3)
-			tw(ui.bannerTitle, 0.35, { TextTransparency = 1 })
-			tw(ui.bannerSub, 0.35, { TextTransparency = 1 })
-			tw(ui.bannerLine, 0.3, { Size = UDim2.fromOffset(0, 4) })
-			task.wait(0.4)
-			ui.bannerFrame.Visible = false
-		end
-		bannerBusy = false
-	end)
-end
-
+-- Big centre banners are gone: titles go to the alert stack under the compass (UI/AlertBar notice line).
 function HUD.banner(title: string, subtitle: string?, color: Color3?)
-	if not ui.bannerFrame then
-		return
-	end
-	local t = os.clock()
-	if title == lastBannerTitle and t - lastBannerAt < 3 then
-		return
-	end
-	lastBannerTitle = title
-	lastBannerAt = t
-	if #bannerQueue >= 3 then
-		table.remove(bannerQueue, 1)
-	end
-	table.insert(bannerQueue, { title = title, sub = subtitle, color = color or C.Accent })
-	runBanners()
+	AlertBar.notice(title, subtitle, color, 2.4)
 end
 
 -- Hitmarkers ----------------------------------------------------------------------------------------------------------
@@ -1021,6 +808,7 @@ local function onKill(d: any)
 	streak = if t - streakLast <= STREAK_WINDOW then streak + 1 else 1
 	streakLast = t
 	missionKills += 1
+	TopRight.setResource("kills", missionKills)
 	local class = d.class
 	local name: string? = nil
 	for _, e in STREAK_NAMES do
@@ -1036,6 +824,15 @@ local function onKill(d: any)
 		-- colour heats up with the streak: white -> gold -> orange -> red
 		local col = if streak >= 10 then C.Danger elseif streak >= 5 then C.Accent elseif streak >= 3 then C.Gold else C.White
 		showStreak(string.format("x%d", streak), name, col, math.min(0.9 + streak * 0.03, 1.3))
+	end
+	-- event feed: heavy kills and streak milestones (own kills = amber)
+	if class == "behemoth" then
+		EventFeed.push("BEHEMOTH DOWN", Style.Amber, "kill")
+	elseif class == "heavy" then
+		EventFeed.push("HEAVY DOWN", Style.Amber, "kill")
+	end
+	if MILESTONES[streak] then
+		EventFeed.push(string.format("x%d STREAK", streak), Style.Amber, "streak")
 	end
 	if MILESTONES[streak] and audioMod and audioMod.play2D then
 		pcall(audioMod.play2D, "KillWeak", { pitch = 0.9 + math.min(streak, 15) * 0.04, volume = 0.8, priority = 5 })
@@ -1055,6 +852,9 @@ function HUD.setSpread(deg: number)
 end
 
 function HUD.setReload(progress: number?)
+	if progress ~= nil and reloadProgress == nil then
+		SquadComms.onReload()
+	end
 	reloadProgress = progress
 	if progress == nil then
 		ui.reloadBar.Visible = false
@@ -1144,7 +944,7 @@ function HUD.refreshMarkers()
 				table.insert(list, {
 					key = "obj" .. tostring(o.id),
 					pos = o.marker,
-					color = o.main and C.Accent or C.Friendly,
+					color = o.main and Style.Cyan or Style.Green,
 					label = o.title or "",
 					glyph = o.main and "◆" or "◇",
 				})
@@ -1164,439 +964,87 @@ function HUD.refreshMarkers()
 		local us = Instance.new("UIScale")
 		us.Scale = math.max(s, 0.8)
 		us.Parent = world
-		Theme.label({
+		Style.label({
 			Name = "Name",
 			Text = string.upper(d.label),
-			Font = "Black",
-			TextSize = 12,
+			TextSize = 13,
 			Color = d.color,
+			XAlign = Enum.TextXAlignment.Center,
 			Size = UDim2.new(1, 0, 0, 14),
 			Parent = world,
 		})
-		Theme.label({
+		Style.label({
 			Name = "Glyph",
 			Text = d.glyph,
-			Font = "Black",
-			TextSize = 26,
+			TextSize = 24,
 			Color = d.color,
+			XAlign = Enum.TextXAlignment.Center,
 			Size = UDim2.new(1, 0, 0, 28),
 			Position = UDim2.fromOffset(0, 14),
 			Parent = world,
 		})
-		Theme.label({
+		Style.label({
 			Name = "Dist",
 			Text = "",
-			Font = "Black",
 			TextSize = 13,
+			XAlign = Enum.TextXAlignment.Center,
 			Size = UDim2.new(1, 0, 0, 16),
 			Position = UDim2.fromOffset(0, 42),
 			Parent = world,
 		})
 		world.Visible = false
 		world.Parent = ui.markerLayer
-		local comp = Theme.label({
-			Name = d.key,
-			Text = d.glyph,
-			Font = "Black",
-			TextSize = 20,
-			Color = d.color,
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Size = UDim2.fromOffset(22, 22),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Parent = ui.compassMarkerLayer,
-		})
+		local comp = Compass.addPip(ui.compassMarkerLayer, d.key, d.glyph, d.color)
 		markers[d.key] = { pos = d.pos, world = world, compass = comp }
 	end
 end
 
 -- Objectives ----------------------------------------------------------------------------------------------------------
-local function clearRows(panel: Instance)
-	for _, c in panel:GetChildren() do
-		if c:GetAttribute("Row") then
-			c:Destroy()
-		end
-	end
-end
-
-local function addRow(panel: Instance, text: string, order: number): TextLabel
-	local l = Theme.label({
-		Text = text,
-		Font = "Body",
-		Rich = true,
-		TextSize = touch and 12 or 14,
-		XAlign = Enum.TextXAlignment.Left,
-		YAlign = Enum.TextYAlignment.Top,
-		Wrap = true,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-		LayoutOrder = order,
-		Parent = panel,
-	})
-	l:SetAttribute("Row", true)
-	return l
-end
-
-local function addProgress(panel: Instance, progress: number, order: number, color: Color3)
-	local holder = Instance.new("Frame")
-	holder.BackgroundTransparency = 1
-	holder.Size = UDim2.new(1, 0, 0, 8)
-	holder.LayoutOrder = order
-	holder:SetAttribute("Row", true)
-	holder.Parent = panel
-	local b = Theme.bar({ Size = UDim2.new(1, -16, 0, 6), Position = UDim2.fromOffset(16, 1), Color = color, Parent = holder })
-	b:set(progress)
-end
-
+-- Right-side checklist (UI/ObjectiveList). Also feeds the green SAMPLES chip (parsed "(n/m)" from step texts).
 local function updateObjectives()
-	local panel = ui.objPanel
-	if not panel then
+	if not ui.objReady then
 		return
 	end
-	clearRows(panel)
 	local objs = Store.get("objectives")
-	if not objs or #objs == 0 then
-		panel.Visible = false
-		prevDone = nil
-		return
+	local newlyDone, newlyStep, any = ObjectiveList.render(objs)
+	ObjectiveList.setVisible(any and (COMBAT[state] == true or state == "Drop"))
+	for _, t in newlyDone do
+		HUD.banner("OBJECTIVE COMPLETE", t, Style.Green)
+		Theme.sfx("ObjectiveDone")
+		EventFeed.push("OBJECTIVE: " .. t, Style.Cyan, "objective")
 	end
-	panel.Visible = COMBAT[state] == true or state == "Drop"
-	local order = 1
-	local doneNow: { [string]: boolean } = {}
-	local newlyDone: { string } = {}
-	local newlyStep: { string } = {}
-	local mains, sides = {}, {}
-	for _, o in objs do
-		table.insert(o.main and mains or sides, o)
+	for _, t in newlyStep do
+		EventFeed.push("DONE: " .. t, Style.Cyan, "objective")
 	end
-	local function track(o: any)
-		local key = tostring(o.id)
-		doneNow[key] = o.done == true
-		if prevDone and o.done and not prevDone[key] then
-			table.insert(newlyDone, o.title or "Objective")
-		end
-		if o.steps then
-			for i, s in o.steps do
-				local k = key .. ":" .. i
-				doneNow[k] = s.done == true
-				if prevDone and s.done and not prevDone[k] and not o.done then
-					table.insert(newlyStep, s.text)
-				end
-			end
-		end
-	end
-	for _, o in mains do
-		track(o)
-		local mark = o.done and string.format('<font color="%s">✓</font> ', Theme.hex(C.Friendly)) or ""
-		addRow(panel, string.format('%s<font color="%s"><b>%s</b></font>', mark, Theme.hex(C.Accent), string.upper(o.title or "MISSION")), order)
-		order += 1
-		if o.steps then
-			for _, s in o.steps do
-				if touch and not s.active then
-					continue
-				end
-				local text
-				if s.done then
-					text = string.format('<font color="%s">✓ %s</font>', Theme.hex(C.Friendly), s.text)
-				elseif s.active then
-					text = string.format('<font color="%s">▶ <b>%s</b></font>', Theme.hex(C.Gold), s.text)
-				else
-					text = string.format('<font color="%s">○ %s</font>', Theme.hex(C.Muted), s.text)
-				end
-				addRow(panel, text, order)
-				order += 1
-				if s.active and s.progress ~= nil then
-					addProgress(panel, s.progress, order, C.Gold)
-					order += 1
-				end
-			end
-		end
-	end
-	for _, o in sides do
-		track(o)
-		local active
-		if o.steps then
-			for _, s in o.steps do
-				if s.active then
-					active = s
-				end
-			end
-		end
-		local text
-		if o.done then
-			text = string.format('<font color="%s">✓ %s</font>', Theme.hex(C.Friendly), o.title or "")
-		else
-			text = string.format('<font color="%s">◇</font> %s', Theme.hex(C.Friendly), o.title or "")
-			if active and not touch then
-				text ..= string.format('  <font color="%s">%s</font>', Theme.hex(C.Muted), active.text)
-			end
-		end
-		addRow(panel, text, order)
-		order += 1
-		if not o.done and active and active.progress ~= nil then
-			addProgress(panel, active.progress, order, C.Friendly)
-			order += 1
-		end
-	end
-	if prevDone then
-		for _, t in newlyDone do
-			HUD.banner("OBJECTIVE COMPLETE", t, C.Friendly)
-			Theme.sfx("ObjectiveDone")
-		end
-		for _, t in newlyStep do
-			HUD.toast("✓ " .. t, C.Friendly)
-		end
-	end
-	prevDone = doneNow
+	local samples = ObjectiveList.sampleCount(objs)
+	TopRight.setResource("samples", samples or 0)
 	HUD.refreshMarkers()
 end
 
 -- Squad -------------------------------------------------------------------------------------------------------------------
+-- Squad cards (UI/SquadCards, left edge y 58-78 %) + callsign colours + squad chatter edges
 local function updateSquad()
-	local panel = ui.squadPanel
-	if not panel then
+	if not ui.root then
 		return
 	end
-	clearRows(panel)
 	local squad = Store.get("squad")
-	local rows = 0
-	if squad then
-		for i, m in squad do
-			if m.userId == player.UserId then
-				continue
-			end
-			rows += 1
-			local row = Instance.new("Frame")
-			row.BackgroundTransparency = 1
-			row.Size = UDim2.new(1, 0, 0, touch and 22 or 28)
-			row.LayoutOrder = i
-			row:SetAttribute("Row", true)
-			row.Parent = panel
-			Theme.label({
-				Text = m.name or "?",
-				Font = "Black",
-				TextSize = touch and 11 or 13,
-				Color = m.alive and C.Text or C.Muted,
-				XAlign = Enum.TextXAlignment.Left,
-				Size = UDim2.new(1, 0, 0, 14),
-				Parent = row,
-			})
-			local frac = (m.maxHp and m.maxHp > 0) and (m.hp or 0) / m.maxHp or 0
-			local bar = Theme.bar({
-				Size = UDim2.new(1, 0, 0, 6),
-				Position = UDim2.new(0, 0, 0, touch and 15 or 17),
-				Color = m.alive and (frac > 0.35 and C.Friendly or C.Danger) or C.Grey,
-				Parent = row,
-			})
-			bar:set(m.alive and frac or 1)
-			if not m.alive then
-				Theme.label({
-					Text = "DOWN",
-					Font = "Header",
-					TextSize = 10,
-					Color = C.Danger,
-					XAlign = Enum.TextXAlignment.Right,
-					Size = UDim2.new(1, 0, 0, 14),
-					Parent = row,
-				})
-			end
-		end
+	Style.setSquad(squad, player.UserId)
+	if ui.callsign then
+		local me = Style.callsign(player.UserId)
+		ui.callsign.Text = me.tag
+		ui.callsign.TextColor3 = me.color
 	end
-	panel.Visible = rows > 0 and (COMBAT[state] == true or state == "Drop")
+	SquadCards.update(squad, Store.get("me"), Store.get("mission"), player.UserId, now())
+	SquadCards.setVisible(COMBAT[state] == true or state == "Drop")
+	SquadComms.onSquad(squad)
 end
 
 -- Call-in bar -------------------------------------------------------------------------------------------------------------
-local function makeSlotWidget(parent: Instance, order: number, size: number, reinforce: boolean?): any
-	local frame = Theme.panel({
-		Name = "Slot" .. order,
-		Color = C.Navy,
-		Transparency = 0.1,
-		Corner = 10,
-		Stroke = reinforce and C.Friendly or C.Accent,
-		StrokeTransparency = 0.25,
-		Size = UDim2.fromOffset(size, size + 8),
-		LayoutOrder = order,
-		ClipsDescendants = false,
-		Parent = parent,
-	})
-	local inner = Instance.new("Frame")
-	inner.Name = "Inner"
-	inner.BackgroundTransparency = 1
-	inner.Size = UDim2.fromScale(1, 1)
-	inner.ClipsDescendants = true
-	inner.Parent = frame
-	Theme.corner(inner, 10)
-	local glyph = Theme.label({
-		Text = "",
-		Font = "Black",
-		TextSize = touch and 22 or 30,
-		Size = UDim2.new(1, 0, 0, size * 0.55),
-		Position = UDim2.fromOffset(0, 4),
-		Parent = inner,
-	})
-	local name = Theme.label({
-		Text = "",
-		Font = "Black",
-		TextSize = touch and 9 or 11,
-		Color = C.Text,
-		Size = UDim2.new(1, -4, 0, 14),
-		Position = UDim2.new(0, 2, 1, -16),
-		Parent = inner,
-	})
-	local cd = Instance.new("Frame")
-	cd.Name = "Cooldown"
-	cd.BackgroundColor3 = C.Dark
-	cd.BackgroundTransparency = 0.25
-	cd.BorderSizePixel = 0
-	cd.AnchorPoint = Vector2.new(0, 1)
-	cd.Position = UDim2.fromScale(0, 1)
-	cd.Size = UDim2.fromScale(1, 0)
-	cd.ZIndex = 3
-	cd.Parent = inner
-	local cdText = Theme.label({
-		Text = "",
-		Font = "Black",
-		TextSize = touch and 16 or 20,
-		Size = UDim2.fromScale(1, 0.7),
-		ZIndex = 4,
-		Parent = inner,
-	})
-	local badge = Theme.label({
-		Text = "",
-		Font = "Black",
-		TextSize = touch and 10 or 12,
-		Color = C.Gold,
-		XAlign = Enum.TextXAlignment.Right,
-		Size = UDim2.new(1, -6, 0, 14),
-		Position = UDim2.fromOffset(0, 2),
-		ZIndex = 4,
-		Parent = inner,
-	})
-	local pips = Instance.new("Frame")
-	pips.Name = "Pips"
-	pips.BackgroundTransparency = 1
-	pips.AnchorPoint = Vector2.new(0.5, 1)
-	pips.Position = UDim2.new(0.5, 0, 1, 6)
-	pips.Size = UDim2.fromOffset(size, 8)
-	pips.Parent = frame
-	Theme.list(pips, Enum.FillDirection.Horizontal, 3, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
-	return {
-		frame = frame, glyph = glyph, name = name, cd = cd, cdText = cdText, badge = badge, pips = pips,
-		stroke = frame:FindFirstChildOfClass("UIStroke"), ready = nil, id = nil, pipCount = -1,
-	}
-end
-
-local function rebuildCallinBar()
-	for _, w in slotWidgets do
-		w.frame:Destroy()
-	end
-	slotWidgets = {}
-	local me = Store.get("me")
-	local slots = me and me.callins and me.callins.slots or {}
-	local size = touch and 46 or 62
-	for i, s in slots do
-		local def = CallIns.get(s.id)
-		local w = makeSlotWidget(ui.callinBar, i, size)
-		w.glyph.Text = def and def.icon or "?"
-		w.name.Text = Theme.callinShort(def)
-		w.def = def
-		w.slotIndex = i
-		if def then
-			w.stroke.Color = Theme.beaconColor(def.beacon)
-		end
-		table.insert(slotWidgets, w)
-	end
-	local rw = makeSlotWidget(ui.callinBar, 10, size, true)
-	local rdef = CallIns.get("REINFORCE")
-	rw.glyph.Text = rdef and rdef.icon or "✚"
-	rw.name.Text = "REINF"
-	rw.def = rdef
-	rw.reinforce = true
-	table.insert(slotWidgets, rw)
-end
-
+-- The top-left call-in list lives in UI/CallInList.
 local function updateCallins()
 	local me = Store.get("me")
-	if not me or not me.callins or not me.callins.slots then
-		return
-	end
-	local slots = me.callins.slots
-	local key = {}
-	for _, s in slots do
-		table.insert(key, s.id)
-	end
-	local k = table.concat(key, ",")
-	if k ~= slotKey then
-		slotKey = k
-		rebuildCallinBar()
-	end
-	local t = now()
-	for _, w in slotWidgets do
-		local def = w.def
-		if not def then
-			continue
-		end
-		local available, remaining, reason
-		local slot
-		if w.reinforce then
-			remaining = math.max(0, (me.reinforceReadyAt or 0) - t)
-			available = remaining <= 0
-			reason = available and "READY" or "COOLDOWN"
-		else
-			slot = slots[w.slotIndex]
-			if not slot then
-				continue
-			end
-			available, remaining, reason = Theme.slotStatus(slot, def, t)
-		end
-		local frac = 0
-		if remaining > 0 and not (slot and slot.charges ~= nil and slot.charges > 0) then
-			frac = Theme.clamp(remaining / math.max(def.cooldown, 1), 0, 1)
-		end
-		w.cd.Size = UDim2.fromScale(1, frac)
-		if reason == "NO USES" then
-			w.cd.Size = UDim2.fromScale(1, 1)
-			w.cdText.Text = "0"
-			w.cdText.TextColor3 = C.Danger
-		elseif remaining > 0 and frac > 0 then
-			w.cdText.Text = tostring(math.ceil(remaining))
-			w.cdText.TextColor3 = C.Text
-		else
-			w.cdText.Text = ""
-		end
-		w.glyph.TextTransparency = available and 0 or 0.55
-		if slot then
-			-- charges badge / uses pips
-			w.badge.Text = (slot.maxCharges and slot.maxCharges > 1) and ("x" .. tostring(slot.charges or 0)) or ""
-			if def.uses then
-				if w.pipCount ~= (slot.uses or def.uses) or #w.pips:GetChildren() ~= def.uses + 1 then
-					for _, c in w.pips:GetChildren() do
-						if c:IsA("Frame") then
-							c:Destroy()
-						end
-					end
-					for i = 1, def.uses do
-						local p = Instance.new("Frame")
-						p.Size = UDim2.fromOffset(8, 5)
-						p.BorderSizePixel = 0
-						p.BackgroundColor3 = i <= (slot.uses or def.uses) and C.Gold or C.Grey
-						p.LayoutOrder = i
-						p.Parent = w.pips
-						Theme.corner(p, 2)
-					end
-					w.pipCount = slot.uses or def.uses
-				end
-			end
-		end
-		if w.ready ~= available then
-			if available and w.ready == false then
-				tw(w.frame, 0.1, { Size = UDim2.fromOffset(w.frame.Size.X.Offset + 6, w.frame.Size.Y.Offset + 6) })
-				task.delay(0.12, function()
-					tw(w.frame, 0.2, { Size = UDim2.fromOffset(w.frame.Size.X.Offset - 6, w.frame.Size.Y.Offset - 6) })
-				end)
-			end
-			w.ready = available
-			w.stroke.Transparency = available and 0.1 or 0.7
-		end
+	if me then
+		CallInList.update(me, now())
 	end
 end
 
@@ -1631,24 +1079,29 @@ local function updateAmmo()
 		ammoLastId, ammoLastMag = entry.id, mag
 		ammoLow = maxMag > 1 and mag <= math.max(1, maxMag * 0.25)
 		if mag <= 0 then
-			ui.ammoMag.TextColor3 = C.Danger
+			ui.ammoMag.TextColor3 = Style.Red
 			ui.ammoState.Text = reloadProgress and "" or "RELOAD"
 		elseif mag <= math.max(1, maxMag * 0.25) then
-			ui.ammoMag.TextColor3 = C.Accent
+			ui.ammoMag.TextColor3 = Style.Amber
 			ui.ammoState.Text = ""
 		else
-			ui.ammoMag.TextColor3 = C.Text
+			ui.ammoMag.TextColor3 = Style.White
 			ui.ammoState.Text = ""
 		end
+		-- spare magazines (whole mags left in reserve)
+		local mags = if maxMag > 0 then math.ceil(spare / math.max(maxMag, 1)) else 0
+		ui.cntMags.Text = "▮ " .. tostring(mags)
+		ui.cntMags.TextColor3 = if spare <= 0 then Style.Red else Style.Amber
 	end
 	local g = me.grenades or 0
-	local gdef = me.grenadeId and Weapons.get(me.grenadeId)
-	local dots = {}
-	for i = 1, math.min(g, 6) do
-		table.insert(dots, "●")
+	ui.cntNade.Text = "● " .. tostring(g)
+	ui.cntNade.TextColor3 = if g <= 0 then Style.Grey else Style.Amber
+	local stims = me.stims
+	ui.cntStim.Visible = type(stims) == "number"
+	if type(stims) == "number" then
+		ui.cntStim.Text = "✚ " .. tostring(stims)
+		ui.cntStim.TextColor3 = if stims <= 0 then Style.Grey else Style.Amber
 	end
-	local gname = gdef and string.upper(string.sub(gdef.name, 1, 8)) or "NADES"
-	ui.ammoNades.Text = string.format("%s  %s%s", gname, table.concat(dots, " "), g > 6 and (" x" .. g) or (g == 0 and "—" or ""))
 end
 
 -- WeaponController: its predicted magazine table (same table every call; read by reference).
@@ -1666,14 +1119,8 @@ local function updateHealth()
 	end
 	local hp, maxHp = me.hp or 0, math.max(me.maxHp or Config.PlayerHealth, 1)
 	local frac = Theme.clamp(hp / maxHp, 0, 1)
-	tw(ui.hpFill, 0.12, { Size = UDim2.new(frac, -6 * frac, 1, -6) })
-	local col = C.Friendly
-	if frac < 0.25 then
-		col = C.Danger
-	elseif frac < 0.5 then
-		col = C.Accent
-	end
-	ui.hpFill.BackgroundColor3 = col
+	tw(ui.hpFill, 0.12, { Size = UDim2.fromScale(frac, 1) })
+	ui.hpFill.BackgroundColor3 = if frac < 0.3 then Style.Red else Style.White
 	ui.hpText.Text = me.alive == false and "DOWN" or string.format("%d / %d", math.ceil(hp), maxHp)
 	if lastHp and hp < lastHp - 0.5 then
 		flash = math.max(flash, math.min(1, (lastHp - hp) / maxHp * 3 + 0.3))
@@ -1704,22 +1151,17 @@ local function updateTimer()
 		return
 	end
 	local t = now()
-	local label = ""
 	if state == "Active" or state == "Extract" then
 		local left = math.max(0, (m.endsAt or t) - t)
-		local col = C.Text
-		local title = state == "Extract" and "EXTRACT" or "TIME"
+		local col = Style.White
 		if state == "Active" and left < 120 then
-			col = (math.floor(t * 2) % 2 == 0) and C.Danger or C.Accent
+			col = if math.floor(t * 2) % 2 == 0 then Style.Red else Style.Amber
 		elseif state == "Extract" then
-			col = C.Friendly
+			col = Style.Green
 		end
-		label = string.format(
-			'<font color="%s">%s</font> <font color="%s">%s</font>    <font color="%s">✚ %s</font>',
-			Theme.hex(C.Muted), title, Theme.hex(col), Theme.formatTime(left), Theme.hex((m.lives or 0) <= 1 and C.Danger or C.Friendly), tostring(m.lives or 0)
-		)
+		TopRight.setTimer("T-" .. Theme.formatTime(left), col)
+		TopRight.setLives(m.lives or 0)
 	end
-	ui.timerLabel.Text = label
 end
 
 -- Visibility by mission state --------------------------------------------------------------------------------------------------------------
@@ -1731,11 +1173,19 @@ local function applyVisibility()
 	local alive = not me or me.alive ~= false
 	ui.cross.Visible = combat and alive and not Store.get("menuOpen")
 	ui.markerLayer.Visible = combat
-	ui.compassHolder.Visible = combat
-	ui.ammoPanel.Visible = combat
-	ui.bottomStack.Visible = combat
+	Compass.setVisible(combat)
+	TopRight.setVisible(combat)
+	CallInList.setVisible(combat)
+	ui.ownCard.Visible = combat
+	EventFeed.setVisible(combat)
+	PickupToast.setVisible(combat)
+	SquadComms.setActive(combat)
+	if not combat then
+		EventFeed.clear()
+		PickupToast.clear()
+	end
 	ui.shipPanel.Visible = ship
-	ui.objPanel.Visible = (combat or drop) and #(Store.get("objectives") or {}) > 0
+	ObjectiveList.setVisible((combat or drop) and #(Store.get("objectives") or {}) > 0)
 	updateSquad()
 	if not combat then
 		ui.promptFrame.Visible = false
@@ -2088,33 +1538,6 @@ local function updatePrompt()
 end
 
 -- Compass / world markers (per frame) ---------------------------------------------------------------------------------------------------
-local function wrap180(a: number): number
-	return (a + 180) % 360 - 180
-end
-
-local function stepCompass(cam: Camera)
-	local look = cam.CFrame.LookVector
-	local ang = math.deg(math.atan2(look.X, -look.Z))
-	local span = COMPASS_SPAN
-	for _, c in ui.compassItems do
-		local rel = wrap180(c.bearing - ang)
-		if math.abs(rel) > span / 2 then
-			c.item.Visible = false
-		else
-			c.item.Visible = true
-			c.item.Position = UDim2.fromScale(0.5 + rel / span, 0.5)
-		end
-	end
-	local camPos = cam.CFrame.Position
-	for _, m in markers do
-		local d = m.pos - camPos
-		local b = math.deg(math.atan2(d.X, -d.Z))
-		local rel = wrap180(b - ang)
-		m.compass.Visible = math.abs(rel) <= span / 2 + 6
-		m.compass.Position = UDim2.fromScale(Theme.clamp(0.5 + rel / span, 0, 1), 0.5)
-	end
-end
-
 local function stepMarkers(cam: Camera)
 	local vp = cam.ViewportSize
 	local cx, cy = vp.X / 2, vp.Y / 2
@@ -2160,7 +1583,7 @@ local function step(dt: number)
 			local off = gap + t.half
 			t.frame.Position = UDim2.fromOffset(t.dir.X * off, t.dir.Y * off)
 		end
-		stepCompass(cam)
+		Compass.step(cam, markers)
 		stepMarkers(cam)
 		if ui.promptFrame.Visible then
 			ui.promptScale.Scale = 1 + 0.06 * math.sin(os.clock() * 7)
@@ -2205,19 +1628,27 @@ local function step(dt: number)
 			end
 		end
 		scale.Scale = s
-		-- magazine bar: eased drain; while reloading it fills with the reload progress in the accent colour
-		if ui.magFill then
+		-- magazine segments: eased drain; while reloading they fill with the reload progress in amber
+		if ui.magSegs then
 			local target = magTarget
-			local col = C.Text
+			local col = Style.White
 			if reloadProgress ~= nil and not charging then
 				target = Theme.clamp(reloadProgress, 0, 1)
-				col = C.Accent
+				col = Style.Amber
 			elseif ammoLow then
-				col = C.Danger
+				col = Style.Red
 			end
 			magShown += (target - magShown) * (1 - math.exp(-18 * dt))
-			ui.magFill.Size = UDim2.fromScale(Theme.clamp(magShown, 0, 1), 1)
-			ui.magFill.BackgroundColor3 = col
+			local lit = math.ceil(Theme.clamp(magShown, 0, 1) * MAG_SEGS - 0.001)
+			for i, seg in ui.magSegs do
+				if i <= lit then
+					seg.BackgroundColor3 = col
+					seg.BackgroundTransparency = 0.05
+				else
+					seg.BackgroundColor3 = Style.White
+					seg.BackgroundTransparency = 0.8
+				end
+			end
 		end
 	end
 	-- vignette (Main.client's Hurt handler already flashes Juice.vignette, so this one stays restrained)
@@ -2241,9 +1672,9 @@ local function step(dt: number)
 	elseif me and me.alive == false and combat then
 		low = 0.32
 	end
-	if not strokeLow and ui.hpStroke and ui.hpStroke.Color ~= C.PanelHi then
-		ui.hpStroke.Color = C.PanelHi
-		ui.hpStroke.Transparency = 0.2
+	if not strokeLow and ui.hpStroke and ui.hpStroke.Color ~= Style.White then
+		ui.hpStroke.Color = Style.White
+		ui.hpStroke.Transparency = 0.7
 	end
 	setVignette(math.max(flash * 0.45, low))
 end
@@ -2262,7 +1693,7 @@ local function onMission()
 			HUD.banner("EXTRACTION INBOUND", "Reach the " .. Config.ShuttleName .. " before the window closes", C.Friendly)
 		end
 		if new ~= "Active" and new ~= "Extract" then
-			prevDone = nil
+			ObjectiveList.reset()
 		end
 	end
 	applyVisibility()
@@ -2278,6 +1709,7 @@ function HUD.init()
 	inited = true
 	touch = Theme.isTouch()
 
+	AlertBar.init()
 	buildCrosshair()
 	buildStreak()
 	buildMain()
@@ -2294,6 +1726,7 @@ function HUD.init()
 	if okFx and type(fx) == "table" and fx.register then
 		fxMod = fx
 		fx.register("Death", onKill)
+		SquadComms.init(fx)
 	end
 	local okA, am = pcall(function()
 		return require(clientRoot:WaitForChild("Audio", 5))
@@ -2305,16 +1738,18 @@ function HUD.init()
 		local s = m and m.state
 		if s ~= "Active" and s ~= "Extract" then
 			missionKills, streak, streakLast = 0, 0, -100
+			TopRight.setResource("kills", 0)
 		end
 	end)
 
 	Store.on("mission", onMission)
-	Store.on("me", function()
+	Store.on("me", function(me)
 		updateAmmo()
 		updateHealth()
 		updateCallins()
 		updatePrompt()
 		applyVisibility()
+		SquadComms.onMe(me)
 	end)
 	Store.on("holding", updatePrompt)
 	Store.on("objectives", updateObjectives)
@@ -2328,6 +1763,10 @@ function HUD.init()
 		end
 		if kind == "banner" then
 			HUD.banner(text, nil, color)
+		elseif COMBAT[state] and PickupToast.route(text) then
+			Theme.sfx("Notify") -- pickup: orange toast at the right edge
+		elseif COMBAT[state] and EventFeed.route(text, color, kind) then
+			-- DIED / reinforced lines live in the bottom-right event feed
 		else
 			HUD.toast(text, color)
 			Theme.sfx("Notify")
@@ -2339,6 +1778,8 @@ function HUD.init()
 		updateCallins()
 		updateTimer()
 		updateOverlay()
+		SquadCards.tick(Store.get("me"), Store.get("mission"), now())
+		EventFeed.tick()
 	end)
 
 	onMission()

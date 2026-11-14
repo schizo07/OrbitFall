@@ -35,6 +35,12 @@ export type Enemy = {
 	-- LUMEN extras (server/Enemies/LumenAI.luau)
 	blink: { aim: number, dist: number, cooldown: number }?, -- blink sideways after being aimed at for `aim` s
 	nodes: { open: number, closed: number }?, -- resonance nodes cycle open/closed (seconds)
+	-- FODDER tier (Director v2): 1-hit swarm units. They reuse a regular unit's model scaled down (modelKind / modelScale), count
+	-- `cost` (< 1) towards the live cap and run a cheap AI (EnemyAI: steer only close to the target)
+	fodder: boolean?,
+	cost: number?,
+	modelKind: string?,
+	modelScale: number?,
 }
 
 local E: { [string]: Enemy } = {
@@ -210,25 +216,48 @@ local E: { [string]: Enemy } = {
 	},
 }
 
+-- FODDER (swarm) tier: one per faction, built on the faction's regular unit. 1 HP (any hit kills), half cap cost, body only (every
+-- zone name falls back to "body"), weak attacks. Spawned in numbers by the breach sources (server/Enemies/Director.luau).
+local FODDER_SCALE = 0.8
+local function fodder(baseId: string, id: string, name: string, speedMult: number, attack: Attack, keepDistance: number?): Enemy
+	local b = E[baseId]
+	return {
+		id = id, name = name, faction = b.faction, class = "regular",
+		hp = 1, speed = b.speed * speedMult, size = b.size * FODDER_SCALE,
+		zones = { body = { armor = 0, mult = 1 } },
+		attacks = { attack },
+		keepDistance = keepDistance,
+		salvage = 0, xp = 0,
+		desc = "Swarm unit: dies to any hit, comes in dozens.",
+		fodder = true, cost = 0.5, modelKind = baseId, modelScale = FODDER_SCALE,
+	}
+end
+E.TINKER_SWARM = fodder("TINKER", "TINKER_SWARM", "Scrap Swarmer", 1.15,
+	{ kind = "bolt", damage = 6, range = 45, cooldown = 1.4, speed = 100 }, 20)
+E.SKITTER_SWARM = fodder("SKITTER", "SKITTER_SWARM", "Skitterling Swarm", 1.05,
+	{ kind = "leap", damage = 8, range = 8, cooldown = 1.2, windup = 0.25 }, nil)
+E.SHARDLING_SWARM = fodder("SHARDLING", "SHARDLING_SWARM", "Shard Swarmer", 1.1,
+	{ kind = "needle", damage = 5, range = 50, cooldown = 1.7, speed = 140, count = 1, interval = 0.1, spread = 4 }, 18)
+
 local Enemies = { byId = E }
 
 Enemies.Factions = {
 	COG = {
 		id = "COG", name = "The Cogwork Legion", short = "Cogwork",
 		color = Color3.fromHex("ff4040"),
-		roster = { regular = "TINKER", medium = "RIVET", heavy = "BULWARK", behemoth = "COLOSSUS" },
+		roster = { regular = "TINKER", medium = "RIVET", heavy = "BULWARK", behemoth = "COLOSSUS", fodder = "TINKER_SWARM" },
 		deathStyle = "scrap",
 	},
 	BROOD = {
 		id = "BROOD", name = "The Skitter Brood", short = "Brood",
 		color = Color3.fromHex("8cff3a"),
-		roster = { regular = "SKITTER", medium = "SPITTER", heavy = "CHARGER", behemoth = "TITAN" },
+		roster = { regular = "SKITTER", medium = "SPITTER", heavy = "CHARGER", behemoth = "TITAN", fodder = "SKITTER_SWARM" },
 		deathStyle = "goo",
 	},
 	LUMEN = {
 		id = "LUMEN", name = "The Lumen Concord", short = "Concord",
 		color = Color3.fromHex("c060ff"),
-		roster = { regular = "SHARDLING", medium = "WARDEN", heavy = "LANCER", behemoth = "SPIRE" },
+		roster = { regular = "SHARDLING", medium = "WARDEN", heavy = "LANCER", behemoth = "SPIRE", fodder = "SHARDLING_SWARM" },
 		deathStyle = "shard", -- client/Fx/LumenFx.luau: shatter into crystal shards + soft light pop
 		reinforce = "rift", -- Director: rift gate warp-in (4-6 units)
 	},

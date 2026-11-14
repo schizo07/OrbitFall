@@ -1,0 +1,255 @@
+-- In-mission HUD style kit: thin, flat, edge-hugging panels (black 55 % transparent, square corners, 1 px white corner
+-- brackets at 70 % opacity), condensed bold caps font, four accent colours. Used by HUD / AlertBar / CallInList / ...
+-- Ship lobby screens keep using Theme; nothing here touches Theme's own helpers.
+local Theme = require(script.Parent.Theme)
+
+local Style = {}
+
+Style.Amber = Color3.fromHex("F5B93A") -- own / neutral
+Style.Cyan = Color3.fromHex("5FD4E6") -- objectives
+Style.Red = Color3.fromHex("D8232A") -- alerts
+Style.Green = Color3.fromHex("57D163") -- samples / friendly
+Style.Orange = Color3.fromHex("F07A2B") -- rare pickups
+Style.Grey = Color3.fromHex("A7ADB7")
+Style.White = Color3.new(1, 1, 1)
+Style.Black = Color3.new(0, 0, 0)
+
+Style.MARGIN = 16
+Style.PANEL_ALPHA = 0.55 -- BackgroundTransparency of the black panels
+Style.BRACKET_ALPHA = 0.3 -- = 70 % opaque
+Style.TEXT = 14
+Style.ALERT = 18
+
+-- Condensed bold caps face. Oswald Bold via its font family; Gotham Bold if the family cannot be built.
+local function makeFont(): Font
+	local ok, f = pcall(function()
+		return Font.new("rbxasset://fonts/families/Oswald.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+	end)
+	if ok and f then
+		return f
+	end
+	return Font.fromEnum(Enum.Font.GothamBold)
+end
+Style.Font = makeFont()
+
+function Style.up(s: any): string
+	return string.upper(tostring(s or ""))
+end
+
+-- 1 px corner brackets around a frame (children of a Folder, so a UIListLayout in `frame` ignores them)
+function Style.brackets(frame: GuiObject, color: Color3?, arm: number?, alpha: number?): Folder
+	local col = color or Style.White
+	local len = arm or 6
+	local tr = alpha or Style.BRACKET_ALPHA
+	local holder = Instance.new("Folder")
+	holder.Name = "Brackets"
+	local function bar(anchor: Vector2, pos: UDim2, size: UDim2)
+		local f = Instance.new("Frame")
+		f.BackgroundColor3 = col
+		f.BackgroundTransparency = tr
+		f.BorderSizePixel = 0
+		f.AnchorPoint = anchor
+		f.Position = pos
+		f.Size = size
+		f.ZIndex = frame.ZIndex + 2
+		f.Parent = holder
+	end
+	bar(Vector2.new(0, 0), UDim2.fromOffset(0, 0), UDim2.fromOffset(len, 1))
+	bar(Vector2.new(0, 0), UDim2.fromOffset(0, 0), UDim2.fromOffset(1, len))
+	bar(Vector2.new(1, 0), UDim2.fromScale(1, 0), UDim2.fromOffset(len, 1))
+	bar(Vector2.new(1, 0), UDim2.fromScale(1, 0), UDim2.fromOffset(1, len))
+	bar(Vector2.new(0, 1), UDim2.fromScale(0, 1), UDim2.fromOffset(len, 1))
+	bar(Vector2.new(0, 1), UDim2.fromScale(0, 1), UDim2.fromOffset(1, len))
+	bar(Vector2.new(1, 1), UDim2.fromScale(1, 1), UDim2.fromOffset(len, 1))
+	bar(Vector2.new(1, 1), UDim2.fromScale(1, 1), UDim2.fromOffset(1, len))
+	holder.Parent = frame
+	return holder
+end
+
+local PANEL_SKIP = { Color = true, Transparency = true, Brackets = true, BracketColor = true }
+-- Flat panel. p: Color, Transparency (default 0.55), Brackets (default true), BracketColor, plus any Frame property.
+function Style.panel(p: { [string]: any }?): Frame
+	p = p or {}
+	local f = Instance.new("Frame")
+	f.BackgroundColor3 = p.Color or Style.Black
+	f.BackgroundTransparency = p.Transparency or Style.PANEL_ALPHA
+	f.BorderSizePixel = 0
+	local parent = nil
+	for k, v in p do
+		if PANEL_SKIP[k] then
+			continue
+		end
+		if k == "Parent" then
+			parent = v
+		else
+			(f :: any)[k] = v
+		end
+	end
+	if p.Brackets ~= false then
+		Style.brackets(f, p.BracketColor)
+	end
+	f.Parent = parent
+	return f
+end
+
+local LABEL_SKIP = { Color = true, XAlign = true, YAlign = true, Wrap = true, Rich = true, Shadow = true }
+-- Caps label in the HUD font. p: Text, Color, TextSize (default 14), XAlign (default Left), YAlign, Rich, Wrap + any property.
+function Style.label(p: { [string]: any }?): TextLabel
+	p = p or {}
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.BorderSizePixel = 0
+	l.FontFace = Style.Font
+	l.TextColor3 = p.Color or Style.White
+	l.TextSize = p.TextSize or Style.TEXT
+	l.TextXAlignment = p.XAlign or Enum.TextXAlignment.Left
+	l.TextYAlignment = p.YAlign or Enum.TextYAlignment.Center
+	l.TextWrapped = p.Wrap == true
+	l.RichText = p.Rich == true
+	l.TextStrokeColor3 = Style.Black
+	l.TextStrokeTransparency = p.Shadow == false and 1 or 0.65
+	l.Text = ""
+	local parent = nil
+	for k, v in p do
+		if LABEL_SKIP[k] then
+			continue
+		end
+		if k == "Parent" then
+			parent = v
+		elseif k == "Text" and type(v) == "string" then
+			l.Text = p.Rich and v or string.upper(v)
+		else
+			(l :: any)[k] = v
+		end
+	end
+	l.Parent = parent
+	return l
+end
+
+-- Plain solid rectangle (bars, ticks, separators)
+function Style.rect(p: { [string]: any }): Frame
+	local f = Instance.new("Frame")
+	f.BorderSizePixel = 0
+	f.BackgroundColor3 = p.Color or Style.White
+	f.BackgroundTransparency = p.Transparency or 0
+	local parent = nil
+	for k, v in p do
+		if k == "Color" or k == "Transparency" then
+			continue
+		end
+		if k == "Parent" then
+			parent = v
+		else
+			(f :: any)[k] = v
+		end
+	end
+	f.Parent = parent
+	return f
+end
+
+-- Thin horizontal bar: back track + fill. Returns { back, fill, set(alpha, color?) }.
+function Style.bar(p: { [string]: any }): any
+	local back = Style.rect({
+		Name = p.Name or "Bar",
+		Color = Style.Black,
+		Transparency = 0.45,
+		Size = p.Size or UDim2.new(1, 0, 0, 3),
+		Position = p.Position,
+		AnchorPoint = p.AnchorPoint,
+		LayoutOrder = p.LayoutOrder,
+		ClipsDescendants = true,
+		Parent = p.Parent,
+	})
+	local fill = Style.rect({
+		Name = "Fill",
+		Color = p.Color or Style.White,
+		Size = UDim2.fromScale(0, 1),
+		Parent = back,
+	})
+	local bar = { back = back, fill = fill }
+	function bar.set(alpha: number, color: Color3?)
+		fill.Size = UDim2.fromScale(Theme.clamp(alpha, 0, 1), 1)
+		if color then
+			fill.BackgroundColor3 = color
+		end
+	end
+	return bar
+end
+
+-- Row with the small "▸" tick at its left. Returns (row, tick).
+function Style.listRow(parent: Instance, height: number, order: number?, color: Color3?): (Frame, TextLabel)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.BorderSizePixel = 0
+	row.Size = UDim2.new(1, 0, 0, height)
+	row.LayoutOrder = order or 0
+	row.Parent = parent
+	local tick = Style.label({
+		Text = ">", -- "▸" has no glyph in the HUD font (renders as a box)
+		TextSize = 12,
+		Color = color or Style.Amber,
+		XAlign = Enum.TextXAlignment.Center,
+		Size = UDim2.new(0, 10, 1, 0),
+		Parent = row,
+	})
+	tick.Name = "Tick"
+	return row, tick
+end
+
+-- Content frame inside a Theme.root: on touch everything is drawn at 0.8 x (smaller HUD, same 16 px margins in content space).
+function Style.content(root: Frame, touch: boolean): Frame
+	local k = if touch then 0.8 else 1
+	local f = Instance.new("Frame")
+	f.Name = "Content"
+	f.BackgroundTransparency = 1
+	f.BorderSizePixel = 0
+	f.Size = UDim2.fromScale(1 / k, 1 / k)
+	local us = Instance.new("UIScale")
+	us.Scale = k
+	us.Parent = f
+	f.Parent = root
+	return f
+end
+
+-- Callsigns: squad members sorted by userId get A1, B2, C3 ... and a stable colour. The local player is always amber.
+local PALETTE = { Color3.fromHex("5FD4E6"), Color3.fromHex("57D163"), Color3.fromHex("F07A2B"), Color3.fromHex("D98AE6"), Color3.fromHex("E8E26A") }
+local callsigns: { [number]: { tag: string, color: Color3, index: number } } = {}
+local localId = 0
+
+function Style.setSquad(squad: any, myUserId: number)
+	localId = myUserId
+	table.clear(callsigns)
+	if type(squad) ~= "table" then
+		return
+	end
+	local ids = {}
+	for _, m in squad do
+		if type(m) == "table" and type(m.userId) == "number" then
+			table.insert(ids, m.userId)
+		end
+	end
+	table.sort(ids)
+	for i, id in ids do
+		local letter = string.char(64 + ((i - 1) % 26) + 1)
+		callsigns[id] = {
+			tag = letter .. tostring(i),
+			color = if id == myUserId then Style.Amber else PALETTE[(i - 1) % #PALETTE + 1],
+			index = i,
+		}
+	end
+end
+
+function Style.callsign(userId: number): { tag: string, color: Color3, index: number }
+	local c = callsigns[userId]
+	if c then
+		return c
+	end
+	return { tag = "A1", color = if userId == localId then Style.Amber else PALETTE[1], index = 1 }
+end
+
+-- Tween that tolerates dead instances
+function Style.tween(inst: Instance, t: number, props: { [string]: any }, style: Enum.EasingStyle?)
+	return Theme.tween(inst, t, props, style)
+end
+
+return Style

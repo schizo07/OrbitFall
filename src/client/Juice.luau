@@ -3,6 +3,8 @@
 --
 --   Juice.shake(mag, dur, pos?, range?)  mag ~ peak degrees of camera rotation (0.3 subtle .. 4 huge);
 --                                        with pos the magnitude falls off with distance to the camera
+--   Juice.trauma(mag, dur, pos, range?)  shake with ~1/dist falloff out to `range` (default 120): orbital strikes / eruptions
+--   Juice.flashAt(color, alpha, dur, pos, farRange?)  flash scaled by distance and by how much the camera faces `pos`
 --   Juice.kick(pitchDeg, yawDeg)         instant recoil that springs back (positive pitch = camera up)
 --   Juice.hitstop(t)                     freezes shake/kick progression and holds the camera for t seconds
 --   Juice.flash(color, alpha, dur)       full-screen colour flash
@@ -78,6 +80,27 @@ function Juice.shake(mag: number, dur: number, pos: Vector3?, range: number?)
 		seed = rng:NextNumber() * 1000,
 		freq = SHAKE_FREQ * (0.8 + rng:NextNumber() * 0.5),
 	})
+end
+
+-- Explosion-style trauma: magnitude falls off ~1/distance (full strength inside `near` studs) and fades to zero at `range`
+-- (default 120). Unlike shake(mag, dur, pos) this does not square the falloff, so a big blast stays felt across the map.
+function Juice.trauma(mag: number, dur: number, pos: Vector3?, range: number?)
+	if Juice.intensity <= 0 or mag <= 0 then
+		return
+	end
+	if pos then
+		local cam = workspace.CurrentCamera
+		if cam then
+			local r = range or 120
+			local d = (cam.CFrame.Position - pos).Magnitude
+			if d >= r then
+				return
+			end
+			local u = d / r
+			mag *= math.min(1, 14 / math.max(d, 1)) * (1 - u * u)
+		end
+	end
+	Juice.shake(mag, dur)
 end
 
 function Juice.kick(pitchDeg: number, yawDeg: number)
@@ -275,6 +298,25 @@ function Juice.flash(color: Color3, alpha: number, dur: number)
 		BackgroundTransparency = 1,
 	})
 	flashTween:Play()
+end
+
+-- Flash scaled by how far away the event is and how directly the camera faces it (full alpha close and in view, a
+-- faint wash far away or behind the player). Used by the orbital strikes.
+function Juice.flashAt(color: Color3, alpha: number, dur: number, pos: Vector3, farRange: number?)
+	local cam = workspace.CurrentCamera
+	if not cam then
+		Juice.flash(color, alpha, dur)
+		return
+	end
+	local off = pos - cam.CFrame.Position
+	local d = off.Magnitude
+	local far = farRange or 700
+	local distK = math.clamp(1.1 - d / far, 0.1, 1)
+	local facing = if d > 1 then math.max(cam.CFrame.LookVector:Dot(off / d), 0) else 1
+	local a = alpha * distK * (0.5 + 0.5 * facing)
+	if a >= 0.03 then
+		Juice.flash(color, a, dur)
+	end
 end
 
 function Juice.vignette(color: Color3, alpha: number, dur: number)

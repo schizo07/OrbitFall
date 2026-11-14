@@ -12,7 +12,7 @@
 --   Non-rigged (legacy single-piece mesh): plain Welds carrying Sway = "upper" | "legs", animated as a bob/sway.
 --
 -- API:
---   EnemyModels.build(kindId, enemyId) -> (Model, Rig)
+--   EnemyModels.build(kindId, enemyId, scale?) -> (Model, Rig)   scale: fodder tier (0.8), applied with Model:ScaleTo
 --   EnemyModels.animate(rig, rootCF, t, move, windup)   -- procedural leg motion, call after PivotTo
 --   EnemyModels.flash(part)                             -- cheap hit tint
 --   EnemyModels.Offsets[kindId] = { muzzle = Vector3, laser = Vector3?, ... }  (root-local)
@@ -549,7 +549,30 @@ local function buildRigged(kindId: string, enemyId: number, tpl: Model, info: an
 	return model, c.rig
 end
 
-function EnemyModels.build(kindId: string, enemyId: number): (Model, Rig)
+-- Fodder tier: the same model scaled down (Model:ScaleTo about the root at the origin, before it is pivoted into place).
+-- Procedural leg animation caches hip / hipLocal in unscaled space, so those are scaled too.
+local function scaleBuilt(model: Model, rig: Rig, scale: number)
+	model:ScaleTo(scale)
+	model:SetAttribute("Scale", scale)
+	rig.bob *= scale
+	for _, leg in rig.legs do
+		leg.hip = CFrame.new(leg.hip.Position * scale) * leg.hip.Rotation
+		leg.hipLocal = CFrame.new(leg.hipLocal.Position * scale) * leg.hipLocal.Rotation
+	end
+end
+
+function EnemyModels.build(kindId: string, enemyId: number, scale: number?): (Model, Rig)
+	local model, rig = EnemyModels.buildUnscaled(kindId, enemyId)
+	if scale and scale ~= 1 then
+		local ok, err = pcall(scaleBuilt, model, rig, scale)
+		if not ok then
+			warn("[EnemyModels] scaling failed for", kindId, err)
+		end
+	end
+	return model, rig
+end
+
+function EnemyModels.buildUnscaled(kindId: string, enemyId: number): (Model, Rig)
 	local builder = BUILDERS[kindId]
 	assert(builder, "EnemyModels: unknown kind " .. tostring(kindId))
 

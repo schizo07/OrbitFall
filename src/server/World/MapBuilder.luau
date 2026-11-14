@@ -2934,12 +2934,17 @@ local function applyLighting(faction: string, biome: string)
 		i:SetAttribute("OrbitfallMap", true)
 		i.Parent = Lighting
 	end
+	-- spectacle pass: dustier, warmer air in every biome (density floor 0.35, +haze, atmosphere colour nudged toward warm dust);
+	-- the biome colour still dominates (swamp / ice only get a light nudge)
+	local DUST_WARM = RGB(214, 170, 124)
+	local HAZE_WARM = { desert = 0.2, ash = 0.14, swamp = 0.12, ice = 0.1 }
+	local HAZE_EXTRA = { desert = 0.9, ash = 0.9, swamp = 1.0, ice = 0.8 }
 	local atm = Instance.new("Atmosphere")
-	atm.Density = m.atmDensity
+	atm.Density = math.max(m.atmDensity, 0.35)
 	atm.Offset = m.atmOffset
-	atm.Haze = m.haze
+	atm.Haze = math.min(m.haze + (HAZE_EXTRA[biome] or 0.9), 6)
 	atm.Glare = m.glare
-	atm.Color = m.atm
+	atm.Color = m.atm:Lerp(DUST_WARM, HAZE_WARM[biome] or 0.12)
 	atm.Decay = m.decay
 	tag(atm)
 	local sky = Instance.new("Sky")

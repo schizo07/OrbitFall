@@ -18,16 +18,35 @@ local CameraController = {}
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"))
+
+-- Framing (intensity spec §1): tight over-the-shoulder, trooper fills the lower-left, body clipped at the thighs.
 local yaw, pitch = 0, -0.15
-local dist = 10 -- smoothed zoom distance
-local distTarget = 10 -- player zoom (mouse wheel / pinch), clamped to [DIST_MIN, DIST_MAX]
-local DIST_MIN, DIST_MAX = 6.5, 20
+local dist = 5 -- smoothed zoom distance
+local distTarget = 5 -- player zoom (mouse wheel / pinch), clamped to [DIST_MIN, DIST_MAX]
+local DIST_MIN, DIST_MAX = 4, 7.5
+local WHEEL_STEP = 0.75
+local PIVOT_UP = 1.6 -- focus height above the root
+local BASE_FOV = 72
+local SHOULDER = Vector3.new(1.7, 0.9, 0) -- default right-shoulder offset
+local SPRINT_SHOULDER = Vector3.new(1.4, 0.8, 0)
+local SPRINT_DIST_ADD = 1 -- 5 -> 6
+local SPRINT_FOV_ADD = 8 -- 72 -> 80
+local LOW_SHOULDER = Vector3.new(1.2, 0.3, 0) -- prone / dive
+local LOW_DIST = 4.2
+local FOLLOW_RATE = 18 -- horizontal focus follow (exp rate, 1/s): a little weight when moving
+local STRAFE_ROLL = math.rad(1.2)
+local FADE_DIST = 1.8 -- lens closer than this to the focus fades the local character
 local aimBlend = 0
 local zoomMult = 1
-local ADS_DIST = 5.4 -- lens distance behind the focus while aiming
-local ADS_SHOULDER = Vector3.new(1.75, 0.7, 0) -- right-shoulder offset while aiming
-local ADS_FOV_DROP = 20 -- 70 -> 50 FOV at full aim
+local ADS_DIST = 2.6 -- lens distance behind the focus while aiming
+local ADS_SHOULDER = Vector3.new(1.15, 0.55, 0) -- right-shoulder offset while aiming
+local ADS_FOV_DROP = 24 -- 72 -> 48 FOV at full aim
 local ADS_SENS = 0.5 -- look sensitivity multiplier at full aim
+local lowBlend = 0 -- prone / dive framing
+local rollCur = 0
+local focusXZ: Vector3? = nil
+local lastFade = 0
 local freeMouse = false -- set by dial/menus
 CameraController.sens = 0.0042
 CameraController.touchSens = 0.0065
@@ -105,7 +124,7 @@ function CameraController.init()
 			end
 		end
 		if io.UserInputType == Enum.UserInputType.MouseWheel and not gp then
-			distTarget = math.clamp(distTarget - io.Position.Z * 1.5, DIST_MIN, DIST_MAX)
+			distTarget = math.clamp(distTarget - io.Position.Z * WHEEL_STEP, DIST_MIN, DIST_MAX)
 		end
 	end)
 	local pinchStart = distTarget
@@ -170,9 +189,19 @@ function CameraController.init()
 		local hum = c and c:FindFirstChildOfClass("Humanoid")
 		local focus: Vector3
 		if root then
-			focus = root.Position + Vector3.new(0, 2.1, 0)
+			-- horizontal follow lags a touch (weight); snap on teleports / drops
+			local rp = root.Position
+			local want = Vector3.new(rp.X, 0, rp.Z)
+			if not focusXZ or (focusXZ - want).Magnitude > 8 or root.Anchored then
+				focusXZ = want
+			else
+				focusXZ = focusXZ:Lerp(want, 1 - math.exp(-dt * FOLLOW_RATE))
+			end
+			local fxz = focusXZ :: Vector3
+			focus = Vector3.new(fxz.X, rp.Y + PIVOT_UP, fxz.Z)
 		else
 			focus = camera.Focus.Position
+			focusXZ = nil
 		end
 		local bob, fovAdd = CFrame.identity, 0
 		if Movement and root then
@@ -181,12 +210,35 @@ function CameraController.init()
 			bob = CFrame.identity:Lerp(b, 1 - aimBlend) -- steady while aiming
 			fovAdd = f * (1 - aimBlend)
 		end
+		-- sprint fraction (Movement reports it as its own FOV add) and prone/dive framing
+		local sprint = math.clamp(fovAdd / math.max(Config.Move.SprintFov, 0.01), 0, 1)
+		local low = false
+		if Movement then
+			local mode = Movement.getMode()
+			low = Movement.getStance() == "prone" or mode == "dive"
+		end
+		lowBlend += ((low and 1 or 0) - lowBlend) * (1 - math.exp(-dt * 8))
+		-- strafe roll: lean slightly into sideways motion
+		local rollT = 0
+		if root then
+			local right = Vector3.new(math.cos(yaw), 0, -math.sin(yaw))
+			local vx = root.AssemblyLinearVelocity:Dot(right)
+			rollT = -math.clamp(vx / 16, -1, 1) * STRAFE_ROLL * (1 - aimBlend * 0.6)
+		end
+		rollCur += (rollT - rollCur) * (1 - math.exp(-dt * 6))
+		bob = bob * CFrame.Angles(0, 0, rollCur)
+
 		local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
 		dist += (distTarget - dist) * math.min(1, dt * 8)
+		-- hip framing: default -> sprint (wider, a bit back) -> prone/dive (low and close)
+		local hipDist = dist + SPRINT_DIST_ADD * sprint
+		local hipShoulder = SHOULDER:Lerp(SPRINT_SHOULDER, sprint)
+		hipDist += (LOW_DIST - hipDist) * lowBlend
+		hipShoulder = hipShoulder:Lerp(LOW_SHOULDER, lowBlend)
 		-- aim-down-sights: pull in tight over the right shoulder (fixed ADS distance, independent of wheel zoom)
 		local ads = aimBlend * aimBlend * (3 - 2 * aimBlend) -- smoothstep: snappy in the middle, soft ends
-		local wantDist = dist + (ADS_DIST - dist) * ads
-		local shoulder = Vector3.new(2.3 + (ADS_SHOULDER.X - 2.3) * ads, 1.1 + (ADS_SHOULDER.Y - 1.1) * ads, 0)
+		local wantDist = hipDist + (ADS_DIST - hipDist) * ads
+		local shoulder = hipShoulder:Lerp(ADS_SHOULDER, ads)
 		local desired = CFrame.new(focus) * rot * CFrame.new(shoulder + Vector3.new(0, 0, wantDist))
 		-- collision: pull in toward focus
 		rayParams.FilterDescendantsInstances = camExclude()
@@ -196,7 +248,7 @@ function CameraController.init()
 		local offset = toP - fromP
 		local full = offset.Magnitude
 		local allowed = full
-		local hit = workspace:Spherecast(fromP, 0.45, offset, rayParams)
+		local hit = workspace:Spherecast(fromP, 0.4, offset, rayParams)
 		if hit then
 			allowed = math.max(0.5, hit.Distance - 0.15)
 		end
@@ -210,8 +262,23 @@ function CameraController.init()
 		cf = cf * Juice.step(dt)
 		camera.CFrame = cf
 		camera.Focus = CFrame.new(focus)
-		local fov = 70 - ads * (ADS_FOV_DROP + (zoomMult - 1) * 22) + fovAdd
-		camera.FieldOfView = fov
+		local fov = BASE_FOV - ads * (ADS_FOV_DROP + (zoomMult - 1) * 22) + SPRINT_FOV_ADD * sprint + Juice.getFov()
+		camera.FieldOfView = math.clamp(fov, 20, 100)
+
+		-- lens jammed against the trooper (wall pull-in): fade the local character so it never fills the screen
+		if c then
+			local d = (camPos - focus).Magnitude
+			local fade = if d < FADE_DIST then math.clamp((FADE_DIST - d) / 1.0, 0, 0.85) else 0
+			fade = math.floor(fade * 20 + 0.5) / 20
+			if fade ~= lastFade then
+				lastFade = fade
+				for _, p in c:GetDescendants() do
+					if p:IsA("BasePart") or p:IsA("Decal") then
+						(p :: any).LocalTransparencyModifier = fade
+					end
+				end
+			end
+		end
 
 		-- face where we aim (unless dead / menu / dive, mantle or tumble own the body)
 		if root and hum and hum.Health > 0 and not root.Anchored and (not Movement or Movement.allowFacing()) then

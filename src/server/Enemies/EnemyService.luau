@@ -5,8 +5,11 @@
 --   S.Enemies.setDifficulty(d)       HP scale from Config.DifficultyHpScale (Director.start calls this)
 --   S.Enemies.despawn(enemy)         silent removal (no kill credit, no Death fx)
 --   S.Enemies.getById(id)            -> Enemy?
---   S.Enemies.countByClass()         -> {regular=, medium=, heavy=, behemoth=}
+--   S.Enemies.countByClass()         -> {regular=, medium=, heavy=, behemoth=, fodder=}  (fodder = the swarm tier, counted apart)
+--   S.Enemies.load()                 -> live cap load: sum of def.cost (1, fodder 0.5). The Director caps on this, not on count()
 --   S.Enemies.kills                  total kills this mission (reset by clear())
+--   Fodder (def.fodder): model = the base unit scaled (def.modelKind / modelScale), e.kind stays the BASE kind (client anim / fx lookups),
+--   e.spawnKind = the id it was spawned as, e.fodder = true.
 --   spawn opts: { dest: Vector3?, home: Vector3?, patrol: boolean?, aggro: boolean?, target: Player?, hpScale: number?, group: any? }
 --   explode opts.status entries: number (duration) | { d: number, m: number?, noBehemoth: boolean? }
 --   hit() returns result = "none" when the part no longer belongs to a live enemy.
@@ -28,6 +31,7 @@ local EnemyService = {}
 local S: { [string]: any } = {}
 local enemies: { [number]: any } = {}
 local liveCount = 0
+local liveLoad = 0 -- sum of e.cost over live enemies (the Director's cap is counted in load)
 local nextId = 0
 local difficulty = 1
 local conn: RBXScriptConnection? = nil
@@ -80,7 +84,11 @@ function EnemyService.spawn(kindId: string, cf: CFrame, opts: any?)
 	nextId += 1
 	local id = nextId
 
-	local model, rig = EnemyModels.build(kindId, id)
+	local baseKind = def.modelKind or kindId
+	local model, rig = EnemyModels.build(baseKind, id, def.modelScale)
+	if def.fodder then
+		model:SetAttribute("Fodder", true)
+	end
 	local zones: { [string]: { hp: number? } } = {}
 	for name, z in def.zones do
 		zones[name] = { hp = z.fatal }
@@ -96,7 +104,10 @@ function EnemyService.spawn(kindId: string, cf: CFrame, opts: any?)
 
 	local e: any = {
 		id = id,
-		kind = kindId,
+		kind = baseKind,
+		spawnKind = kindId,
+		fodder = def.fodder == true,
+		cost = def.cost or 1,
 		def = def,
 		model = model,
 		root = model.PrimaryPart,
@@ -112,6 +123,7 @@ function EnemyService.spawn(kindId: string, cf: CFrame, opts: any?)
 	}
 	enemies[id] = e
 	liveCount += 1
+	liveLoad += e.cost
 
 	-- never spawn inside another enemy (patrol groups are laid out by the Director; this catches stacked wave spawns)
 	if e.class ~= "behemoth" then
@@ -155,6 +167,7 @@ local function removeEnemy(e: any)
 	if enemies[e.id] then
 		enemies[e.id] = nil
 		liveCount -= 1
+		liveLoad -= e.cost or 1
 	end
 	EnemyAI.unregister(e)
 	return true
@@ -178,6 +191,7 @@ local function kill(e: any, source: any?)
 			style = faction and faction.deathStyle or "scrap",
 			size = SIZE_LETTER[e.class] or "M",
 			kind = e.kind,
+			fodder = e.fodder == true,
 			dir = e.lastDir,
 			by = if source and source.player then source.player.UserId else nil,
 			src = sKind,
@@ -422,10 +436,15 @@ function EnemyService.count(): number
 	return liveCount
 end
 
+function EnemyService.load(): number
+	return liveLoad
+end
+
 function EnemyService.countByClass(): { [string]: number }
-	local c = { regular = 0, medium = 0, heavy = 0, behemoth = 0 }
+	local c = { regular = 0, medium = 0, heavy = 0, behemoth = 0, fodder = 0 }
 	for _, e in enemies do
-		c[e.class] += 1
+		local k = if e.fodder then "fodder" else e.class
+		c[k] += 1
 	end
 	return c
 end
@@ -435,6 +454,13 @@ function EnemyService.explode(pos: Vector3, radius: number, core: number, dmg: n
 	opts = opts or {}
 	if S.Objectives and S.Objectives.onExplosion then
 		pcall(S.Objectives.onExplosion, pos, radius)
+	end
+	-- breach sources (Director v2) are closed by explosions: grenades, call-ins, launcher rounds
+	if dmg > 0 and S.Director and S.Director.onExplosion then
+		local okS, errS = pcall(S.Director.onExplosion, pos, radius, core, dmg, source)
+		if not okS then
+			warn("[Enemies] Director.onExplosion failed:", errS)
+		end
 	end
 	local killedCount = 0
 	local snapshot = {}
@@ -514,6 +540,7 @@ function EnemyService.clear()
 	end
 	table.clear(enemies)
 	liveCount = 0
+	liveLoad = 0
 	EnemyService.kills = 0
 	EnemyAI.clear()
 	if S.Projectiles and S.Projectiles.clear then

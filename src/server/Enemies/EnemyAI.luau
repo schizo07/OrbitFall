@@ -5,7 +5,14 @@
 -- Fx sent: Bolt/BoltEnd (via Projectiles), Telegraph {shape, p, r | a, b, w, t},
 --          EnemyAttack {id, kind, e, p, t, ...}, Shockwave, Shake, Breach.
 -- Calls: S.Players.getAlive/getRoot/damage, S.Projectiles.fire, S.Enemies.spawn/count/damage,
---        S.CallIns.isInSmoke (optional), S.Director.onSpotted (optional).
+--        S.CallIns.isInSmoke (optional), S.Director.onSpotted / meleeSlots (optional).
+--
+-- Director v2 additions:
+--   * Melee slots: a melee unit (regular / medium, no keepDistance) only attacks while it holds one of the player's
+--     Config.Action.MeleeSlots-ish slots (Director.meleeSlots()); the rest circle the player at CircleMin..CircleMax studs and
+--     rotate in when a lease (MeleeSlotLease) runs out. e.slot = Player holding it, e.circling = Player being circled.
+--   * Fodder (e.fodder): thinks at FodderThink, no LOS raycast, inside FodderSteerRange of the target it just seeks (no obstacle
+--     raycasts), separation is cached 0.3 s, ground snap every FodderGroundSnap studs.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -190,7 +197,11 @@ function EnemyAI.register(e: any, cf: CFrame, opts: any)
 	e.air = 0
 	e.animT = rng:NextNumber(0, 6)
 	e.windupV = 0
-	e.nextThink = workspace:GetServerTimeNow() + rng:NextNumber(0, THINK)
+	e.thinkDt = if e.fodder then Config.Action.FodderThink else THINK
+	e.snapDist = if e.fodder then Config.Action.FodderGroundSnap else 0.25
+	e.slot = nil
+	e.circling = nil
+	e.nextThink = workspace:GetServerTimeNow() + rng:NextNumber(0, e.thinkDt)
 	e.gcd = 0
 	e.cd = {}
 	local now = workspace:GetServerTimeNow()
@@ -200,6 +211,8 @@ function EnemyAI.register(e: any, cf: CFrame, opts: any)
 	e.home = opts.home or e.pos
 	e.goal = opts.dest
 	e.goalSpeed = 0.75
+	-- Director patrols: ignore the squad for `crossFor` seconds (unless hit / alerted) so they walk across its path
+	e.crossUntil = if opts.crossFor then now + opts.crossFor else nil
 	e.patrol = opts.patrol == true
 	e.aggro = opts.aggro == true
 	e.target = opts.target
@@ -228,6 +241,8 @@ function EnemyAI.register(e: any, cf: CFrame, opts: any)
 	if e.def.keepDistance then
 		e.stopDist = nil
 	end
+	-- melee slots apply to the swarm of ordinary melee units (heavies / behemoths charge and stomp freely)
+	e.meleeGate = melee < math.huge and not e.def.keepDistance and (e.class == "regular" or e.class == "medium")
 	e.los = true
 	LumenAI.register(e) -- LUMEN hook (no-op for other factions)
 end
@@ -235,6 +250,8 @@ end
 function EnemyAI.unregister(e: any)
 	e.act = nil
 	e.target = nil
+	e.slot = nil
+	e.circling = nil
 	LumenAI.unregister(e) -- LUMEN hook
 end
 
@@ -806,6 +823,13 @@ local function alertNearby(e: any)
 end
 
 local function pickTarget(e: any): (Target?, number)
+	local cross = e.crossUntil
+	if cross then
+		if not e.aggro and not e.lastHitBy and workspace:GetServerTimeNow() < cross then
+			return nil, math.huge
+		end
+		e.crossUntil = nil
+	end
 	local best: Target? = nil
 	local bestD = math.huge
 	for _, t in targets do
@@ -852,6 +876,14 @@ local function steer(e: any, dir: Vector3): Vector3
 end
 
 local function separation(e: any): Vector3
+	if e.fodder then
+		-- fodder: the neighbour scan runs 3x a second, the result is reused in between
+		local c = os.clock()
+		if c < (e.sepAt or 0) then
+			return e.sepCache or Vector3.zero
+		end
+		e.sepAt = c + 0.3 + rng:NextNumber(0, 0.15)
+	end
 	local push = Vector3.zero
 	for _, o in snapshot do
 		if o ~= e and o.alive then
@@ -867,7 +899,85 @@ local function separation(e: any): Vector3
 			end
 		end
 	end
+	if e.fodder then
+		e.sepCache = push
+	end
 	return push
+end
+
+-- Melee slots ---------------------------------------------------------------------------
+-- Tallied once per frame in EnemyAI.step from e.slot / e.circling (the Player a unit holds a slot on / circles).
+local slotCount: { [Player]: number } = {}
+local waiting: { [Player]: number } = {}
+local slotMax = Config.Action.MeleeSlotsBase
+local slotMaxAt = 0
+
+local function refreshSlotMax(clock: number)
+	if clock < slotMaxAt then
+		return
+	end
+	slotMaxAt = clock + 1
+	local n = Config.Action.MeleeSlotsBase
+	local dir = S.Director
+	if dir and type(dir.meleeSlots) == "function" then
+		local ok, v = pcall(dir.meleeSlots)
+		if ok and type(v) == "number" then
+			n = v
+		end
+	end
+	slotMax = n
+end
+
+-- Movement of a slot-gated melee unit: holders close in and fight, everybody else walks to the 8-12 stud ring and circles it.
+local function meleeMove(e: any, t: Target, dist: number, dir: Vector3, stop: number, now: number): (Vector3?, number)
+	local A = Config.Action
+	local p = t.p
+	if e.slot ~= nil and e.slot ~= p then
+		e.slot = nil -- the slot was on another player
+	end
+	if e.slot then
+		-- lease over and somebody is waiting: rotate out
+		if now >= (e.slotUntil or 0) and (waiting[p] or 0) > 0 then
+			e.slot = nil
+			slotCount[p] = math.max((slotCount[p] or 1) - 1, 0)
+			e.slotCool = now + 3.5
+		end
+	end
+	if not e.slot and dist <= A.MeleeClaimRange and now >= (e.slotCool or 0) and (slotCount[p] or 0) < slotMax then
+		e.slot = p
+		e.slotUntil = now + rng:NextNumber(A.MeleeSlotLease[1], A.MeleeSlotLease[2])
+		slotCount[p] = (slotCount[p] or 0) + 1
+	end
+	if e.slot then
+		e.circling = nil
+		if dist > stop then
+			return dir, 1
+		elseif e.class == "regular" then
+			if now >= e.strafeUntil then
+				e.strafeUntil = now + rng:NextNumber(0.4, 1.0)
+				e.strafeDir = -e.strafeDir
+			end
+			return Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir, 0.7
+		end
+		return nil, 0
+	end
+	if dist > A.MeleeClaimRange then
+		e.circling = nil
+		return dir, 1 -- still on the way in
+	end
+	-- waiting for a slot: orbit at CircleMin..CircleMax
+	e.circling = p
+	if now >= e.strafeUntil then
+		e.strafeUntil = now + rng:NextNumber(2.2, 4.5)
+		e.strafeDir = -e.strafeDir
+	end
+	local radial = 0
+	if dist < A.CircleMin then
+		radial = -1
+	elseif dist > A.CircleMax then
+		radial = 0.8
+	end
+	return Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir + dir * radial, 0.65
 end
 
 local function setWish(e: any, dir: Vector3?, speed: number, noSteer: boolean?)
@@ -962,6 +1072,8 @@ local function think(e: any, now: number)
 	if not t then
 		e.seenT = 0
 		e.faceDir = nil
+		e.slot = nil
+		e.circling = nil
 		-- idle / patrol movement
 		if e.patrol and #targets > 0 and (not e.goal or now > (e.goalRefresh or 0)) then
 			local np = targets[1]
@@ -1024,13 +1136,17 @@ local function think(e: any, now: number)
 		if e.seenT >= 3 and not e.called then
 			e.called = true
 			if S.Director and S.Director.onSpotted then
-				S.Director.onSpotted(e)
+				-- false = refused (cooldown / lull / another call in progress): try again in about a second
+				if S.Director.onSpotted(e) == false then
+					e.called = false
+					e.seenT = 2
+				end
 			end
 		end
 	end
 
-	-- line of sight (only ranged units care)
-	if def.keepDistance then
+	-- line of sight (only ranged units care; fodder never pays for the raycast)
+	if def.keepDistance and not e.fodder then
 		local from = e.pos + Vector3.new(0, math.min(def.size, 4) + 1, 0)
 		local r = workspace:Raycast(from, t.pos - from, envParams)
 		e.los = (r == nil)
@@ -1059,6 +1175,8 @@ local function think(e: any, now: number)
 			moveDir = Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir
 			moveSpeed = 0.75
 		end
+	elseif e.meleeGate then
+		moveDir, moveSpeed = meleeMove(e, t, dist, dir, e.stopDist or 4, now)
 	else
 		local stop = e.stopDist or 4
 		if dist > stop then
@@ -1087,7 +1205,8 @@ local function think(e: any, now: number)
 		moveDir = e.stuckDir
 		moveSpeed = 0.9
 	end
-	setWish(e, moveDir, moveSpeed, now < e.stuckUntil)
+	-- fodder inside FodderSteerRange: plain seek, no obstacle raycasts
+	setWish(e, moveDir, moveSpeed, now < e.stuckUntil or (e.fodder == true and dist <= Config.Action.FodderSteerRange))
 
 	-- attack decision -------------------------------------------------------------------
 	if e.act or now < e.gcd then
@@ -1097,7 +1216,8 @@ local function think(e: any, now: number)
 	local close: { { idx: number, atk: any } } = {}
 	local far: { { idx: number, atk: any } } = {}
 	for i, atk in def.attacks do
-		if now >= e.cd[i] and eligible(e, atk, dist, aimErr, e.los, now) then
+		local gated = e.meleeGate and not e.slot and MELEE_KINDS[atk.kind] -- no slot on this player: no melee / leap
+		if not gated and now >= e.cd[i] and eligible(e, atk, dist, aimErr, e.los, now) then
 			if MELEE_KINDS[atk.kind] and atk.kind ~= "charge" then
 				table.insert(close, { idx = i, atk = atk })
 			else
@@ -1115,7 +1235,7 @@ end
 -- Per-frame update -------------------------------------------------------------------
 local function snapGround(e: any, dt: number, force: boolean)
 	local moved = flat(e.pos - e.lastSnap).Magnitude
-	if not force and moved < 0.25 then
+	if not force and moved < e.snapDist then
 		return
 	end
 	e.lastSnap = e.pos
@@ -1126,7 +1246,8 @@ local function snapGround(e: any, dt: number, force: boolean)
 		if force or math.abs(gy - e.pos.Y) > 6 then
 			e.pos = Vector3.new(e.pos.X, gy, e.pos.Z)
 		else
-			e.pos = Vector3.new(e.pos.X, e.pos.Y + (gy - e.pos.Y) * math.min(1, dt * 14), e.pos.Z)
+			-- fodder snaps less often, so each snap closes more of the gap
+			e.pos = Vector3.new(e.pos.X, e.pos.Y + (gy - e.pos.Y) * (if e.fodder then 0.6 else math.min(1, dt * 14)), e.pos.Z)
 		end
 	end
 end
@@ -1134,7 +1255,7 @@ end
 local function update(e: any, dt: number, now: number)
 	local def = e.def
 	if now >= e.nextThink then
-		e.nextThink = now + THINK + rng:NextNumber(0, 0.02)
+		e.nextThink = now + e.thinkDt + rng:NextNumber(0, 0.02)
 		think(e, now)
 		if not e.alive then
 			return
@@ -1251,6 +1372,30 @@ function EnemyAI.step(dt: number, enemies: { [number]: any })
 	for _, e in enemies do
 		table.insert(snapshot, e)
 	end
+
+	-- melee slot tally (who holds / waits for a slot on which player)
+	refreshSlotMax(os.clock())
+	table.clear(slotCount)
+	table.clear(waiting)
+	for _, e in snapshot do
+		local sl = e.slot
+		if sl then
+			if tmap[sl] then
+				slotCount[sl] = (slotCount[sl] or 0) + 1
+			else
+				e.slot = nil -- the player went down / left
+			end
+		end
+		local ci = e.circling
+		if ci then
+			if tmap[ci] then
+				waiting[ci] = (waiting[ci] or 0) + 1
+			else
+				e.circling = nil
+			end
+		end
+	end
+
 	for _, e in snapshot do
 		if e.alive then
 			-- only animate things anywhere near a player

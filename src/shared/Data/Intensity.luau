@@ -10,20 +10,67 @@
 
 local Intensity = {}
 
-Intensity.Calm = { min = 40, max = 70 } -- quiet stretch between incidents
-Intensity.Build = { min = 14, max = 20 } -- warning phase (rumble / signal spike, patrols ramp up)
-Intensity.Breach = { min = 30, max = 45 } -- the directional wave
-Intensity.Relax = { min = 14, max = 24, clearFraction = 0.25 } -- mop-up; ends early once live enemies < clearFraction * cap (after `min`)
+-- Director v2 (docs/intensity-spec.md section 2): fights are local, dense and spiky. CALM = patrols crossing the squad's path, BREACH
+-- = 2-3 breach SOURCES (holes / drop pods / rift shards) 35-55 studs away that emit fodder bursts until the squad closes them.
+Intensity.Calm = { min = 20, max = 35 } -- quiet stretch between incidents
+Intensity.Build = { min = 8, max = 10 } -- warning phase (rumble / signal spike, one more patrol)
+Intensity.Breach = { min = 30, max = 45 } -- the breach (ends early when every source is closed)
+-- mop-up; units beyond the straggler count (far first, then fodder past fodderScatterDist) are quietly removed, re-checked every trimEvery s
+Intensity.Relax = { min = 10, max = 10, stragglersMin = 6, stragglersMax = 10, fodderScatterDist = 18, regularScatterDist = 35, trimEvery = 2 }
 
 Intensity.DiffScale = 0.07
 Intensity.PlayerScale = 0.06
-Intensity.CalmMinScaled = 26 -- calm never shrinks below this (except while the mission timer is critical)
+Intensity.CalmMinScaled = 14 -- calm never shrinks below this (except while the mission timer is critical)
 
--- patrol-rate multiplier (divides the patrol interval) and patrol budget multiplier per state
-Intensity.PatrolRate = { calm = 0.5, build = 1.6, breach = 0.35, relax = 0.7 }
-Intensity.PatrolBudget = { calm = 0.7, build = 1.15, breach = 0.8, relax = 0.7 }
+-- CALM / BUILD patrols: a group of `count` units spawns `dist` studs from the squad (to the side of its heading) and walks ACROSS its path
+Intensity.Patrol = {
+	calmInterval = 14, -- seconds between patrols in CALM
+	buildInterval = 6, -- ... and in BUILD (the field fills up)
+	firstDelay = 8, -- first patrol this long after the mission starts
+	count = { min = 5, max = 8 },
+	mediumChance = 0.25, -- per member (the rest are regulars)
+	dist = { min = 90, max = 120 },
+	sideDeg = { min = 55, max = 110 }, -- spawn angle off the squad's heading (either side)
+	ahead = { min = 15, max = 40 }, -- the walk target sits this far ahead of the squad, so the patrol crosses its path
+	overshoot = { min = 35, max = 60 }, -- ... and this far past it on the other side
+	minHeadingSpeed = 2.5, -- studs/s: below this the squad has no heading and the patrol comes from a random side
+	crossFor = 6, -- seconds the patrol ignores the squad (unless shot at) so it really walks across instead of charging at once
+}
 
--- breach waves: one big group-wave every `interval` seconds from one compass side of the squad
+-- Breach sources (server/Enemies/BreachSources.luau; emission is driven by the Director)
+Intensity.Sources = {
+	count = { min = 2, max = 3 }, -- 3 gets likelier with difficulty / party size
+	threeBase = 0.35,
+	threePerDifficulty = 0.1,
+	threePerPlayer = 0.1,
+	distMin = 35, -- studs from the squad centroid
+	distMax = 55,
+	arcDeg = 90, -- the sources sit in this arc centred on the breach bearing
+	minSpacing = 18, -- between two sources
+	candidates = 28, -- placement samples per source
+	hp = 600, -- base HP (a frag grenade does ~400 at the centre; two close it)
+	hpPerDifficulty = 0.1, -- +10 % per difficulty step above 1
+	hpPerPlayer = 0.12, -- +12 % per extra player
+	hitRadius = 5.5, -- explosion distances are measured to this radius around the source centre
+	descent = { COG = 2.0, BROOD = 0.8, LUMEN = 1.2 }, -- seconds before a source starts to emit (COG: drop-pod descent)
+	openStagger = 0.9, -- seconds between the sources opening
+	-- emission: bursts of `on` seconds then `off` seconds of silence
+	burstOn = 12,
+	burstOff = 4,
+	fodderEvery = 2.5, -- seconds between fodder batches while a burst is on
+	fodderCount = { min = 4, max = 6 },
+	fodderSoloMult = 0.6, -- batch size multiplier for a solo player ...
+	fodderPerPlayerMult = 0.15, -- ... + this per extra player (capped at 1)
+	eliteEvery = 10, -- one elite (the faction's medium) per source this often
+	heavyAt = 15, -- seconds into the breach the heavy shows up (once per breach) ...
+	heavyMinDifficulty = 4, -- ... on this difficulty and above
+	spawnRing = { min = 2.5, max = 7 }, -- fodder appear this far from the source centre
+	extraBurst = 6, -- fodder added instantly to the nearest source when a spotted-reinforce call lands during a breach
+	closeDelay = 0.2, -- seconds a closing source needs to collapse
+}
+
+-- breach waves (LEGACY / fallback: only used when no breach source could be placed, and by the extraction hold-out): one big
+-- group-wave every `interval` seconds from one compass side of the squad
 Intensity.BreachWave = {
 	interval = 6.5, -- base seconds between waves (shrinks a little with difficulty)
 	intervalMin = 4.5,
@@ -52,8 +99,17 @@ Intensity.Extract = {
 	maxMult = 2.4,
 	rotateEvery = 2, -- waves between compass-side changes (flanking)
 	capMult = 1.3,
+	capFloor = 48, -- the live cap never drops below this during the hold-out
 	heavyChance = 0.7,
 	behemothChance = 0.55,
+	distMin = 62, -- the directional waves pour in closer than a normal breach wave (proximity budget)
+	distMax = 90,
+	-- the hold-out also keeps breach sources open: every `sourceEvery` seconds the missing ones re-open (up to `maxSources` at once)
+	sourceEvery = 20,
+	maxSources = 3,
+	sourceDistMin = 30,
+	sourceDistMax = 45,
+	firstSources = 2, -- opened right after `firstDelay`
 }
 
 -- heavy / behemoth entrance (only while BUILD / BREACH / EXTRACT)
@@ -66,19 +122,20 @@ Intensity.Heavy = {
 	shakeRange = 170,
 }
 
--- objective hooks: Director.objectiveEvent(name). `force` = start a breach (after a short BUILD of `delay` s), `bring` = pull the next
--- CALM -> BUILD forward by that many seconds. Ignored while a BUILD/BREACH/extraction hold is already running; during RELAX a forced
--- event is queued and fires as soon as CALM begins.
+-- objective hooks: Director.objectiveEvent(name). `force` = start a BUILD within `Intensity.ForceWithin` seconds (its length is `delay`
+-- clamped to Intensity.Build), `bring` = pull the next CALM -> BUILD forward by that many seconds. Ignored while a BUILD/BREACH/
+-- extraction hold is already running; during RELAX a forced event is queued and fires as soon as CALM begins.
 Intensity.Events = {
-	DEFEND_START = { force = true, delay = 5 }, -- generator spin-up / data upload begins
-	MAIN_STEP = { bring = 20 }, -- any main-objective step completed
-	FINAL_STEPS = { force = true, delay = 7 }, -- the launch / last-but-one step completed
+	DEFEND_START = { force = true, delay = 8 }, -- generator spin-up / data upload begins
+	MAIN_STEP = { force = true, delay = 9 }, -- any main-objective step completed (terminal, ...)
+	FINAL_STEPS = { force = true, delay = 8 }, -- the launch / last-but-one step completed
 	SAMPLE = { bring = 9 }, -- a sample picked up
 	SIDE_DONE = { bring = 14 }, -- nest / fabricator destroyed
 	LOUD = { bring = 12 }, -- anything noisy (beacon throws etc.)
-	TIME_CRITICAL = { force = true, delay = 6, ignoreCooldown = true }, -- fired by the Director itself when the mission clock drops under TimerCriticalSec
+	TIME_CRITICAL = { force = true, delay = 8, ignoreCooldown = true }, -- fired by the Director itself when the mission clock drops under TimerCriticalSec
 }
-Intensity.ForceCooldown = 50 -- seconds after a breach ends before a forced event may fire another
+Intensity.ForceCooldown = 30 -- seconds after a breach ends before a forced event starts a BUILD at once (inside the cooldown it only pulls CALM to ForceWithin)
+Intensity.ForceWithin = 10 -- a forced event always leads to a BUILD within this many seconds
 
 Intensity.SpottedBring = 6 -- every "spotted -> reinforcements" call counts: pulls CALM forward by this many seconds
 Intensity.SpottedBringMax = 18 -- total pull-forward allowed per CALM phase

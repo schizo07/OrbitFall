@@ -77,9 +77,34 @@ Config.Action = {
 	PatrolInterval = 22, -- seconds between patrol groups (was 45)
 	PatrolIntervalBusy = 0.4, -- multiplier on that interval while the field is nearly empty (< EmptyFraction of the cap)
 	EmptyFraction = 0.4,
-	ReinforceCooldown = 24, -- seconds between "spotted -> reinforcements" calls (was 40)
+	ReinforceCooldown = 12, -- seconds between "spotted -> reinforcements" calls (was 40, then 24)
+	ReinforceWindup = 3, -- seconds the caller burns a flare before the reinforcements arrive; killing / stunning it cancels the call
 	AggroMult = 1.25, -- enemy detection radius multiplier (EnemyAI)
 	AdvanceSpeed = 1.0, -- speed fraction patrols/seekers advance at (was 0.8)
+
+	-- Melee slots (EnemyAI): at most this many melee attackers engage ONE player at once, the rest circle at CircleMin..CircleMax studs.
+	-- Director.meleeSlots() = MeleeSlotsBase + floor(difficulty / 2)  (diff 1 -> 3 ... diff 4-5 -> 5), clamped to MeleeSlotsMax.
+	MeleeSlotsBase = 3,
+	MeleeSlotsMax = 5,
+	MeleeSlotLease = { 5, 9 }, -- seconds a melee unit keeps its slot before it may rotate out (only when somebody is waiting)
+	MeleeClaimRange = 14, -- a melee unit only claims a slot once it is this close to its target
+	CircleMin = 8,
+	CircleMax = 12,
+	-- 4 s lull (no new spawns, no reinforcement calls) after a player goes down
+	DownLull = 4,
+
+	-- Fodder / swarm tier (one cheap unit per faction, see Data/Enemies.luau SWARM kinds)
+	FodderCost = 0.5, -- share of the live cap one fodder body costs (the cap is counted in "load", not bodies)
+	FodderSteerRange = 40, -- inside this many studs of the target fodder skip obstacle raycasts and just seeks (steer only)
+	FodderThink = 0.18, -- seconds between AI thinks of a fodder unit (others: 0.1)
+	FodderGroundSnap = 1.2, -- fodder re-snaps to the terrain every this many studs of movement (others: 0.25)
+
+	-- Proximity budget while a BREACH is up
+	NearRadius = 70, -- "close to the action": within this many studs of some player
+	NearFraction = 0.6, -- target share of live enemies that should be near
+	RecycleDist = 140, -- stragglers beyond this (regular / medium / fodder) are despawned and respawned at a source
+	RecycleInterval = 2, -- seconds between proximity passes
+	RecycleMax = 8, -- most units recycled per pass
 }
 
 -- Rewards (per successful mission)

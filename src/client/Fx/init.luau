@@ -20,6 +20,7 @@
 --   Fx.visual(size, color, cf, shape, material, transparency, life) -> Part? (budgeted transient part)
 --   Fx.tween(inst, dur, props, style?, dir?) -> Tween
 --   Fx.groundAt(p, up?, down?) -> (pos?, normal?)
+--   Fx.onExplosion(fn(p, size, style, R, silent))  listener for every Fx.explosion (Spectacle: dust burst + aftermath)
 --   Fx.camDistance(p) -> number
 --   Fx.quality (number, 0.3-1)           particle/debris scale (phone 0.5)
 
@@ -686,11 +687,21 @@ local function explosionSound(size: string, style: string, p: Vector3)
 	Audio.play(key, p, { pitch = pitch, volume = vol, priority = 5 })
 end
 
+-- Listeners called for EVERY Fx.explosion (network blasts and local ones such as heavy deaths): fn(p, size, style, R, silent).
+-- Spectacle uses it for the dust burst and the aftermath (fires, smoke columns, scorch). Each listener is pcall'd.
+local explosionHooks: { (Vector3, string, string, number, boolean) -> () } = {}
+function Fx.onExplosion(fn: (Vector3, string, string, number, boolean) -> ())
+	table.insert(explosionHooks, fn)
+end
+
 function Fx.explosion(p: Vector3, opts: { size: string?, r: number?, style: string?, silent: boolean?, noShake: boolean? }?)
 	opts = opts or {}
 	local size = opts.size
 	if not SIZE_R[size] then
 		size = "M"
+	end
+	for _, hook in explosionHooks do
+		pcall(hook, p, size, opts.style or "fire", opts.r or SIZE_R[size], opts.silent == true)
 	end
 	local R = opts.r or SIZE_R[size]
 	local V = math.clamp(R * 0.75, 2, 40) -- visual radius
@@ -1286,6 +1297,50 @@ local function deathPalette(kind: any): { scrap: { Color3 }, goo: { Color3 }, gl
 	return pal
 end
 
+-- Fodder (1-HP swarm units) die by the dozen: a lean "gib pop" instead of the full death burst. Budget: 10 pops per 0.25 s
+-- (5 on phones), physical gibs only for the first 4 of each window and only within 60 studs; nothing past 110 studs.
+local gibWindowStart, gibCount = 0, 0
+local function fodderGib(p: Vector3, style: string, pal, dir: Vector3?, dist: number)
+	if dist > 110 then
+		return
+	end
+	local t = os.clock()
+	if t - gibWindowStart > 0.25 then
+		gibWindowStart, gibCount = t, 0
+	end
+	gibCount += 1
+	if gibCount > (if Fx.quality < 0.6 then 5 else 10) then
+		return
+	end
+	local goo = style == "goo"
+	local popCol = if goo then C3(210, 255, 190) else C3(255, 240, 200)
+	local pop = visual(Vector3.one * 0.4, popCol, CFrame.new(p), Enum.PartType.Ball, Enum.Material.Neon, 0, 0.16)
+	if pop then
+		tween(pop, 0.09, { Size = Vector3.one * 2.4, Transparency = 1 }, Quad, Out)
+	end
+	if goo then
+		burst("goo", p, 7, { scale = 0.55, speed = 0.9 })
+	else
+		burst("sparks", p, 6, { scale = 0.7, speed = 0.9 })
+		burst("puff", p, 2, { scale = 0.6 })
+	end
+	if dir then
+		burst(if goo then "goo" else "sparks", upCF(p, dir), 4, { scale = 0.6, speed = 1.5, spread = 35 })
+	end
+	if gibCount <= 4 and dist < 60 then
+		Fx.debris(p, {
+			n = 2,
+			style = if goo then "goo" else "scrap",
+			speed = 20,
+			scale = 0.5,
+			life = 0.8,
+			palette = if pal then (if goo then pal.goo else pal.scrap) else nil,
+			dir = dir,
+			bias = 0.9,
+		})
+	end
+end
+
 local function death(d)
 	local p: Vector3 = d.p
 	local pal = deathPalette(d.kind)
@@ -1316,6 +1371,10 @@ local function death(d)
 		Audio.play2D("KillWeak", { pitch = if heavy then 0.8 else 0.95, volume = 0.6, priority = 4 })
 	end
 	if dist > 400 then
+		return
+	end
+	if d.fodder == true then
+		fodderGib(p, style, pal, if typeof(d.dir) == "Vector3" then d.dir else nil, dist)
 		return
 	end
 
