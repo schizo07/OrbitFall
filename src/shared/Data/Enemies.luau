@@ -3,9 +3,15 @@
 -- Zone "body" is mandatory and its armour is the "body armour" used by explosions.
 -- fatal = zone HP; when it reaches 0 the enemy dies instantly.
 
+-- PACE TUNING (playtest: "enemies need to move a bit slower, especially COG"). Faction multipliers on walk / run speed
+-- (Enemy.speed) and on the "charge" dash speed. Applied once to the roster below, so the fodder tier and the limb-loss speed
+-- penalty (server/Enemies/Dismember.luau) inherit them. LUMEN is untouched. Retune here.
+local COG_SPEED_MULT = 0.8 -- robots: -20 %
+local BROOD_SPEED_MULT = 0.9 -- bugs: -10 %
+
 export type Zone = { armor: number, mult: number, fatal: number?, blocks: boolean? }
 export type Attack = {
-	kind: string, -- "bolt" | "burst" | "cannon" | "mortar" | "sweep" | "melee" | "leap" | "spit" | "charge" | "stomp" | "summon"
+	kind: string, -- "bolt" | "burst" | "cannon" | "mortar" | "sweep" | "melee" | "bite" | "leap" | "spit" | "charge" | "stomp" | "summon"
 	--              LUMEN (server/Enemies/LumenAI.luau): "needle" | "beam" | "pulse" | "rift"
 	damage: number,
 	range: number,
@@ -108,7 +114,8 @@ local E: { [string]: Enemy } = {
 			body = { armor = 0, mult = 1 },
 			head = { armor = 0, mult = 1.5 },
 		},
-		attacks = { { kind = "leap", damage = 12, range = 9, cooldown = 1.2, windup = 0.25 } },
+		-- ground bite (mandibles): run up, 0.3 s tell with the mandibles open, snap. Same damage / cycle (~8 per s) as the old leap.
+		attacks = { { kind = "bite", damage = 12, range = 5, cooldown = 1.2, windup = 0.3 } },
 		salvage = 1, xp = 1,
 		desc = "Fast little biter. Comes in packs.",
 	},
@@ -216,6 +223,18 @@ local E: { [string]: Enemy } = {
 	},
 }
 
+for _, d in E do
+	local m = if d.faction == "COG" then COG_SPEED_MULT elseif d.faction == "BROOD" then BROOD_SPEED_MULT else 1
+	if m ~= 1 then
+		d.speed *= m
+		for _, atk in d.attacks do
+			if atk.kind == "charge" and atk.speed then
+				atk.speed *= m -- the dash scales with the walk speed (projectile speeds are not movement and stay)
+			end
+		end
+	end
+end
+
 -- FODDER (swarm) tier: one per faction, built on the faction's regular unit. 1 HP (any hit kills), half cap cost, body only (every
 -- zone name falls back to "body"), weak attacks. Spawned in numbers by the breach sources (server/Enemies/Director.luau).
 local FODDER_SCALE = 0.8
@@ -235,7 +254,7 @@ end
 E.TINKER_SWARM = fodder("TINKER", "TINKER_SWARM", "Scrap Swarmer", 1.15,
 	{ kind = "bolt", damage = 6, range = 45, cooldown = 1.4, speed = 100 }, 20)
 E.SKITTER_SWARM = fodder("SKITTER", "SKITTER_SWARM", "Skitterling Swarm", 1.05,
-	{ kind = "leap", damage = 8, range = 8, cooldown = 1.2, windup = 0.25 }, nil)
+	{ kind = "bite", damage = 8, range = 4.5, cooldown = 1.2, windup = 0.3 }, nil)
 E.SHARDLING_SWARM = fodder("SHARDLING", "SHARDLING_SWARM", "Shard Swarmer", 1.1,
 	{ kind = "needle", damage = 5, range = 50, cooldown = 1.7, speed = 140, count = 1, interval = 0.1, spread = 4 }, 18)
 

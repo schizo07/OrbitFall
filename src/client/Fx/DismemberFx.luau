@@ -8,7 +8,7 @@
 --   * robots: sparks + oily smoke puff + a few bolts, and a spark/oil sputter on the stump for 3 s;
 --     bugs: cartoon green goo puff + splat + chunky shell chips, short goo drip on the stump;
 --   * limp: models that lost legs get their Body Motor6D leaned towards the missing side (bipeds hop-limp while moving).
---     Applied in PreSimulation on top of whatever EnemyAnim wrote in RenderStepped this frame.
+--     Fx.limp(model, speed, dt) returns the offset; EnemyAnim.setBody multiplies it into its own single Body write.
 -- The death break-up (EnemyAnim) only clones visible parts, so a lost limb is never duplicated there.
 
 local RunService = game:GetService("RunService")
@@ -393,66 +393,43 @@ end
 -- -------------------------------------------------------------------------------------------
 -- Limp (Body motor lean)
 -- -------------------------------------------------------------------------------------------
+-- The limp used to be written to the Body motor from its own PreSimulation connection on top of whatever EnemyAnim wrote in
+-- RenderStepped. That made two writers with different cadences: PreSimulation runs once per PHYSICS step (0..4 times per rendered
+-- frame), and the "did EnemyAnim write this frame" test compared CFrames for exact equality, which fails after the engine
+-- normalises the stored Transform, so the lean was re-applied on top of itself once per physics step (measured: Body roll sweeping
+-- -1.5 -> +39 degrees inside one frame, the visible value depending on how many physics steps the frame had) and its hop phase was
+-- driven by raw replicated-position steps (0 on most frames, a big jump on network ticks). Result: the whole body jittered every
+-- frame after a leg came off. Now EnemyAnim asks for the offset (Fx.limp) once per frame, inside the same setBody write, with its
+-- smoothed speed: one writer, one cadence, nothing stacks.
 type Limp = {
-	model: Model,
-	motor: Motor6D,
-	root: BasePart,
 	biped: boolean,
 	lean: number, -- signed: + leans to the left (-X) side
 	legsLost: number,
 	drop: number, -- static sink (biped with no legs left)
-	speed: number,
+	speed: number, -- the kind's top speed (normalises the hop)
 	phase: number,
-	lastPos: Vector3,
-	base: CFrame,
-	written: CFrame?,
 }
-local limps: { [Model]: Limp } = {}
-local limpConn: RBXScriptConnection? = nil
+local limps: { [Model]: Limp } = setmetatable({}, { __mode = "k" }) :: any
 
-local function limpStep(dt: number)
-	if dt <= 0 then
-		return
+-- Body Transform offset (applied after the pose: tb * offset) for a model that lost a leg; nil = no limp.
+-- speed = EnemyAnim's smoothed planar speed (studs/s), dt = seconds since this enemy was last posed.
+local function limpOffset(model: Model, speed: number, dt: number): CFrame?
+	local st = limps[model]
+	if not st then
+		return nil
 	end
-	local cam = workspace.CurrentCamera
-	local camPos = if cam then cam.CFrame.Position else Vector3.zero
-	for model, st in limps do
-		if not model.Parent or not st.motor.Parent then
-			limps[model] = nil
-			continue
-		end
-		local pos = st.root.Position
-		local d = pos - st.lastPos
-		st.lastPos = pos
-		if (pos - camPos).Magnitude > 160 then
-			continue
-		end
-		local m = st.motor
-		local base = m.Transform
-		if st.written and base == st.written then
-			base = st.base -- EnemyAnim did not write this frame (far / culled): do not stack the lean
-		end
-		st.base = base
-		local v = Vector3.new(d.X, 0, d.Z).Magnitude / dt
-		local move = math.clamp(v / math.max(st.speed * 0.5, 1), 0, 1)
-		st.phase += dt * math.clamp(v * 0.9, 0, 14)
-		local hop = math.abs(math.sin(st.phase))
-		local roll, dip
-		if st.biped then
-			roll = st.lean * (0.1 + 0.18 * hop * move)
-			dip = -st.drop - 0.35 * hop * move
-		else
-			roll = st.lean * (0.05 + 0.04 * hop * move)
-			dip = -0.08 * st.legsLost
-		end
-		local w = base * CFrame.new(0, dip, 0) * CFrame.Angles(0, 0, roll)
-		m.Transform = w
-		st.written = w
+	local move = math.clamp(speed / math.max(st.speed * 0.5, 1), 0, 1)
+	st.phase += dt * math.clamp(speed * 0.9, 0, 14)
+	local hop = math.abs(math.sin(st.phase))
+	local roll, dip
+	if st.biped then
+		roll = st.lean * (0.1 + 0.18 * hop * move)
+		dip = -st.drop - 0.35 * hop * move
+	else
+		roll = st.lean * (0.05 + 0.04 * hop * move)
+		dip = -0.08 * st.legsLost
 	end
-	if next(limps) == nil and limpConn then
-		limpConn:Disconnect()
-		limpConn = nil
-	end
+	return CFrame.new(0, dip, 0) * CFrame.Angles(0, 0, roll)
 end
 
 local function addLimp(model: Model, kind: string, mainName: string)
@@ -461,28 +438,16 @@ local function addLimp(model: Model, kind: string, mainName: string)
 		return
 	end
 	local info = Limbs.info(kind)
-	local body = model:FindFirstChild("Body")
-	local motor = body and body:FindFirstChild("Body")
-	local root = model.PrimaryPart or model:FindFirstChild("Root")
-	if not (motor and motor:IsA("Motor6D") and root and root:IsA("BasePart")) then
-		return
-	end
 	local st = limps[model]
 	if not st then
 		local def = EnemyData.get(kind)
 		st = {
-			model = model,
-			motor = motor,
-			root = root,
 			biped = info ~= nil and info.biped == true,
 			lean = 0,
 			legsLost = 0,
 			drop = 0,
 			speed = if def then def.speed else 10,
 			phase = 0,
-			lastPos = root.Position,
-			base = motor.Transform,
-			written = nil,
 		}
 		limps[model] = st
 	end
@@ -494,9 +459,6 @@ local function addLimp(model: Model, kind: string, mainName: string)
 		local main = model:FindFirstChild(mainName)
 		st.drop = if main and main:IsA("BasePart") then main.Size.Y * 1.6 else 1.5
 		st.lean = 0
-	end
-	if not limpConn then
-		limpConn = RunService.PreSimulation:Connect(limpStep)
 	end
 end
 
@@ -560,6 +522,7 @@ function DismemberFx.init(fx: any, audio: any, _juice: any)
 	Fx = fx
 	Audio = audio
 	Fx.register("Dismember", onDismember)
+	Fx.limp = limpOffset -- read by EnemyAnim.setBody (one Body write per frame)
 end
 
 return DismemberFx

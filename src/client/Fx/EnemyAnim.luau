@@ -94,6 +94,7 @@ local ATK: { [string]: { tail: number, shots: number?, gap: number? } } = {
 	stomp = { tail = 0.5 },
 	melee = { tail = 0.5 },
 	leap = { tail = 0.55 },
+	bite = { tail = 0.4 },
 	spit = { tail = 0.55 },
 	charge = { tail = 1.8 },
 	summon = { tail = 1.4 },
@@ -377,8 +378,11 @@ end
 -- stagger (deeper lean, head snap, arms flung back). The spring is read in `setBody` for every pose.
 local SPRING_K = 300
 local SPRING_C = 14 -- zeta ~0.4: one visible overshoot, settles in ~0.35 s
-local IMPULSE = 22 -- velocity added per unit of hit strength (a unit hit peaks at ~1 displacement unit)
-local MAX_DISP = 1.8
+-- Baked playtest pick (Studio A/B preset C): the old base values (IMPULSE 22, MAX_DISP 1.8) x2.6. The Studio attribute
+-- Feel_EnemyFlinch is now a FURTHER multiplier on top of this, default 1 (it scaled the max displacement too when > 1).
+local FLINCH_BAKE = 2.6
+local IMPULSE = 22 * FLINCH_BAKE -- velocity added per unit of hit strength (old: a unit hit peaked at ~1 displacement unit)
+local MAX_DISP = 1.8 * FLINCH_BAKE
 local LOCAL_WINDOW = 0.35
 
 local function addImpulse(e: Entry, dirW: Vector3?, mag: number, weak: boolean, stagger: boolean)
@@ -883,6 +887,14 @@ local function setBody(e: Entry, c: Ctx, y: number, z: number, pitch: number, ya
 	y -= (abs(fz) * 0.05 + c.stag * 0.09) * e.size
 	z += fz * 0.13 * e.size + c.stag * 0.08 * e.size
 	local tb = CF(fx * 0.12 * e.size, y, z) * CFrame.Angles(pitch, yaw, roll)
+	-- lost a leg: DismemberFx supplies the limp lean / hop as an offset, applied here so the Body motor has exactly one writer
+	local limp = FxRef and FxRef.limp
+	if limp then
+		local off = limp(e.model, e.speed, c.dt)
+		if off then
+			tb = tb * off
+		end
+	end
 	setM(e, "Body", tb)
 	return tb
 end
@@ -1002,10 +1014,11 @@ local function poseQuad(e: Entry, c: Ctx)
 	setM(e, "Shield", counter(e, "Shield", tb, 1)) -- the shield stays steady
 end
 
-local function mandibles(e: Entry, t: number, open: number)
+-- open: 0..1 spread asked by the attack; snap: 0..1 over-shoot past closed (the jaws clack shut on a bite)
+local function mandibles(e: Entry, t: number, open: number, snap: number?)
 	-- idle snapping: a quick open/close pulse every ~2 s, plus whatever the attack asks for
 	local pulse = clamp(sin(t * 2.6) * 2.5 - 1.2, 0, 1)
-	local o = rad(24) * max(open, pulse * 0.8)
+	local o = rad(24) * max(open, pulse * 0.8) - rad(9) * (snap or 0)
 	setM(e, "Mandible_L", ry(o))
 	setM(e, "Mandible_R", ry(-o))
 end
@@ -1048,9 +1061,20 @@ local function poseHex(e: Entry, c: Ctx)
 			pitch += rad(14) * c.pre - rad(30) * c.post
 			z -= 0.5 * c.post
 		end
+		local open, snap = 0, 0
+		if c.ak == "bite" then
+			-- ground bite: rear up and spread the mandibles over the wind-up (c.pre ramps 0 -> 1), then they snap shut on the
+			-- shot (pre drops to 0 in one frame) with a short lunge and a clack past closed (c.kick decays in ~0.1 s)
+			y -= 0.1 * c.pre
+			pitch += rad(12) * c.pre - rad(16) * c.kick
+			z -= 0.35 * c.kick
+			open = c.pre * 2.2 -- the jaws spread wider than the idle pulse (rad 24 * 2.2 ~ 53 degrees) so the tell is readable
+			snap = c.kick
+		elseif c.ak == "leap" then
+			open = max(c.pre * 0.6, c.post)
+		end
 		setBody(e, c, y, z, pitch, yaw, roll)
-		local open = if c.ak == "leap" then max(c.pre * 0.6, c.post) else 0
-		mandibles(e, t, open)
+		mandibles(e, t, open, snap)
 	elseif k == "SPITTER" then
 		y -= 0.12 * c.pre
 		pitch -= rad(5) * c.post

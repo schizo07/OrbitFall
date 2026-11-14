@@ -82,8 +82,8 @@ local byKind: { [string]: KindInfo } = {
 	},
 	SKITTER = {
 		limbs = append({
-			{ part = "Mandible_L", hp = 12, weaken = { kind = "leap", mult = 0.75 } },
-			{ part = "Mandible_R", hp = 12, weaken = { kind = "leap", mult = 0.75 } },
+			{ part = "Mandible_L", hp = 12, weaken = { kind = "bite", mult = 0.75 } },
+			{ part = "Mandible_R", hp = 12, weaken = { kind = "bite", mult = 0.75 } },
 		}, hexLegs(15, 0.85)),
 	},
 	SPITTER = {

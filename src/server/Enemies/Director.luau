@@ -20,7 +20,9 @@
 --   RELAX (10 s)    sources collapse, stragglers beyond 6-10 survivors are removed, nothing new spawns
 --   Extraction hold-out: a continuous BREACH until the shuttle lifts off; breach sources re-open every 20 s 30-45 studs out, the old
 --                   directional waves keep rolling (closer, 62-90 studs), the live cap never drops under 48.
---   Spotted -> reinforce: 12 s cooldown, the caller burns a flare for 3 s first; killing / stunning it cancels the call.
+--   Spotted -> reinforce: 45 s cooldown, the caller burns a flare for 3 s first; killing / stunning it cancels the call. No call
+--                   starts during BUILD / BREACH / extraction hold-out or within 30 s after a breach ended (a flare still burning when a
+--                   breach starts is cancelled); units delivered by a call may chain at most 1 further call per breach cycle.
 --   After a player goes down nothing new spawns for 4 s (Config.Action.DownLull).
 --   Objective interaction (Intensity.Events force = true) leads to a BUILD within 10 s.
 --
@@ -60,6 +62,7 @@ local pressure = 1
 local startedAt = 0
 local nextPatrol = 0
 local lastReinforce = -1e9
+local chainCalls = 0 -- spotted calls made by units that were themselves delivered by a call, since the last breach started
 local pending = { regular = 0, medium = 0, heavy = 0, behemoth = 0, fodder = 0 }
 
 -- intensity state machine
@@ -459,6 +462,7 @@ local function deliver(kinds: { string }, base: Vector3, method: string, opts: a
 		home = base,
 		dest = opts.dest,
 		crossFor = opts.crossFor,
+		reinforced = opts.reinforced == true, -- delivered by a spotted call: such a unit may only chain one further call per breach
 	}
 	for _, k in kinds do
 		pending[pendKey(k)] += 1
@@ -888,6 +892,7 @@ local function startBreach()
 	iBreachN += 1
 	iWave = 0
 	breachExtended = 0
+	chainCalls = 0
 	lastBearing = iBearing
 	breachStartedAt = t
 	heavyFired = false
@@ -1343,6 +1348,9 @@ end
 local function fireCall(c: { e: any, fireAt: number, prev: number, flare: Instance? })
 	local e = c.e
 	endCall(false)
+	if e.reinforced then
+		chainCalls += 1 -- counted when the chained call actually lands (a cancelled flare does not use it up)
+	end
 	local t = now()
 	local ps = playerPositions()
 	if #ps == 0 then
@@ -1391,17 +1399,28 @@ local function fireCall(c: { e: any, fireAt: number, prev: number, flare: Instan
 	end
 	local budget = (6 + 2.5 * #ps + difficulty * 1.5) * pressure
 	local kinds = compose(math.min(budget, 26), factionId)
-	deliver(kinds, spot, defaultMethod(), { aggro = true, patrol = true })
+	deliver(kinds, spot, defaultMethod(), { aggro = true, patrol = true, reinforced = true })
 end
 
--- true = a call started (the caller burns a flare for ReinforceWindup s). EnemyAI retries a refused caller after a moment.
+-- A breach is "up" while it is arriving (BUILD), running (BREACH, incl. the extraction hold-out and a source still opening) and for
+-- Config.Action.ReinforceBreachLockout seconds after it ended (RELAX included). No spotted call may start in that window: during a
+-- breach the sources already pour units in, and answering each elite's call with an extra burst + elite made the field cascade.
+local function breachWindow(t: number): boolean
+	if istate == "build" or istate == "breach" or extractHold ~= nil or sourcesToOpen > 0 or BreachSources.count() > 0 then
+		return true
+	end
+	return t - lastBreachEnd < Config.Action.ReinforceBreachLockout
+end
+
+-- true = a call started (the caller burns a flare for ReinforceWindup s) OR the caller may never call (nothing to retry);
+-- false = refused for now: EnemyAI retries a refused caller after about a second.
 function Director.onSpotted(e: any): boolean
 	if not running or not e or not e.alive then
 		return true -- nothing to retry
 	end
 	local t = now()
 	local A = Config.Action
-	if istate == "relax" or inLull(t) or pendingCall then
+	if istate == "relax" or inLull(t) or pendingCall or breachWindow(t) then
 		return false
 	end
 	if t - lastReinforce < A.ReinforceCooldown then
@@ -1409,6 +1428,10 @@ function Director.onSpotted(e: any): boolean
 	end
 	if loadNow() >= liveCap() - 6 then
 		return false
+	end
+	-- units that arrived with a call chain at most A.ReinforceChainMax further calls per breach cycle (then they just fight)
+	if e.reinforced and chainCalls >= A.ReinforceChainMax then
+		return true
 	end
 	pendingCall = { e = e, fireAt = t + A.ReinforceWindup, prev = lastReinforce, flare = makeFlare(e) }
 	lastReinforce = t
@@ -1424,6 +1447,10 @@ local function callTick(t: number)
 	-- killing (or stunning / confusing) the caller cancels the call; so does a lull or the end of the breach pacing
 	if not e.alive or e.status.stun or e.status.confuse or inLull(t) or istate == "relax" then
 		endCall(true)
+		return
+	end
+	if breachWindow(t) then
+		endCall(true) -- a breach started (or a source is opening) during the flare: the breach answers, not the call
 		return
 	end
 	if t >= c.fireAt then
@@ -1596,6 +1623,7 @@ function Director.start(m: any, faction: string, diff: number, opts: any?)
 
 	-- intensity: every mission opens with a CALM stretch
 	iBreachN, iWave, breachExtended = 0, 0, 0
+	chainCalls = 0
 	lastBreachEnd = -1e9
 	lastBearing = nil
 	extractHold = nil

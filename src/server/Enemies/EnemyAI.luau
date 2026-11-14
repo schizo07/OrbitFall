@@ -1,7 +1,7 @@
 -- Per-enemy behaviour. Not a registered service: EnemyService requires this and drives it.
 -- Think at ~10 Hz (staggered per enemy), move/animate every Heartbeat via PivotTo.
 --
--- Attack kinds (Data/Enemies): bolt, burst, cannon, mortar, sweep, stomp, melee, leap, spit, charge, summon.
+-- Attack kinds (Data/Enemies): bolt, burst, cannon, mortar, sweep, stomp, melee, bite (Brood ground bite), leap, spit, charge, summon.
 -- Fx sent: Bolt/BoltEnd (via Projectiles), Telegraph {shape, p, r | a, b, w, t},
 --          EnemyAttack {id, kind, e, p, t, ...}, Shockwave, Shake, Breach.
 -- Calls: S.Players.getAlive/getRoot/damage, S.Projectiles.fire, S.Enemies.spawn/count/damage,
@@ -37,9 +37,9 @@ local TURN = { regular = 7, medium = 5, heavy = 3.2, behemoth = 1.5 }
 local THINK = 0.1
 local NOMOVE = {
 	burst = true, cannon = true, mortar = true, sweep = true, stomp = true,
-	spit = true, charge = true, summon = true, melee = true, leap = true,
+	spit = true, charge = true, summon = true, melee = true, leap = true, bite = true,
 }
-local MELEE_KINDS = { melee = true, leap = true, stomp = true, charge = true }
+local MELEE_KINDS = { melee = true, leap = true, bite = true, stomp = true, charge = true }
 local MAP_HALF = Config.MapSize / 2 - 6
 local ROBOT_BOLT = Color3.fromRGB(255, 84, 58)
 
@@ -230,6 +230,7 @@ function EnemyAI.register(e: any, cf: CFrame, opts: any)
 	e.stepT = 0
 	e.lastHitBy = nil
 	e.alerted = false
+	e.reinforced = opts.reinforced == true -- delivered by a Director spotted call (see Director.onSpotted: chained calls are capped)
 	-- stop distance for melee-type units
 	local melee = math.huge
 	for _, atk in e.def.attacks do
@@ -523,7 +524,46 @@ FIRE.melee = function(e, a, atk, now)
 	e.act = nil
 end
 
--- leap
+-- bite: the ground attack of ordinary Brood melee units (Skitterling). The unit runs up to close range (stopDist), stands still for
+-- the wind-up (mandibles open on the client = the readable tell), then snaps its mandibles shut: damage in a short cone in front of
+-- it, plus a tiny forward lunge on the ground (no jump). Dodge by stepping out of the cone / range during the wind-up.
+local BITE_CONE = math.cos(math.rad(55)) -- half angle of the bite cone
+local BITE_REACH = 1.3 -- forgiveness on atk.range (measured from the unit's edge, like melee)
+local BITE_LUNGE = 1.4 -- studs the snap steps forward
+local BITE_LUNGE_T = 0.12
+FIRE.bite = function(e, a, atk, now)
+	local t = targetEntry(e)
+	local fwd = heading(e.yaw)
+	local gap = 0
+	if t then
+		local to = flat(t.pos - e.pos)
+		local dist = to.Magnitude
+		gap = dist - e.def.size * 0.6
+		if gap <= atk.range * BITE_REACH and math.abs(t.pos.Y - e.pos.Y) < 6 and (dist < 0.5 or to.Unit:Dot(fwd) >= BITE_CONE) then
+			damagePlayer(t.p, atk.damage, e.pos, 14, "bite")
+		end
+	end
+	a.phase = "active"
+	a.noMove = true
+	a.t0 = now
+	a.from = e.pos
+	a.to = clampMap(e.pos + fwd * math.clamp(gap - 1, 0, BITE_LUNGE))
+	e.faceDirOverride = fwd
+end
+ACTIVE.bite = function(e, a, atk, dt, now)
+	local u = math.clamp((now - a.t0) / BITE_LUNGE_T, 0, 1)
+	local p = a.from:Lerp(a.to, u)
+	e.pos = Vector3.new(p.X, e.pos.Y, p.Z)
+	e.vel = flat(a.to - a.from) / BITE_LUNGE_T * (1 - u)
+	if u >= 1 then
+		e.vel = Vector3.zero
+		e.act = nil
+		e.gcd = now + 0.2
+	end
+	return true
+end
+
+-- leap (no ordinary unit uses it any more; kept for units whose identity is a leaper)
 FIRE.leap = function(e, a, atk, now)
 	local t = targetEntry(e)
 	if not t then
@@ -710,7 +750,7 @@ end
 
 -- the bolt wind-up exists so clients can show the eye charge-up telegraph (client/Fx/EnemyAnim windupGlow); its cooldown
 -- overlaps the wind-up (see startAttack) so the rate of fire is unchanged
-local DEFAULT_WINDUP = { bolt = 0.3, burst = 0.25, melee = 0.3, summon = 1.0, leap = 0.25, stomp = 0.8, charge = 0.9 }
+local DEFAULT_WINDUP = { bolt = 0.3, burst = 0.25, melee = 0.3, summon = 1.0, leap = 0.25, bite = 0.3, stomp = 0.8, charge = 0.9 }
 
 -- LUMEN hook: LumenAI adds needle / beam / pulse / rift to PREP/FIRE/ACTIVE using these helpers
 LumenAI.install({
@@ -792,6 +832,8 @@ local function eligible(e: any, atk: any, dist: number, aimErr: number, los: boo
 		return edist <= atk.range
 	elseif k == "melee" then
 		return edist <= atk.range
+	elseif k == "bite" then
+		return edist <= atk.range and aimErr < 0.7
 	elseif k == "leap" then
 		return dist <= atk.range + 0.5 and dist >= 1.5 and aimErr < 0.8
 	elseif k == "spit" then
