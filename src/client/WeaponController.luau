@@ -210,6 +210,11 @@ local function shoot(w, slot: number)
 	local aim = Input.isDown("Aim")
 	local spread = (w.spread or 1) * (aim and 0.45 or 1) * (1 + bloom) * (sprinting and 1.6 or 1)
 	local mPos, mAtt = muzzle()
+	-- own shot sound first, before the traces and effects (SHOT SOUND PATH A/B: "old" = after them)
+	local soundFirst = workspace:GetAttribute("Feel_ShotSoundPath") ~= "old"
+	if soundFirst then
+		Audio.play(w.sound, mAtt or mPos, { source = "local" })
+	end
 	seq += 1
 	if w.pellets then
 		local centre = WeaponController.aimPoint(w.range or 120, 0)
@@ -234,7 +239,9 @@ local function shoot(w, slot: number)
 		end
 	end
 	GunFeel.shot(w, aim) -- grip recoil, star muzzle flash + light, casing, gatling heat (client/Fx/GunFeel.luau)
-	Audio.play(w.sound, mAtt or mPos, { source = "local" })
+	if not soundFirst then
+		Audio.play(w.sound, mAtt or mPos, { source = "local" })
+	end
 	-- x2.2 camera kick: 2026-11-14 playtest pick (GUN FEEL D)
 	local kick = (w.recoil or 0.5) * (aim and 0.6 or 1) * 2.2 * feel("CamKick")
 	Juice.kick(kick, (math.random() - 0.5) * kick * 0.6)
@@ -360,6 +367,7 @@ function WeaponController.init()
 		end
 	end)
 	Input.on("Grenade", function(d)
+		d = require(script.Parent.ThrowArc).grenadeEdge(d) -- hold to aim with the throw arc, throw on release
 		local m = me()
 		if d and not blocked() and m and m.grenades > 0 and not Input.isGated("Grenade") then -- gate: haul cell carrier
 			local p = WeaponController.aimPoint(60, 0)

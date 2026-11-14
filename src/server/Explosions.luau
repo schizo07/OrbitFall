@@ -9,7 +9,11 @@
 --     4. listeners: every onBlast fn gets the BlastInfo below
 --   spec: radius, core, damage, ap, size ("S"|"M"|"L"|"XL"), style ("fire"|"emp"|...), vis, knock, power, shake,
 --         shakeRadius, coreDamage?, coreAp?, legacy? = { shake, shakeR, shockwave, crater } (replayed only by the
---         "Current" explosion look in Studio A/B), noDamage? (effect + knock only)
+--         "Current" explosion look in Studio A/B), noDamage? (effect + knock only), skipPlayer? (a Player never
+--         knocked by this blast, e.g. the trooper inside a landing drop pod), noEmit? (skip onBlast listeners: enemy
+--         shells must not stagger their own side)
+--   Troopers in debug god mode (S.Players.isGod) are never knocked.
+--   S.Explosions.playerFalloff(dist, core, radius) -> splash share for troopers (steeper than Damage.falloff)
 --
 -- Listener API (for enemy stagger / fling):
 --   local off = S.Explosions.onBlast(function(info: BlastInfo) ... end)   -- returns a disconnect function
@@ -26,9 +30,25 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Damage = require(Shared:WaitForChild("Damage"))
 local Blasts = require(Shared:WaitForChild("Data"):WaitForChild("Blasts"))
+local CallInData = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
 
 local Explosions = {}
 local S: any = nil
+
+-- Cryo Bomb shatter: enemies whose model FrozenUntil (server time) lies ahead take this multiple of bullet / blast
+-- damage (bonus applied here for blasts, in WeaponService for bullets).
+local cryoDef = CallInData.get("CRYO")
+local SHATTER = cryoDef and cryoDef.params.shatter or 2
+local SHATTER_FX_CAP = 6 -- "Shatter" effects sent per blast
+
+function Explosions.frozenMult(e: any): number
+	local m = e and e.model
+	local fu = m and m:GetAttribute("FrozenUntil")
+	if type(fu) == "number" and fu > workspace:GetServerTimeNow() then
+		return SHATTER
+	end
+	return 1
+end
 
 export type BlastInfo = {
 	pos: Vector3,
@@ -93,6 +113,25 @@ function Explosions.powerAt(info: BlastInfo, at: Vector3): number
 	return info.power * knockFrac((at - info.pos).Magnitude, info.core, info.radius)
 end
 
+-- Splash damage share for troopers. Enemies use Damage.falloff (soft: 1 -> 0.45 on a u^1.5 curve); troopers keep a
+-- steeper linear 1 -> PLAYER_EDGE so the edge of a mortar / cannon ring stays survivable.
+-- Studio A/B: Feel_PlayerSplash (Variants group "PLAYER SPLASH"): nil = steep, "enemy" = same curve as enemies.
+local PLAYER_EDGE = 0.25
+local IS_STUDIO = game:GetService("RunService"):IsStudio()
+function Explosions.playerFalloff(dist: number, core: number, radius: number): number
+	if IS_STUDIO and workspace:GetAttribute("Feel_PlayerSplash") == "enemy" then
+		return Damage.falloff(dist, core, radius)
+	end
+	if dist <= core then
+		return 1
+	end
+	if dist >= radius then
+		return 0
+	end
+	local u = (dist - core) / math.max(radius - core, 0.001)
+	return 1 - (1 - PLAYER_EDGE) * u
+end
+
 -- Troopers: knockdown (heavy) or shove (light). Squadmates included; no damage unless Config.FriendlyFire.
 local rng = Random.new()
 local function knockPlayers(pos: Vector3, spec: any, source: any?)
@@ -106,12 +145,12 @@ local function knockPlayers(pos: Vector3, spec: any, source: any?)
 	local threshold = Config.Move.KnockdownSpeed
 	for _, p in players.getAlive() do
 		local root = players.getRoot(p)
-		if not root then
+		if not root or p == spec.skipPlayer then
 			continue
 		end
 		local d = root.Position - pos
 		local dist = d.Magnitude
-		if knock > 0 then
+		if knock > 0 and not (players.isGod and players.isGod(p)) then
 			local f = knockFrac(dist, core, radius)
 			if f > 0 then
 				local flat = Vector3.new(d.X, 0, d.Z)
@@ -129,7 +168,7 @@ local function knockPlayers(pos: Vector3, spec: any, source: any?)
 			end
 		end
 		if Config.FriendlyFire and (spec.damage or 0) > 0 and source and source.player and dist < radius then
-			local f = Damage.falloff(dist, core, radius)
+			local f = Explosions.playerFalloff(dist, core, radius)
 			if f > 0 and players.damage then
 				players.damage(p, spec.damage * f * 0.5, pos, { kind = "friendly" })
 			end
@@ -149,7 +188,15 @@ function Explosions.blast(pos: Vector3, spec: any, source: any?): { killed: numb
 	local style = spec.style or "fire"
 	local killed = 0
 
-	-- 1. damage
+	-- 1. damage (frozen enemies are listed first: the main pass may kill or move them)
+	local frozen: { { e: any, f: number } } = {}
+	if not spec.noDamage and damage > 0 and s.Enemies and s.Enemies.getInRadius then
+		for _, e in s.Enemies.getInRadius(pos, radius) do
+			if e.alive and e.root and Explosions.frozenMult(e) > 1 then
+				table.insert(frozen, { e = e, f = Damage.falloff((e.root.Position - pos).Magnitude, core, radius) })
+			end
+		end
+	end
 	if not spec.noDamage and s.Enemies and s.Enemies.explode then
 		local ok, res = pcall(s.Enemies.explode, pos, radius, core, damage, ap, source, { noPlayerKnock = true })
 		if ok and type(res) == "table" then
@@ -165,8 +212,25 @@ function Explosions.blast(pos: Vector3, spec: any, source: any?): { killed: numb
 		end
 	end
 
+	-- 1b. shatter bonus on enemies that were frozen when the blast hit
+	local sent = 0
+	for _, fr in frozen do
+		local e = fr.e
+		if e.alive and fr.f > 0 then
+			local bonus = damage * fr.f * (SHATTER - 1)
+			local ok, res = pcall(s.Enemies.damage, e, bonus, ap, source, "body")
+			if ok and type(res) == "table" and res.killed then
+				killed += 1
+			end
+			if sent < SHATTER_FX_CAP and e.root then
+				sent += 1
+				s.Fx.play("Shatter", { p = e.root.Position })
+			end
+		end
+	end
+
 	-- 2. troopers
-	knockPlayers(pos, { radius = radius, core = core, knock = spec.knock or 0, damage = damage }, source)
+	knockPlayers(pos, { radius = radius, core = core, knock = spec.knock or 0, damage = damage, skipPlayer = spec.skipPlayer }, source)
 
 	-- 3. client effect
 	local lg = spec.legacy or {}
@@ -185,7 +249,7 @@ function Explosions.blast(pos: Vector3, spec: any, source: any?): { killed: numb
 	})
 
 	-- 4. listeners
-	if #listeners > 0 then
+	if #listeners > 0 and not spec.noEmit then
 		Explosions.emit({
 			pos = pos,
 			radius = radius,

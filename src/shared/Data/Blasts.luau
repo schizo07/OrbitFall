@@ -48,6 +48,10 @@ Blasts.byId = {
 	CLUSTER = { radius = 6, core = 2, knock = 55, vis = 0.8, shake = 0.55 }, -- radius 4, core 1
 	BARRAGE = { blast = 9, core = 3.5, knock = 90, vis = 1.8 }, -- blast 6, core 2
 	MINES = { radius = 6, core = 2, knock = 65, vis = 1.05 }, -- radius 5, core 1.5
+	-- new call-ins (no old values)
+	GRAVWELL = { radius = 10, core = 4, knock = 85, vis = 1.9, shake = 1.1 },
+	CRYO = { radius = 14, core = 5, knock = 0, vis = 1.7, shake = 0.7 },
+	RAILSHOT = { radius = 5, core = 1.5, knock = 55, vis = 1.1, shake = 1.2 },
 } :: { [string]: Row }
 
 -- Returns a copy of `base` with the row for `id` applied (base untouched). Unknown id -> plain copy.

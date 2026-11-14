@@ -23,6 +23,18 @@ Mission.lastBeacon = nil :: Vector3?
 Mission.arena = false -- Studio test arena (World/TestArena): an "Active" mission with no objectives, no Director, no tick loop
 
 local token = 0 -- invalidates stale timers when the mission changes
+
+-- Mission clock: Config.MissionTime, or in Studio the A/B attribute Feel_MissionTime (minutes; Variants group
+-- "MISSION TIME", mirrored to the server through the "studioFeel" action like Feel_Regen).
+local function missionTime(): number
+	if RunService:IsStudio() then
+		local a = workspace:GetAttribute("Feel_MissionTime")
+		if type(a) == "number" and a > 0 then
+			return a * 60
+		end
+	end
+	return Config.MissionTime
+end
 local OBJECTIVE_NAMES = { MISSILE = "Missile Launch", UPLINK = "Uplink Relay", HAUL = "Recover Core Cells" }
 
 -- Squad-card join state, replicated as the Player attribute `Deploy`: "loadout" (joined mid-mission, still on the
@@ -374,7 +386,7 @@ function Mission.start(p: Player?, args)
 		local map = S.Map.current
 		local n = #Players:GetPlayers()
 		Mission.lives = Config.LivesBase + Config.LivesPerPlayer * n
-		setState("Drop", Config.MissionTime)
+		setState("Drop", missionTime())
 		Mission.state = "Drop"
 		local ins = map.insertion.Position
 		for i, pl in Players:GetPlayers() do

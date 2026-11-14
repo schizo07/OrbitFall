@@ -114,6 +114,30 @@ local C: { [string]: CallIn } = {
 		params = { weapon = "RAIL" },
 		desc = "Drops the Rail Lance. Charge, aim, pierce.",
 	},
+	GRAVWELL = {
+		id = "GRAVWELL", name = "Gravity Well", category = "orbital", beacon = "offense",
+		delay = 2, cooldown = 120, icon = "◉", unlock = "armory", salvage = 1000, rank = 3,
+		params = { pullRadius = 18, pullTime = 3, pullSpeed = 26, damage = 700, ap = 4, radius = 10, core = 4 },
+		desc = "A 3 s vortex drags enemies into a knot, then it bursts.",
+	},
+	CRYO = {
+		id = "CRYO", name = "Cryo Bomb", category = "orbital", beacon = "offense",
+		delay = 1.5, cooldown = 100, icon = "❄", unlock = "armory", salvage = 900, rank = 2,
+		params = { radius = 14, core = 5, damage = 80, ap = 2, freeze = 4, shatter = 2 },
+		desc = "Freezes everything in the blast for 4 s. Frozen enemies take double damage.",
+	},
+	RAILSHOT = {
+		id = "RAILSHOT", name = "Railshot", category = "orbital", beacon = "offense",
+		delay = 2, cooldown = 90, icon = "↧", unlock = "armory", salvage = 1200, rank = 4,
+		params = { charge = 0.9, damage = 2600, ap = 5, hitRadius = 2.5, splash = 350, splashAp = 3, radius = 5, core = 1.5 },
+		desc = "One pinpoint shot from orbit, exactly on the beacon. Pierces tank armour.",
+	},
+	FIRESTORM = {
+		id = "FIRESTORM", name = "Firestorm Line", category = "air", beacon = "offense",
+		delay = 2, cooldown = 110, icon = "♨", unlock = "armory", salvage = 800, rank = 3,
+		params = { length = 32, width = 7, duration = 10, dps = 110, ap = 3, patches = 8 },
+		desc = "Sets a 32-stud strip on fire along your throw direction for 10 s.",
+	},
 	REINFORCE = {
 		id = "REINFORCE", name = "Reinforce", category = "mission", beacon = "supply",
 		delay = 2, cooldown = 10, icon = "✚", unlock = "mission",
@@ -129,7 +153,11 @@ local CODES: { [string]: string } = {
 	LANCE = "LDLUR",
 	EMP = "LDRD",
 	BARRAGE = "LDLLDU",
+	GRAVWELL = "LDUU",
+	CRYO = "LDDR",
+	RAILSHOT = "LDRUR",
 	-- air: U L ...
+	FIRESTORM = "ULDL",
 	STRAFE = "ULL",
 	HALFTON = "ULDD",
 	TOXIN = "ULUD",
@@ -160,6 +188,10 @@ local CALLOUT_OVERRIDES: { [string]: string } = {
 	MINES = "Laying mines. Watch your feet.",
 	SHIELD = "Dome going up. Get inside.",
 	SMOKE = "Smoke wall inbound.",
+	GRAVWELL = "Gravity Well out. Stay clear of the pull.",
+	CRYO = "Cryo going down. Shoot the frozen ones.",
+	RAILSHOT = "Railshot inbound. One shot, make it count.",
+	FIRESTORM = "Firestorm line. Don't stand in it.",
 }
 for id, line in CALLOUT_OVERRIDES do
 	local def = C[id]

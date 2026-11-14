@@ -3,7 +3,12 @@
 -- ramp zone board it, then it lifts off and onDone(boarded) fires.
 --   S.Extraction.start(map, onDone(boarded: {Player}))
 --   S.Extraction.stop()
---   S.Extraction.getState() -> {phase = "idle"|"called"|"landing"|"landed"|"leaving", eta = number?, windowEnd = number?}
+--   S.Extraction.getState() -> {phase = "idle"|"called"|"hovering"|"landing"|"landed"|"leaving", eta = number?, windowEnd = number?}
+-- Hot zone: after the ETA the Skiff HOVERS over the pad and only lands once no live enemy has been within SK.clearRadius
+-- for SK.clearHold s in a row; while hovering its door gun shoots enemies near the pad (server picks targets + damage,
+-- clients draw Fx "SkiffGun" / "SkiffHover" in client/Fx/SkiffFx.luau). Enemies back on the pad during boarding make it
+-- lift off again and the boarding timer pauses (payload `paused` = seconds left). Extract payload extras for the HUD:
+-- `label` (what the Skiff is doing), `hold` (true while holding), `paused`. Studio A/B Feel_SkiffMode (group SKIFF).
 -- Objects live in workspace.ExtractionObjects (separate from ObjectiveObjects so Objectives.stop() cannot delete them).
 -- Mission state is pushed with S.Mission.setExtract({eta = serverTime, window = serverTime?}) when present,
 -- otherwise S.State.broadcast("extract", {eta, window}).
@@ -12,8 +17,10 @@
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
+local EnemyData = require(Shared.Data.Enemies)
 local SetPieces = require(script.Parent.SetPieces)
 
 local Extraction = {}
@@ -34,6 +41,33 @@ local LAND_TIME = 7
 local LEAVE_TIME = 9 -- liftoff -> gone (client cinematic = RAMP_PRE + LEAVE_TIME, then fade to black and Results)
 local RAMP_PRE = 1.5 -- ramp closes before the engines lift the Skiff
 local HOVER_Y = 240
+
+-- Hot-zone hold (tuning). Distances in studs, times in seconds.
+local SK = {
+	clearRadius = 30, -- no live enemy within this of the pad centre ...
+	clearHold = 2.5, -- ... for this long in a row -> the Skiff lands
+	hotHold = 0.75, -- an enemy inside for this long during boarding / touchdown -> it lifts off again (a passing bug is ignored)
+	hoverUp = 22, -- hover height above the landed pose
+	hoverMax = 90, -- after this much holding in total it lands anyway and stays down (math.huge = never)
+	approach = 5, -- arrival -> hover point
+	settle = 2.8, -- hover -> pad
+	lift = 2.0, -- pad -> hover
+	gunAcquire = 60, -- door gun looks for enemies within this of the pad centre (nearest to the pad first)
+	gunRange = 100, -- and within this of the gun, with a clear line from the gun
+	gunInterval = 0.3, -- s between rounds
+	gunDamage = 70,
+	gunAp = 3, -- Medium armour piercing
+}
+
+-- Studio A/B (Variants group SKIFF, mirrored by client/Fx/SkiffFx): "gun" = hover until clear + door gun (live games),
+-- "nogun" = hover until clear without the gun, "old" = lands on time regardless of enemies.
+local function skiffMode(): string
+	if not RunService:IsStudio() then
+		return "gun"
+	end
+	local v = workspace:GetAttribute("Feel_SkiffMode")
+	return if v == "nogun" or v == "old" then v else "gun"
+end
 
 -- Takeoff flight path. MUST stay identical to skiffPath in client/Fx/WorldFx.luau: every client animates the replicated Skiff
 -- locally along it (smooth, in sync with the engine Fx and the cinematic camera); the server only snaps it to the end pose.
@@ -154,8 +188,13 @@ local function sound(key: string, pos: Vector3?)
 	end
 end
 
-local function pushExtract(eta: number?, windowEnd: number?)
-	local payload = if eta then { eta = eta, window = windowEnd } else nil
+local function pushExtract(eta: number?, windowEnd: number?, extra: { [string]: any }?)
+	local payload: any = if eta then { eta = eta, window = windowEnd } else nil
+	if payload and extra then
+		for k, v in extra do
+			payload[k] = v
+		end
+	end
 	if S and S.Mission and S.Mission.setExtract then
 		local ok, err = pcall(S.Mission.setExtract, payload)
 		if not ok then
@@ -172,6 +211,90 @@ local function wave(center: Vector3, budget: number)
 		local n = math.max(1, #alivePlayers())
 		pcall(d.spawnWave, center, math.floor(budget * (0.75 + 0.25 * n) + 0.5))
 	end
+end
+
+-- ---------------------------------------------------------------- hot zone
+local function hostilesNear(center: Vector3, r: number): { any }
+	local E = S and S.Enemies
+	local out = {}
+	if not (E and E.getInRadius) then
+		return out
+	end
+	for _, e in E.getInRadius(center, r) do
+		if e.alive and not (e.def and e.def.static) then
+			out[#out + 1] = e
+		end
+	end
+	return out
+end
+
+-- the mission clock must not run out while the Skiff holds over a hot pad (Mission.setExtract only extends it from the
+-- ETA / boarding window); kept at least 45 s ahead, raised in 30 s steps so the HUD clock isn't rebroadcast constantly
+local function holdClock()
+	local M = S and S.Mission
+	if M and M.state == "Extract" and type(M.endsAt) == "number" then
+		local now = workspace:GetServerTimeNow()
+		if M.endsAt < now + 45 then
+			M.endsAt = now + 75
+			if M.broadcast then
+				pcall(M.broadcast)
+			end
+		end
+	end
+end
+
+local gunParams = RaycastParams.new()
+gunParams.FilterType = Enum.RaycastFilterType.Exclude
+gunParams.IgnoreWater = true
+
+-- One door-gun round: nearest enemy to the pad with a clear line from the gun on its side of the hull. Damage goes through
+-- S.Enemies.damage only, so troopers can never be hit. -> true when a round was fired.
+local function doorGun(skiff: any, center: Vector3): boolean
+	local E = S and S.Enemies
+	if not (E and E.damage) or not skiff.root.Parent then
+		return false
+	end
+	local list = hostilesNear(center, SK.gunAcquire)
+	if #list == 0 then
+		return false
+	end
+	local function flatDist(e: any): number
+		local d = e.root.Position - center
+		return Vector3.new(d.X, 0, d.Z).Magnitude
+	end
+	table.sort(list, function(a, b)
+		return flatDist(a) < flatDist(b)
+	end)
+	local exclude: { Instance } = { folder :: any }
+	local ef = Workspace:FindFirstChild("Enemies")
+	if ef then
+		exclude[#exclude + 1] = ef
+	end
+	for _, p in Players:GetPlayers() do
+		if p.Character then
+			exclude[#exclude + 1] = p.Character
+		end
+	end
+	gunParams.FilterDescendantsInstances = exclude
+	local rootCF = skiff.root.CFrame
+	for i = 1, math.min(#list, 6) do
+		local e = list[i]
+		local aim = e.root.Position + Vector3.new(0, (e.def.size or 2) * 0.6, 0)
+		local side = if rootCF:PointToObjectSpace(aim).X < 0 then -1 else 1
+		local gun = (rootCF * CFrame.new(side * 6.6, -2.2, -2)).Position
+		local v = aim - gun
+		if v.Magnitude <= SK.gunRange and workspace:Raycast(gun, v, gunParams) == nil then
+			local faction = EnemyData.Factions[e.faction]
+			local mat = if faction and faction.deathStyle == "goo" then "goo" else "metal"
+			S.Enemies.damage(e, SK.gunDamage, SK.gunAp, { kind = "skiff" }, "body")
+			if S.Fx then
+				local jitter = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 1.2
+				S.Fx.playU("SkiffGun", { a = gun, b = aim + jitter, m = mat })
+			end
+			return true
+		end
+	end
+	return false
 end
 
 -- ---------------------------------------------------------------- the Skiff
@@ -598,54 +721,171 @@ function Extraction.start(map: any, onDone: (boarded: { Player }) -> ())
 
 		-- descent
 		state = { phase = "landing", eta = eta }
+		local mode = skiffMode()
 		-- approach from the map-centre side: glide in facing the travel direction, then settle (turning onto the pad heading)
 		local travelRot = CFrame.lookAt(Vector3.zero, -inward)
 		local hoverPos = landedPos + Vector3.new(0, 25, 0)
 		skiff = buildSkiff(f, CFrame.new(landedPos + inward * 90 + Vector3.new(0, 70, 0)) * travelRot)
 		skiff.setRamp(false)
-		if S and S.Fx then
-			S.Fx.play("Skiff", { p = landedPos, t = LAND_TIME, phase = "land" })
-		end
-		sound("SkiffEngine", P)
-		local land1 = tween(skiff.root, LAND_TIME * 0.6, { CFrame = CFrame.new(hoverPos) * travelRot }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		local land2: Tween? = nil
-		land1.Completed:Connect(function(st)
-			if st == Enum.PlaybackState.Completed and live() then
-				land2 = tween(skiff.root, LAND_TIME * 0.4, { CFrame = CFrame.new(landedPos) * skiffRot }, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+		local holdCF = CFrame.new(landedPos + Vector3.new(0, SK.hoverUp, 0)) * skiffRot
+		local landedCF = CFrame.new(landedPos) * skiffRot
+		local padPos = Vector3.new(P.X, padTop, P.Z)
+		if mode == "old" then
+			if S and S.Fx then
+				S.Fx.play("Skiff", { p = landedPos, t = LAND_TIME, phase = "land" })
 			end
-		end)
-		local t0 = os.clock()
-		while live() and os.clock() - t0 < LAND_TIME do
-			task.wait(0.5)
-			if os.clock() - t0 > 2 and math.floor((os.clock() - t0) * 2) % 4 == 0 then
-				if S and S.Fx then
-					S.Fx.play("Shake", { p = P, mag = 0.25, r = 120 })
+			sound("SkiffEngine", P)
+			local land1 = tween(skiff.root, LAND_TIME * 0.6, { CFrame = CFrame.new(hoverPos) * travelRot }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			local land2: Tween? = nil
+			land1.Completed:Connect(function(st)
+				if st == Enum.PlaybackState.Completed and live() then
+					land2 = tween(skiff.root, LAND_TIME * 0.4, { CFrame = landedCF }, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+				end
+			end)
+			local t0 = os.clock()
+			while live() and os.clock() - t0 < LAND_TIME do
+				task.wait(0.5)
+				if os.clock() - t0 > 2 and math.floor((os.clock() - t0) * 2) % 4 == 0 then
+					if S and S.Fx then
+						S.Fx.play("Shake", { p = P, mag = 0.25, r = 120 })
+					end
 				end
 			end
-		end
-		if not live() then
-			return
-		end
-		land1:Cancel()
-		if land2 then
-			land2:Cancel()
-		end
-		skiff.root.CFrame = CFrame.new(landedPos) * skiffRot
-		for _, g in skiff.glow do
-			g.Transparency = 0.4
+			if not live() then
+				return
+			end
+			land1:Cancel()
+			if land2 then
+				land2:Cancel()
+			end
+			skiff.root.CFrame = landedCF
+		else
+			-- glide in onto the hover point over the pad (pad heading, so the door guns face the flanks)
+			sound("SkiffEngine", P)
+			local tw = tween(skiff.root, SK.approach, { CFrame = holdCF }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			local t0 = os.clock()
+			while live() and os.clock() - t0 < SK.approach do
+				task.wait(0.25)
+			end
+			tw:Cancel()
+			if not live() then
+				return
+			end
+			skiff.root.CFrame = holdCF
 		end
 
-		-- boarding window
-		local windowEnd = workspace:GetServerTimeNow() + Config.ExtractWindow
-		state = { phase = "landed", eta = eta, windowEnd = windowEnd }
-		pushExtract(eta, windowEnd)
-		skiff.setRamp(true)
-		zonePlate.Transparency = 0.6
-		pulse:Play()
-		sound("Klaxon", P)
-		notify(string.format("The %s has landed! Board now - %d s!", Config.ShuttleName, Config.ExtractWindow), Config.Colors.Friendly)
-		if S and S.Fx then
-			S.Fx.play("Shake", { p = P, mag = 0.6, r = 150 })
+		-- hot-zone hold helpers (hover modes) ------------------------------------------------------------
+		local hoverTotal = 0
+		local boardLeft = Config.ExtractWindow
+		local timesLanded = 0
+		local hoverFxOn = false
+		local function setHoverFx(on: boolean)
+			if on == hoverFxOn then
+				return
+			end
+			hoverFxOn = on
+			if S and S.Fx then
+				S.Fx.play("SkiffHover", if on then { on = true, root = skiff.root, p = padPos } else { on = false })
+			end
+		end
+		local function forced(): boolean
+			return hoverTotal >= SK.hoverMax
+		end
+		local function pausedLeft(): number?
+			return if timesLanded > 0 then math.max(1, math.floor(boardLeft + 0.5)) else nil
+		end
+		-- holds over the pad until it has been clear for SK.clearHold s (door gun in "gun" mode). false = the run ended
+		local function holdUntilClear(announce: boolean): boolean
+			state = { phase = "hovering", eta = eta }
+			setHoverFx(true)
+			pushExtract(eta, nil, { label = "SKIFF HOLDING: CLEAR THE ZONE", hold = true, paused = pausedLeft() })
+			if announce and #hostilesNear(P, SK.clearRadius) > 0 then
+				notify(string.format("%s holding: clear the zone!", Config.ShuttleName), Config.Colors.Accent)
+			end
+			local clearFor, nextShot, last = 0, 0, os.clock()
+			while live() do
+				task.wait(0.1)
+				local c = os.clock()
+				local dt = c - last
+				last = c
+				hoverTotal += dt
+				holdClock()
+				if #hostilesNear(P, SK.clearRadius) > 0 then
+					clearFor = 0
+				else
+					clearFor += dt
+				end
+				if mode == "gun" and c >= nextShot and doorGun(skiff, P) then
+					nextShot = c + SK.gunInterval
+				end
+				if clearFor >= SK.clearHold then
+					return true
+				end
+				if forced() then
+					notify(string.format("The %s is coming down under fire!", Config.ShuttleName), Config.Colors.Danger)
+					return true
+				end
+			end
+			return false
+		end
+		-- hover -> pad. "landed" | "hot" (enemies back inside, it climbs again) | "dead" (run ended)
+		local function settle(): string
+			state = { phase = "landing", eta = eta }
+			pushExtract(eta, nil, { label = "SKIFF LANDING", paused = pausedLeft() })
+			if not forced() then
+				notify(string.format("Zone clear - the %s is landing!", Config.ShuttleName), Config.Colors.Friendly)
+			end
+			if S and S.Fx then
+				S.Fx.play("Skiff", { p = landedPos, t = SK.settle, phase = "land" })
+			end
+			local tw = tween(skiff.root, SK.settle, { CFrame = landedCF }, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+			local t0, last, hotFor = os.clock(), os.clock(), 0
+			while live() and os.clock() - t0 < SK.settle do
+				task.wait(0.1)
+				local c = os.clock()
+				local dt = c - last
+				last = c
+				holdClock()
+				if not forced() and #hostilesNear(P, SK.clearRadius) > 0 then
+					hotFor += dt
+				else
+					hotFor = 0
+				end
+				if hotFor >= SK.hotHold then
+					tw:Cancel()
+					return "hot"
+				end
+			end
+			tw:Cancel()
+			if not live() then
+				return "dead"
+			end
+			skiff.root.CFrame = landedCF
+			setHoverFx(false)
+			return "landed"
+		end
+		-- pad (or part-way down) -> hover point. false = the run ended
+		local function liftToHover(): boolean
+			setHoverFx(true)
+			local tw = tween(skiff.root, SK.lift, { CFrame = holdCF }, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+			local t0 = os.clock()
+			while live() and os.clock() - t0 < SK.lift do
+				task.wait(0.1)
+				holdClock()
+			end
+			tw:Cancel()
+			if not live() then
+				return false
+			end
+			skiff.root.CFrame = holdCF
+			return true
+		end
+		local function pullUpNotice()
+			notify(
+				string.format("Hostiles on the pad - the %s is pulling up! Clear the zone.%s", Config.ShuttleName, if timesLanded > 0 then string.format(" Boarding paused (%d s left).", pausedLeft() or 0) else ""),
+				Config.Colors.Danger
+			)
+			sound("Klaxon", P)
 		end
 
 		local dwell: { [Player]: number } = {}
@@ -654,79 +894,154 @@ function Extraction.start(map: any, onDone: (boarded: { Player }) -> ())
 		local seats = { { -3, -4 }, { 3, -4 }, { -3, 2 }, { 3, 2 }, { 0, -1 } }
 		local nextWave2 = os.clock() + 5
 		local earlyLeave: number? = nil
+		local windowEnd = 0
+		local announceHold = true
 		while live() do
-			task.wait(0.25)
-			local now = workspace:GetServerTimeNow()
-			local alive = alivePlayers()
-			for _, pl in alive do
-				if not boarded[pl] then
-					local r = getRoot(pl)
-					if r and inZone(r.Position) then
-						dwell[pl] = (dwell[pl] or 0) + 0.25
-						if dwell[pl] >= 1 then
-							boarded[pl] = true
-							boardedList[#boardedList + 1] = pl
-							boardedPlayers = boardedList
-							local seat = seats[math.min(#boardedList, #seats)]
-							local seatCF = skiff.root.CFrame * CFrame.new(seat[1] * (skiff.seatScale or 1), -1.4, seat[2])
-							local ch = pl.Character
-							if ch then
-								ch:SetAttribute("Boarded", true)
-								-- aboard = safe: Humanoid:TakeDamage is ignored while a ForceField exists (the server keeps the
-								-- hull on the pad during the client-animated takeoff, so enemies could still reach them)
-								local ff = Instance.new("ForceField")
-								ff.Name = "BoardedShield"
-								ff.Visible = false
-								ff.Parent = ch
-								welds[#welds + 1] = ff
-								local hum = ch:FindFirstChildOfClass("Humanoid")
-								if hum then
-									hum.PlatformStand = true
+			if mode ~= "old" then
+				if not holdUntilClear(announceHold) then
+					return
+				end
+				announceHold = false
+				local res = settle()
+				if res == "dead" then
+					return
+				elseif res == "hot" then
+					pullUpNotice()
+					if not liftToHover() then
+						return
+					end
+					continue
+				end
+			end
+			for _, g in skiff.glow do
+				g.Transparency = 0.4
+			end
+
+			-- boarding window (resumes with the time that was left when the Skiff last pulled up)
+			timesLanded += 1
+			windowEnd = workspace:GetServerTimeNow() + boardLeft
+			state = { phase = "landed", eta = eta, windowEnd = windowEnd }
+			pushExtract(eta, windowEnd, { label = "BOARDING" })
+			skiff.setRamp(true)
+			zonePlate.Transparency = 0.6
+			pulse:Play()
+			sound("Klaxon", P)
+			if timesLanded == 1 then
+				notify(string.format("The %s has landed! Board now - %d s!", Config.ShuttleName, Config.ExtractWindow), Config.Colors.Friendly)
+			else
+				notify(string.format("The %s is back down! Boarding resumes - %d s!", Config.ShuttleName, math.floor(boardLeft + 0.5)), Config.Colors.Friendly)
+			end
+			if S and S.Fx then
+				S.Fx.play("Shake", { p = P, mag = 0.6, r = 150 })
+			end
+
+			local lifted = false
+			local hotFor = 0
+			while live() do
+				task.wait(0.25)
+				local now = workspace:GetServerTimeNow()
+				local alive = alivePlayers()
+				for _, pl in alive do
+					if not boarded[pl] then
+						local r = getRoot(pl)
+						if r and inZone(r.Position) then
+							dwell[pl] = (dwell[pl] or 0) + 0.25
+							if dwell[pl] >= 1 then
+								boarded[pl] = true
+								boardedList[#boardedList + 1] = pl
+								boardedPlayers = boardedList
+								local seat = seats[math.min(#boardedList, #seats)]
+								local seatCF = skiff.root.CFrame * CFrame.new(seat[1] * (skiff.seatScale or 1), -1.4, seat[2])
+								local ch = pl.Character
+								if ch then
+									ch:SetAttribute("Boarded", true)
+									-- aboard = safe: Humanoid:TakeDamage is ignored while a ForceField exists (the server keeps the
+									-- hull on the pad during the client-animated takeoff, so enemies could still reach them)
+									local ff = Instance.new("ForceField")
+									ff.Name = "BoardedShield"
+									ff.Visible = false
+									ff.Parent = ch
+									welds[#welds + 1] = ff
+									local hum = ch:FindFirstChildOfClass("Humanoid")
+									if hum then
+										hum.PlatformStand = true
+									end
+									r.AssemblyLinearVelocity = Vector3.zero
+									r.CFrame = seatCF
+									local w = Instance.new("WeldConstraint")
+									w.Part0 = r
+									w.Part1 = skiff.floor
+									w.Parent = r
+									welds[#welds + 1] = w
 								end
-								r.AssemblyLinearVelocity = Vector3.zero
-								r.CFrame = seatCF
-								local w = Instance.new("WeldConstraint")
-								w.Part0 = r
-								w.Part1 = skiff.floor
-								w.Parent = r
-								welds[#welds + 1] = w
+								if S and S.State then
+									S.State.notify(pl, "Boarded the " .. Config.ShuttleName .. "!", Config.Colors.Friendly)
+								end
 							end
-							if S and S.State then
-								S.State.notify(pl, "Boarded the " .. Config.ShuttleName .. "!", Config.Colors.Friendly)
-							end
+						else
+							dwell[pl] = nil
 						end
-					else
-						dwell[pl] = nil
 					end
 				end
-			end
-			-- everyone alive is aboard -> leave shortly
-			local aliveCount, aboard = 0, 0
-			for _, pl in alive do
-				aliveCount += 1
-				if boarded[pl] then
-					aboard += 1
+				-- everyone alive is aboard -> leave shortly
+				local aliveCount, aboard = 0, 0
+				for _, pl in alive do
+					aliveCount += 1
+					if boarded[pl] then
+						aboard += 1
+					end
+				end
+				if aliveCount > 0 and aboard == aliveCount and not earlyLeave then
+					earlyLeave = now + 2.5
+					if earlyLeave < windowEnd then
+						windowEnd = earlyLeave
+						pushExtract(eta, windowEnd, { label = "LIFTING OFF" })
+						notify("Everyone aboard - lifting off!", Config.Colors.Friendly)
+					end
+				end
+				if os.clock() >= nextWave2 and now < windowEnd - 4 and not directorHold then
+					nextWave2 = os.clock() + 8
+					wave(P, 6)
+				end
+				-- hot pad: enemies back inside -> pull up, the boarding timer pauses (not once everyone is aboard)
+				if mode ~= "old" and not earlyLeave and not forced() and now < windowEnd then
+					if #hostilesNear(P, SK.clearRadius) > 0 then
+						hotFor += 0.25
+					else
+						hotFor = 0
+					end
+					if hotFor >= SK.hotHold then
+						boardLeft = math.max(windowEnd - now, 1)
+						lifted = true
+						break
+					end
+				end
+				if now >= windowEnd then
+					break
 				end
 			end
-			if aliveCount > 0 and aboard == aliveCount and not earlyLeave then
-				earlyLeave = now + 2.5
-				if earlyLeave < windowEnd then
-					windowEnd = earlyLeave
-					pushExtract(eta, windowEnd)
-					notify("Everyone aboard - lifting off!", Config.Colors.Friendly)
-				end
+			if not live() then
+				return
 			end
-			if os.clock() >= nextWave2 and now < windowEnd - 4 and not directorHold then
-				nextWave2 = os.clock() + 8
-				wave(P, 6)
-			end
-			if now >= windowEnd then
+			if not lifted then
 				break
+			end
+			pulse:Cancel()
+			zonePlate.Transparency = 1
+			skiff.setRamp(false)
+			for _, g in skiff.glow do
+				g.Transparency = 0
+			end
+			table.clear(dwell)
+			pullUpNotice()
+			if not liftToHover() then
+				return
 			end
 		end
 		if not live() then
 			return
 		end
+		setHoverFx(false)
 
 		-- liftoff
 		state = { phase = "leaving", eta = eta }

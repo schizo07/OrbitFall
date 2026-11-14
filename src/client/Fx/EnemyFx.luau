@@ -835,6 +835,11 @@ local staged: { [Model]: StageEntry } = {}
 local platesLive = 0
 
 local function bodyOf(m: Model): BasePart?
+	-- mesh rigs (and most fallback builds) name the hull "Body"; by volume alone the Bulwark's front Shield plate could win
+	local named = m:FindFirstChild("Body") or m:FindFirstChild("Hull")
+	if named and named:IsA("BasePart") and named.Transparency < 0.9 then
+		return named
+	end
 	local best: BasePart? = nil
 	local bestV = 0
 	for _, d in m:GetChildren() do
@@ -1360,6 +1365,15 @@ local function startStaged()
 				pcall(buildStage, s)
 			end
 		end)
+		-- A/B "ENEMY AIM": the server reads Feel_EnemyAim (server/Enemies/EnemyAI.luau); Variants sets it on the client only
+		local Net = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Net"))
+		local function mirrorAim()
+			Net.event("Action"):FireServer("studioFeel", "Feel_EnemyAim", workspace:GetAttribute("Feel_EnemyAim"))
+		end
+		workspace:GetAttributeChangedSignal("Feel_EnemyAim"):Connect(mirrorAim)
+		if workspace:GetAttribute("Feel_EnemyAim") ~= nil then
+			mirrorAim()
+		end
 	end
 	task.spawn(function()
 		while true do

@@ -22,6 +22,10 @@ local Config = require(Shared.Config)
 
 local EnemyModels = require(script.Parent.EnemyModels)
 local LumenAI = require(script.Parent.LumenAI) -- LUMEN hook: Lumen Concord attack kinds + blink / nodes
+local EnemyData = require(Shared.Data.Enemies)
+local AIM = EnemyData.Aim
+local AimDefault = EnemyData.AimDefault
+local IS_STUDIO = game:GetService("RunService"):IsStudio()
 
 local EnemyAI = {}
 
@@ -330,19 +334,88 @@ function EnemyAI.fling(e: any, from: Vector3, power: number, r: any)
 	e.air = 0
 end
 
+-- Outside push (call-in hook, e.g. Gravity Well). velocity in studs/s for `dur` seconds, added on top of the enemy's own
+-- movement; heavier classes resist (PUSH_MASS), static emplacements never move. A new call replaces the previous push, so a
+-- pull that is refreshed every tick just keeps going.
+local PUSH_MASS = { regular = 1, medium = 0.7, heavy = 0.3, behemoth = 0.08 }
+function EnemyAI.push(e: any, velocity: Vector3, dur: number)
+	if not e.alive or e.def.static or not e.pos or dur <= 0 then
+		return
+	end
+	local k = PUSH_MASS[e.class] or 1
+	if k <= 0 then
+		return
+	end
+	e.push = { v = Vector3.new(velocity.X, 0, velocity.Z) * k, untilT = workspace:GetServerTimeNow() + dur }
+end
+
 -- Attack execution -------------------------------------------------------------------
 local PREP: { [string]: (any, any, any, number) -> () } = {}
 local FIRE: { [string]: (any, any, any, number) -> () } = {}
 local ACTIVE: { [string]: (any, any, any, number, number) -> boolean } = {}
 
-local function shootBolt(e: any, atk: any, t: Target, spread: number)
+-- ENEMY AIM: Studio A/B workspace attribute Feel_EnemyAim ("new" default | "harsh" | "old"), mirrored to the server by
+-- client/Fx/EnemyFx.luau (Action "studioFeel"). Live games always use "new".
+local function aimMode(): string
+	if not IS_STUDIO then
+		return "new"
+	end
+	local v = workspace:GetAttribute("Feel_EnemyAim")
+	return if v == "harsh" or v == "old" then v else "new"
+end
+
+-- -> (spread degrees, warning shot?). e.aimT0 / e.aimShots are reset in think() on a new target or after cover.
+local function aimSpread(e: any, t: Target, from: Vector3, oldSpread: number, now: number): (number, boolean)
+	local mode = aimMode()
+	if mode == "old" then
+		return oldSpread, false
+	end
+	local aim = e.def.aim or AimDefault
+	local harsh = mode == "harsh"
+	e.aimShots = (e.aimShots or 0) + 1
+	local warn = aim.warnShots - (if harsh then 1 else 0)
+	if e.aimShots <= warn then
+		return 0, true
+	end
+	local tighten = aim.tighten * (if harsh then AIM.harshTighten else 1)
+	local k = math.clamp((now - (e.aimT0 or now)) / math.max(tighten, 0.05), 0, 1)
+	local spread = aim.base + (aim.min - aim.base) * k
+	local dist = (t.pos - from).Magnitude
+	spread *= 1 + aim.rangeMul * math.clamp((dist - AIM.rangeFrom) / AIM.rangeRef, 0, 2)
+	local speed = flat(t.vel).Magnitude
+	spread *= 1 + aim.moveMul * math.clamp(speed / Config.WalkSpeed, 0, 1)
+	if speed >= AIM.sprintAt then
+		spread *= 1 + aim.moveMul * AIM.sprintBonus
+	end
+	local stance = if S.Players and S.Players.getStance then S.Players.getStance(t.p) else "stand"
+	if stance == "prone" then
+		spread *= AIM.prone
+	elseif stance == "crouch" then
+		spread *= AIM.crouch
+	end
+	if harsh then
+		spread *= AIM.harshSpread
+	end
+	return spread, false
+end
+
+local function shootBolt(e: any, atk: any, t: Target, oldSpread: number)
 	local from = muzzleWorld(e)
 	local speed = atk.speed or 100
 	local pt = aimPoint(from, t, speed, 0.65)
+	local spread, warn = aimSpread(e, t, from, oldSpread, workspace:GetServerTimeNow())
+	if warn then
+		-- near miss: aim beside the target (random side, a little high), and this bolt can never hit that player
+		local side = flat(pt - from)
+		side = if side.Magnitude > 0.05 then Vector3.yAxis:Cross(side.Unit) else Vector3.xAxis
+		local sign = if rng:NextNumber() < 0.5 then 1 else -1
+		pt += side * sign * rng:NextNumber(AIM.warnOffset[1], AIM.warnOffset[2]) + Vector3.new(0, rng:NextNumber(0, 1.6), 0)
+	end
 	local dir = (pt - from).Unit
 	S.Projectiles.fire({
 		a = from,
 		v = spreadDir(dir, spread) * speed,
+		spare = if warn then t.p else nil,
 		style = "bolt",
 		c = ROBOT_BOLT,
 		damage = atk.damage,
@@ -835,6 +908,7 @@ LumenAI.install({
 	targets = targets, targetEntry = targetEntry, muzzleWorld = muzzleWorld, aimPoint = aimPoint,
 	spreadDir = spreadDir, heading = heading, envParams = envParams, groundAt = groundAt, clampMap = clampMap,
 	telegraphLine = telegraphLine, telegraphCircle = telegraphCircle, damagePlayer = damagePlayer, liveCap = liveCap,
+	aimSpread = aimSpread, -- ENEMY AIM for needle volleys
 })
 
 local function startAttack(e: any, idx: number, atk: any, now: number)
@@ -1149,6 +1223,18 @@ local function think(e: any, now: number)
 		e.faceDirOverride = nil
 		return
 	end
+	-- frozen (call-in hook): model attribute FrozenUntil = a workspace:GetServerTimeNow() time; no moving, turning or attacking
+	local fz = e.model:GetAttribute("FrozenUntil")
+	e.frozenUntil = if type(fz) == "number" then fz else nil
+	if e.frozenUntil and e.frozenUntil > now then
+		local fa = e.act
+		if fa and fa.kind ~= "fling" then
+			EnemyAI.interrupt(e)
+		end
+		setWish(e, nil, 0)
+		e.faceDirOverride = nil
+		return
+	end
 
 	local act = e.act
 	if act and act.noThink then
@@ -1162,6 +1248,7 @@ local function think(e: any, now: number)
 	local confused = e.status.confuse ~= nil
 	if confused or inSmoke(e.pos) then
 		e.target = nil
+		e.aimAt = nil
 		e.seenT = 0
 		if e.act and (e.act.phase == "windup") then
 			e.act = nil
@@ -1190,6 +1277,7 @@ local function think(e: any, now: number)
 
 	if not t then
 		e.seenT = 0
+		e.aimAt = nil -- next sighting starts the aim over (EnemyData.Aim)
 		e.faceDir = nil
 		e.slot = nil
 		e.circling = nil
@@ -1271,6 +1359,23 @@ local function think(e: any, now: number)
 		e.los = (r == nil)
 	else
 		e.los = true
+	end
+
+	-- aim state for shootBolt: a new target starts wide with fresh warning shots; out of sight restarts the tighten clock,
+	-- and a long time out of sight (EnemyData.Aim.reacquire) re-arms the warning shots
+	if e.aimAt ~= t.p then
+		e.aimAt = t.p
+		e.aimT0 = now
+		e.aimShots = 0
+		e.aimHidden = nil
+	elseif not e.los then
+		e.aimHidden = e.aimHidden or now
+		e.aimT0 = now
+	elseif e.aimHidden then
+		if now - e.aimHidden >= AIM.reacquire then
+			e.aimShots = 0
+		end
+		e.aimHidden = nil
 	end
 
 	-- movement decision ---------------------------------------------------------------
@@ -1384,14 +1489,25 @@ local function update(e: any, dt: number, now: number)
 		LumenAI.update(e, dt, now) -- LUMEN hook: Warden blink, Spire nodes, shield drop on stun
 	end
 
-	local overridden = runAct(e, dt, now)
+	local frozen = e.frozenUntil ~= nil and e.frozenUntil > now
+	local overridden = if frozen and not (e.act and e.act.kind == "fling") then false else runAct(e, dt, now)
 	if not e.alive then
 		return
 	end
 
-	local stunned = statusActive(e, "stun", now)
+	local stunned = statusActive(e, "stun", now) or frozen
 	local a = e.act
 	local noMove = stunned or (a ~= nil and a.noMove == true)
+
+	-- outside push (EnemyAI.push, e.g. a Gravity Well pull): added on top of the enemy's own movement
+	local push = e.push
+	if push then
+		if push.untilT <= now then
+			e.push = nil
+		elseif not (a and a.kind == "fling") then
+			e.pos = clampMap(e.pos + push.v * dt) -- snapGround follows it like normal walking
+		end
+	end
 
 	if not overridden then
 		local target = Vector3.zero

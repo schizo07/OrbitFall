@@ -1,5 +1,7 @@
 -- Tactical movement (client, predicted; server/MovementService.luau is authoritative for stamina + stance).
 --  * Stamina: sprint drains (Config.Move.SprintTime), refills after RegenDelay; at 0 you jog-limp until RecoverAt.
+--    Stim sprint: after a stim the stamina stays full for Config.Stims.Sprint s (`me.sprintBoostEnd`, server time;
+--    Studio A/B Feel_StimSprint, mirrored to the server). The stamina bar getter's 4th value is `boosted`.
 --  * Stances: Crouch tap = crouch/stand, hold = prone; Prone key toggles prone; Jump stands you up.
 --  * Dive: Crouch/Prone while sprinting -> forward dive, land prone, short recovery. Costs stamina, 1 s cooldown.
 --  * Mantle: Jump into a 2.5-6 stud ledge -> smooth climb onto it.
@@ -21,6 +23,7 @@ local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 local Input = require(script.Parent.Input)
 local Store = require(script.Parent.Store)
+local BodyDebug = require(script.Parent.BodyDebug) -- Studio readout (DebugKeys N); mark() is a no-op while it is off
 
 local M = Config.Move
 local Movement = {}
@@ -105,6 +108,9 @@ local jumpEnabled = true
 local jumpLock = false -- Jump was used to stand up / mantle: no real jump until it is released
 local publishedStamina = -1
 local publishedExhausted = false
+-- stim sprint: server time until which stamina stays full (server MovementService.boost, sent in `me` as sprintBoostEnd)
+local boostEnd = 0
+local boosted = false
 
 -- prone / dive body facing: the legs (root) keep their heading, the upper body twists toward the camera
 local twistOn = false -- the body is currently in "legs fixed, torso follows the camera" mode (also while easing out)
@@ -711,7 +717,14 @@ local function step(dt: number)
 		and not firing
 		and not exhausted
 		and not carrying
-	if sprintApplied then
+	boosted = boostEnd > 0 and workspace:GetServerTimeNow() < boostEnd
+	if boosted then
+		-- stim sprint: stamina pinned full, sprint never runs out (the server does the same)
+		stamina, exhausted = 1, false
+		if sprintApplied then
+			lastDrain = t
+		end
+	elseif sprintApplied then
 		stamina = math.max(0, stamina - dt / M.SprintTime)
 		lastDrain = t
 		if stamina <= 0 then
@@ -878,6 +891,9 @@ local function setJ(rig: Rig, name: string, angle: number)
 	local j = rig.joints[name]
 	if j then
 		setC0(j.m, j.base * CFrame.Angles(angle, 0, 0))
+		if BodyDebug.on then
+			BodyDebug.mark(j.m, "C0", "Pose")
+		end
 	end
 end
 
@@ -926,6 +942,9 @@ local function poseStep(dt: number)
 			r.active = true
 		end
 		setC0(r.root.m, CFrame.new(0, r.d, 0) * CFrame.Angles(-r.p, 0, 0) * r.root.base)
+		if BodyDebug.on then
+			BodyDebug.mark(r.root.m, "C0", "Pose")
+		end
 		-- legs: thigh forward / shin back relative to the tilted pelvis, feet flat
 		local hip = (CROUCH_A + r.p) * r.b
 		local knee = (CROUCH_B - CROUCH_A) * r.b
@@ -964,8 +983,71 @@ end
 -- While lying prone the walk animation's torso lean / bob on Root and Waist is cancelled (those joints' Transform is
 -- replaced): the Animator leans the chest ~12 degrees into the floor while crawling, the collision then lifted the
 -- root ~0.6 studs on every stride.
-type Twist = { waist: any, root: any, shown: number, mine: CFrame?, base: CFrame? }
+-- Lying pose = ONE owner for Root, Waist and all six leg joints: this handler. Before, nothing replaced the leg
+-- Transforms while prone, so the legs showed whatever the Animate script was playing on a lying body: walk / idle
+-- swapping at the walk-speed threshold, and the fall pose blending in and out whenever the Humanoid flipped between
+-- Running and Freefall at the low prone hover height (each swap is a 0.1-0.2 s cross-fade of the whole leg pose), while
+-- the Root lean was zeroed instantly. Now every joint is blended by one weight `lie` (0..1, eased) from the Animator's
+-- value to the lying pose, so entering / leaving prone is smooth and, once down, no Animator track reaches the legs.
+-- Studio A/B: Feel_ProneLegs = "kick" (default: small crawl flutter from the crawl speed) | "still" | "anim" (old:
+-- the Animator keeps the legs).
+type Own = { j: any, mine: CFrame?, raw: CFrame? }
+type Twist = { waist: any, root: any, shown: number, lie: number, ph: number, kick: number, legs: { [string]: Own }?, ownW: Own, ownR: Own }
 local twists: { [Model]: Twist } = {}
+local LIE_RATE = 12 -- 1/s: lying-pose blend in / out
+local LEG_JOINTS = {
+	LeftHip = "LeftUpperLeg",
+	RightHip = "RightUpperLeg",
+	LeftKnee = "LeftLowerLeg",
+	RightKnee = "RightLowerLeg",
+	LeftAnkle = "LeftFoot",
+	RightAnkle = "RightFoot",
+}
+
+-- this frame's Animator value of a joint (our own write from last frame, if still there, does not count as theirs)
+local function ownRead(o: Own): CFrame
+	local cur = o.j.Transform
+	if o.mine ~= nil and cur == o.mine then
+		return o.raw :: CFrame
+	end
+	return cur
+end
+local function ownWrite(o: Own, raw: CFrame, v: CFrame, who: string)
+	o.j.Transform = v
+	o.mine, o.raw = o.j.Transform, raw
+	if BodyDebug.on then
+		BodyDebug.mark(o.j, "T", who)
+	end
+end
+-- stop owning: hand the Animator's value back if nobody else wrote the joint since
+local function ownDrop(o: Own)
+	if o.mine ~= nil and o.j.Transform == o.mine then
+		o.j.Transform = o.raw :: CFrame
+	end
+	o.mine, o.raw = nil, nil
+end
+
+local function proneLegsMode(): string
+	local v = workspace:GetAttribute("Feel_ProneLegs")
+	return if v == "still" or v == "anim" then v else "kick"
+end
+
+-- lying leg pose (Transform, joint space; X = bend forward / back, Z = sideways) at crawl phase `ph`, strength `k` 0..1
+local function lyingLeg(name: string, ph: number, k: number): CFrame
+	if k <= 0 then
+		return CFrame.identity
+	end
+	local left = string.sub(name, 1, 4) == "Left"
+	local s = math.sin(ph + (if left then 0 else math.pi))
+	if string.find(name, "Hip", 1, true) then
+		-- thigh swings out sideways and back (frog crawl); the pulling leg is the one swung out
+		local out = math.max(0, s) * 0.32 * k
+		return CFrame.Angles(-0.06 * k, 0, if left then -out else out)
+	elseif string.find(name, "Knee", 1, true) then
+		return CFrame.Angles(-(0.15 + 0.55 * math.max(0, s)) * k, 0, 0) -- shin lifts off the floor behind
+	end
+	return CFrame.Angles(-0.25 * k, 0, 0) -- toes pointed back
+end
 
 local function c0Of(j: any): CFrame
 	if j:IsA("AnimationConstraint") then
@@ -991,7 +1073,7 @@ local function twistStep(dt: number)
 		local hum = c:FindFirstChildOfClass("Humanoid")
 		local target = 0
 		local lying = false
-		if hum and hum.Health > 0 and proneTwistOn() then
+		if hum and hum.Health > 0 then
 			if isLocal then
 				target = if twistOn then twistRaw * twistGain else 0
 				lying = stance == "prone" and (mode == "none" or mode == "recover")
@@ -1002,6 +1084,9 @@ local function twistStep(dt: number)
 					target = a
 				end
 				lying = st == "prone"
+			end
+			if not proneTwistOn() then
+				target = 0
 			end
 		end
 		local tw = twists[c]
@@ -1018,40 +1103,86 @@ local function twistStep(dt: number)
 			if not waist or not rootJ then
 				continue
 			end
-			tw = { waist = waist, root = rootJ, shown = 0 }
+			tw = { waist = waist, root = rootJ, shown = 0, lie = 0, ph = 0, kick = 0, ownW = { j = waist }, ownR = { j = rootJ } }
 			twists[c] = tw
 		end
 		local t = tw :: Twist
 		t.shown = if isLocal then target else t.shown + (target - t.shown) * (1 - math.exp(-dt * 12))
-		local w = t.waist
-		local cur = w.Transform
-		-- what the Animator (or CombatPose) last wrote; our own twisted value from last frame is not "theirs"
-		local base = if lying then CFrame.identity elseif t.mine ~= nil and cur == t.mine then (t.base :: CFrame) else cur
-		if lying then
-			t.root.Transform = CFrame.identity -- no walk-cycle lean on the pelvis while lying
+		-- lying-pose weight: eased, snapped at the ends so a settled body is exactly the lying pose / exactly the Animator's
+		t.lie += ((if lying then 1 else 0) - t.lie) * (1 - math.exp(-dt * LIE_RATE))
+		if t.lie > 0.995 then
+			t.lie = 1
+		elseif t.lie < 0.005 then
+			t.lie = 0
 		end
-		if math.abs(t.shown) < 0.002 then
-			if lying then
-				w.Transform = CFrame.identity
-			elseif t.mine ~= nil and cur == t.mine then
-				w.Transform = base
+		local lie = t.lie
+		local hrp = c:FindFirstChild("HumanoidRootPart") :: BasePart?
+
+		-- pelvis: no walk-cycle lean while lying
+		if lie > 0 then
+			local rawR = ownRead(t.ownR)
+			ownWrite(t.ownR, rawR, if lie >= 1 then CFrame.identity else rawR:Lerp(CFrame.identity, lie), "Lie")
+		else
+			ownDrop(t.ownR)
+		end
+
+		-- legs: lying pose (optional crawl flutter), blended by `lie`
+		local legMode = proneLegsMode()
+		if lie > 0 and legMode ~= "anim" then
+			if not t.legs then
+				local legs = {}
+				for name, part in LEG_JOINTS do
+					local m = findMotor(c, part, name)
+					if m then
+						legs[name] = { j = m }
+					end
+				end
+				t.legs = legs
 			end
-			t.mine, t.base = nil, nil
-			if math.abs(target) < 0.002 and not lying then
+			local spd = 0
+			if hrp and legMode == "kick" then
+				local v = hrp.AssemblyLinearVelocity
+				spd = Vector3.new(v.X, 0, v.Z).Magnitude
+			end
+			local kickT = if lying then math.clamp(spd / math.max(M.ProneSpeed, 0.1), 0, 1) else 0
+			t.kick += (kickT - t.kick) * (1 - math.exp(-dt * 6))
+			t.ph = (t.ph + dt * spd * 1.6) % (math.pi * 2)
+			for name, o in t.legs :: { [string]: Own } do
+				if not o.j.Parent then
+					continue
+				end
+				local rawL = ownRead(o)
+				local want = lyingLeg(name, t.ph, t.kick)
+				ownWrite(o, rawL, if lie >= 1 then want else rawL:Lerp(want, lie), "Lie")
+			end
+		elseif t.legs then
+			for _, o in t.legs :: { [string]: Own } do
+				ownDrop(o)
+			end
+			t.legs = nil
+		end
+
+		-- waist: the Animator's value (identity while lying), twisted toward the camera
+		local raw = ownRead(t.ownW)
+		local base = if lie <= 0 then raw elseif lie >= 1 then CFrame.identity else raw:Lerp(CFrame.identity, lie)
+		if math.abs(t.shown) < 0.002 then
+			if lie > 0 then
+				ownWrite(t.ownW, raw, base, "Lie")
+			else
+				ownDrop(t.ownW)
+			end
+			if math.abs(target) < 0.002 and not lying and lie <= 0 then
 				twists[c] = nil
 			end
 			continue
 		end
-		local hrp = c:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if not hrp then
 			continue
 		end
 		local rj = t.root
 		local lower = hrp.CFrame * c0Of(rj) * rj.Transform * rj.C1:Inverse()
-		local jr = (lower * c0Of(w)).Rotation
-		local newT = (jr:Inverse() * CFrame.Angles(0, t.shown, 0) * jr) * base
-		w.Transform = newT
-		t.mine, t.base = w.Transform, base
+		local jr = (lower * c0Of(t.waist)).Rotation
+		ownWrite(t.ownW, raw, (jr:Inverse() * CFrame.Angles(0, t.shown, 0) * jr) * base, "Twist")
 	end
 	for c, _ in twists do
 		if not c.Parent then
@@ -1148,6 +1279,7 @@ local function resetLocal()
 	jumpLock = false
 	sprintApplied = false
 	stamina, exhausted = 1, false
+	boostEnd, boosted = 0, false
 	minVy, landDip, landVel = 0, 0, 0
 	focusY = nil
 	sentStance = ""
@@ -1176,6 +1308,9 @@ function Movement.init()
 		if type(me) ~= "table" or type(me.stamina) ~= "number" then
 			return
 		end
+		if type(me.sprintBoostEnd) == "number" then
+			boostEnd = me.sprintBoostEnd
+		end
 		if math.abs(me.stamina - stamina) > 0.2 then
 			stamina = me.stamina
 		end
@@ -1192,6 +1327,16 @@ function Movement.init()
 		end)
 	else
 		warn("[Movement] Fx unavailable; knockdowns disabled")
+	end
+	-- Studio: the server reads Feel_StimSprint (Variants group STIM SPRINT); mirror it like VitalsFx mirrors Feel_Regen
+	if IS_STUDIO then
+		local function mirror()
+			send("studioFeel", "Feel_StimSprint", workspace:GetAttribute("Feel_StimSprint"))
+		end
+		workspace:GetAttributeChangedSignal("Feel_StimSprint"):Connect(mirror)
+		if workspace:GetAttribute("Feel_StimSprint") ~= nil then
+			mirror()
+		end
 	end
 	player.CharacterAdded:Connect(resetLocal)
 	RunService.PreSimulation:Connect(step)
@@ -1221,7 +1366,7 @@ function Movement.init()
 		local okBar, Bar = pcall(require, barMod)
 		if okBar and type(Bar) == "table" and Bar.init then
 			Bar.init(function()
-				return stamina, exhausted, sprintApplied
+				return stamina, exhausted, sprintApplied, boosted
 			end)
 		end
 	end

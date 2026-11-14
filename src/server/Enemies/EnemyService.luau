@@ -13,6 +13,10 @@
 --   spawn opts: { dest: Vector3?, home: Vector3?, patrol: boolean?, aggro: boolean?, target: Player?, hpScale: number?, group: any? }
 --   explode opts.status entries: number (duration) | { d: number, m: number?, noBehemoth: boolean? }
 --   hit() returns result = "none" when the part no longer belongs to a live enemy.
+--   S.Enemies.push(e, velocity, dur)  outside push (Gravity Well pull); regular x1, medium x0.7, heavy x0.3, behemoth x0.08,
+--                                     static never moves. A new call replaces the last one.
+--   Model attribute FrozenUntil (number, workspace:GetServerTimeNow() time, set by call-ins): while in the future the enemy
+--   does not move, turn or attack (EnemyAI.think / update).
 
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -100,7 +104,7 @@ function EnemyService.spawn(kindId: string, cf: CFrame, opts: any?)
 	if def.fodder then
 		model:SetAttribute("Fodder", true)
 	end
-	local zones: { [string]: { hp: number? } } = {}
+	local zones: { [string]: { hp: number?, max: number? } } = {}
 	for name, z in def.zones do
 		zones[name] = { hp = z.fatal }
 	end
@@ -110,6 +114,7 @@ function EnemyService.spawn(kindId: string, cf: CFrame, opts: any?)
 	for _, z in zones do
 		if z.hp then
 			z.hp *= scale
+			z.max = z.hp
 		end
 	end
 
@@ -317,9 +322,15 @@ local function inflict(e: any, amount: number, source: any?, zoneName: string?, 
 		if fx and fx.hitPos then
 			e.lastHitPos = fx.hitPos
 		end
-		-- staged damage: smoke / breach / fire thresholds (client/Fx/EnemyFx.luau)
+		-- staged damage: smoke / breach / fire thresholds (client/Fx/EnemyFx.luau). Health = the lower of overall HP and any
+		-- fatal zone's HP (Bulwark eye: 200 of 900, so eye kills used to land at ~78 % HP, before the first stage at 70 %)
 		if e.def.stages and e.maxHp > 0 then
 			local frac = e.hp / e.maxHp
+			for _, zs in e.zones do
+				if zs.hp and zs.max and zs.max > 0 then
+					frac = math.min(frac, zs.hp / zs.max)
+				end
+			end
 			local st = 0
 			for i, th in STAGES do
 				if frac < th then
@@ -419,6 +430,13 @@ function EnemyService.damage(e: any, dmg: number, ap: number, source: any?, zone
 end
 
 -- Statuses ---------------------------------------------------------------------------
+-- Outside push for call-ins (Gravity Well pull): velocity studs/s for dur s, scaled down for heavier classes (EnemyAI.push).
+function EnemyService.push(e: any, velocity: Vector3, dur: number)
+	if e and e.alive then
+		EnemyAI.push(e, velocity, dur)
+	end
+end
+
 function EnemyService.applyStatus(e: any, name: string, duration: number, magnitude: number?, source: any?)
 	if not e or not e.alive then
 		return

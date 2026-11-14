@@ -1,4 +1,4 @@
--- Left-edge squad cards (y 58 % .. 78 % of the screen): one compact flat card per OTHER squad member.
+-- Left-edge squad cards, stacked upward from just above the own card: one compact flat card per OTHER squad member.
 --   card = callsign tag, primary weapon name (falls back to the display name), call-in icons, 3 px health bar.
 --   dead = grey tag, red "REINFORCE AVAILABLE" (or the cooldown / "NO REINFORCEMENTS" / respawn countdown).
 -- Data: Store "squad" entries { userId, name, hp, maxHp, alive } (PlayerService.squadState). Optional, shown as soon as the
@@ -229,12 +229,21 @@ local function relayout()
 	ui.holder.Visible = want and n > 0
 end
 
+-- offset: content px from the bottom edge to the bottom of the stack
+function SquadCards.setBottom(offset: number)
+	if ui.holder then
+		ui.holder.Position = UDim2.new(0, Style.MARGIN, 1, -math.floor(offset))
+	end
+end
+
 function SquadCards.build(parent: Instance, isTouch: boolean)
 	touch = isTouch
 	local holder = Instance.new("Frame")
 	holder.Name = "SquadCards"
 	holder.BackgroundTransparency = 1
-	holder.Position = UDim2.new(0, Style.MARGIN, 0.58, 0)
+	-- bottom-anchored: grows upward from just above the own card (HUD calls setBottom once it knows the card height)
+	holder.AnchorPoint = Vector2.new(0, 1)
+	holder.Position = UDim2.new(0, Style.MARGIN, 1, -200)
 	holder.Size = UDim2.fromOffset(cardWidth(), 0)
 	holder.AutomaticSize = Enum.AutomaticSize.Y
 	holder.Visible = false

@@ -199,7 +199,7 @@ function MobileControls.init()
 	root.Name = "Root"
 	root.BackgroundTransparency = 1
 	root.BorderSizePixel = 0
-	scaleObj = Instance.new("UIScale")
+	scaleObj = Theme.layoutScale(Instance.new("UIScale"))
 	scaleObj.Parent = root
 	root.Parent = gui
 	refreshScale()

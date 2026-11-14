@@ -61,6 +61,8 @@ function StaminaBar.init(getter: () -> (number, boolean, boolean))
 	local lastV = 1
 	RunService.RenderStepped:Connect(function(dt)
 		local v, exhausted, sprinting = getter()
+		local boost = select(4, (getter :: any)()) == true -- stim sprint (Movement): keep the bar up, tinted stim green below
+		lastV = if boost then -1 else lastV
 		local me = Store.get("me")
 		local hidden = Store.get("menuOpen") == true or (type(me) == "table" and me.alive == false)
 		-- "changing": the value moved this frame, the player is sprinting below full, or exhausted
@@ -88,6 +90,7 @@ function StaminaBar.init(getter: () -> (number, boolean, boolean))
 			fill.BackgroundColor3 = Style.White
 		end
 		tick.Visible = exhausted
+		fill.BackgroundColor3 = if boost then Style.White:Lerp(Style.Green, 0.55 + 0.15 * math.sin(os.clock() * 6)) else fill.BackgroundColor3
 	end)
 end
 

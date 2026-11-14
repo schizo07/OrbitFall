@@ -10,13 +10,13 @@ local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
 local CallInData = require(Shared.Data.CallIns)
+local Throw = require(Shared.Throw)
 
 local CallIns = {}
 local S: any = nil
 
-local MAX_THROW_RANGE = 45
 local BEACON_TIMEOUT = 2.5
-local GRAVITY_SCALE = 0.35 -- beacons fly on a floaty arc (VectorForce cancels the rest)
+local GRAVITY_SCALE = Throw.BEACON_GRAVITY_SCALE
 local READY_COOLDOWN = 0.15
 local THROW_COOLDOWN = 0.25
 local HOLD_EXPIRE = 120
@@ -153,7 +153,18 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- Slots / cooldowns
 -- ---------------------------------------------------------------------------------------------
+local IS_STUDIO = RunService:IsStudio()
+
 local function newState(loadout: { string }): PState
+	-- Studio test hook: workspace attribute DebugCallIns = "GRAVWELL,CRYO,RAILSHOT,FIRESTORM" replaces every loadout
+	local dbg = IS_STUDIO and workspace:GetAttribute("DebugCallIns")
+	if type(dbg) == "string" and dbg ~= "" then
+		local ids = {}
+		for id in string.gmatch(dbg, "[%w_]+") do
+			table.insert(ids, string.upper(id))
+		end
+		loadout = ids
+	end
 	local slots: { Slot } = {}
 	local ids: { string } = {}
 	for i = 1, CallInData.SlotCount do
@@ -735,39 +746,20 @@ local function throwBeacon(player: Player, aim: any)
 	st.holding = nil
 	broadcastCard(player, st, holding.id, "throw")
 
-	-- Clamp the throw to MAX_THROW_RANGE around the player.
-	local rootPos = root.Position
-	local delta = aim - rootPos
-	if delta.Magnitude > MAX_THROW_RANGE then
-		delta = delta.Unit * MAX_THROW_RANGE
-	end
-	local target = rootPos + delta
-	local dirFlat = Vector3.new(delta.X, 0, delta.Z)
-	if dirFlat.Magnitude < 0.1 then
-		local look = root.CFrame.LookVector
-		dirFlat = Vector3.new(look.X, 0, look.Z)
-		if dirFlat.Magnitude < 0.1 then
-			dirFlat = Vector3.zAxis
-		end
-	end
-	dirFlat = dirFlat.Unit
-
-	-- Launch point: right hand, falling back to above the root.
+	-- Clamped to Throw.BEACON_MAX_RANGE, launched from the right hand on a reduced-gravity arc that reaches the target in
+	-- time T (shared/Throw: the client's throw arc predicts the same path).
 	local char = player.Character
 	local hand = char and (char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm"))
-	local origin = (hand and hand:IsA("BasePart")) and hand.Position or (rootPos + Vector3.new(0, 2, 0))
-	origin += dirFlat * 1.2
+	local handPos = if hand and hand:IsA("BasePart") then hand.Position else nil
+	local launch = Throw.beacon(root.Position, root.CFrame.LookVector, handPos, aim, workspace.Gravity)
+	local dirFlat = launch.dirFlat
+	local origin = launch.origin
+	local v0 = launch.velocity
 
 	local id = nextId()
 	local color = BEACON_COLORS[def.beacon] or Config.Colors.BeaconOffense
 	local part = makeBeaconPart(color, CFrame.new(origin))
 	part.Parent = getFolder()
-
-	-- Ballistic arc under reduced gravity so we hit `target` in time T.
-	local g = workspace.Gravity * GRAVITY_SCALE
-	local toTarget = target - origin
-	local T = math.clamp(toTarget.Magnitude / math.max(Config.BeaconThrowSpeed, 1), 0.2, 1.2)
-	local v0 = toTarget / T + Vector3.new(0, 0.5 * g * T, 0)
 
 	local att = Instance.new("Attachment")
 	att.Parent = part

@@ -6,6 +6,7 @@
 --   -  god mode toggle  =  Director auto pacing toggle   T force breach (starts the Director)
 --   Y  refill ammo + reset call-in cooldowns             B switch faction (what the Director spawns)
 --   H  hide / show this label
+--   N  body readout on / off (client/BodyDebug.luau; works outside the arena too)
 -- The label shows only while workspace attribute TestArena is true (set by server/World/TestArena.luau). The spawn / god / refill
 -- keys also work during a normal Studio mission (the server needs a built map); director / breach / faction are arena-only.
 local Players = game:GetService("Players")
@@ -51,6 +52,7 @@ local function helpText(): string
 		"Y Refill + call-in reset",
 		"B Faction: " .. (if type(fac) == "string" then fac else "COG"),
 		"U Bastion  I Bulwark  O Charger",
+		"N Body readout",
 	}, "\n")
 end
 
@@ -114,6 +116,10 @@ function DebugKeys.init()
 		if io.KeyCode == Enum.KeyCode.H then
 			hidden = not hidden
 			refresh()
+			return
+		end
+		if io.KeyCode == Enum.KeyCode.N then -- body readout (client/BodyDebug.luau): hip height, twist, leg joint writers
+			require(script.Parent.BodyDebug).toggle()
 			return
 		end
 		local op = KEYMAP[io.KeyCode]

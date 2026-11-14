@@ -477,7 +477,7 @@ function Style.content(root: Frame, touch: boolean): Frame
 	f.BackgroundTransparency = 1
 	f.BorderSizePixel = 0
 	f.Size = UDim2.fromScale(1 / k, 1 / k)
-	local us = Instance.new("UIScale")
+	local us = Theme.layoutScale(Instance.new("UIScale"))
 	us.Scale = k
 	us.Parent = f
 	f.Parent = root
@@ -486,25 +486,47 @@ end
 
 -- Extra size of the main readable boxes (uplink / area info column, own weapon card, timer block) on top of the viewport
 -- scale that Theme.root + Style.content already apply. Phones are boosted too because content is drawn at 0.8 x there, but
--- less than PC so the left column still ends above the FEED button (y 50 %).
+-- less than PC so the left column still ends above the FEED button (y 50 %). Phones use 1.0 with the new global scale
+-- (Theme.scaleFor + the text floor already make phone text readable); the "old" UI SCALE preset keeps 1.2.
 Style.BOOST_PC = 1.3
-Style.BOOST_TOUCH = 1.2
+Style.BOOST_TOUCH = 1.0
+Style.BOOST_TOUCH_OLD = 1.2
+
+-- Top-left column widths (content px, before the boost). Touch: main column (area info + objective) + uplink column.
+Style.LEFT_PC_W = 230
+Style.LEFT_TOUCH_W = 200
+Style.CALLIN_TOUCH_W = 112
+
+-- Right edge of the top-left column(s) in content px, boost included, plus a gap. Widgets that must stay clear of the
+-- column horizontally (call-in cards) start here.
+function Style.leftColumnRight(touch: boolean): number
+	local w = if touch then Style.LEFT_TOUCH_W + 8 + Style.CALLIN_TOUCH_W else Style.LEFT_PC_W
+	return Style.MARGIN + w * Style.boost(touch) + 16
+end
 
 function Style.boost(touch: boolean): number
-	return if touch then Style.BOOST_TOUCH else Style.BOOST_PC
+	if touch then
+		return if Theme.uiOld() then Style.BOOST_TOUCH_OLD else Style.BOOST_TOUCH
+	end
+	return Style.BOOST_PC
 end
 
 -- UIScale child on a (top-left / bottom-left / top-right anchored) frame: the frame grows by `Style.boost`, its position
--- offsets (screen margins) stay as they are. Returns the UIScale.
+-- offsets (screen margins) stay as they are. Follows the UI SCALE preset live. Returns the UIScale.
 function Style.applyBoost(frame: GuiObject, touch: boolean, extra: number?): UIScale
-	local us = Instance.new("UIScale")
+	local us = Theme.layoutScale(Instance.new("UIScale"))
 	us.Name = "Boost"
 	us.Scale = Style.boost(touch) * (extra or 1)
 	us.Parent = frame
+	Theme.onScaleChanged(function()
+		if us.Parent then
+			us.Scale = Style.boost(touch) * (extra or 1)
+		end
+	end)
 	return us
 end
 
--- Callsigns: squad members sorted by userId get A1, B2, C3 ... and a stable colour. The local player is always amber.
+-- Callsigns: squad members sorted by userId get S1, S2, S3 ... and a stable colour. The local player is always amber.
 local PALETTE = { Color3.fromHex("5FD4E6"), Color3.fromHex("57D163"), Color3.fromHex("F07A2B"), Color3.fromHex("D98AE6"), Color3.fromHex("E8E26A") }
 local callsigns: { [number]: { tag: string, color: Color3, index: number } } = {}
 local localId = 0
@@ -523,9 +545,8 @@ function Style.setSquad(squad: any, myUserId: number)
 	end
 	table.sort(ids)
 	for i, id in ids do
-		local letter = string.char(64 + ((i - 1) % 26) + 1)
 		callsigns[id] = {
-			tag = letter .. tostring(i),
+			tag = "S" .. tostring(i),
 			color = if id == myUserId then Style.Amber else PALETTE[(i - 1) % #PALETTE + 1],
 			index = i,
 		}
@@ -537,7 +558,7 @@ function Style.callsign(userId: number): { tag: string, color: Color3, index: nu
 	if c then
 		return c
 	end
-	return { tag = "A1", color = if userId == localId then Style.Amber else PALETTE[1], index = 1 }
+	return { tag = "S1", color =if userId == localId then Style.Amber else PALETTE[1], index = 1 }
 end
 
 -- Tween that tolerates dead instances

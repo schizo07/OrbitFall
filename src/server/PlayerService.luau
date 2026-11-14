@@ -1,6 +1,7 @@
 -- Player lifecycle: characters, health, loadout weapons/ammo, drop capsules, "me" state.
 -- Health: Config.PlayerHealth, passive regen per Config.Regen (Studio A/B Feel_Regen), stims (Config.Stims, Action "stim",
--- Fx "Stim" to everyone / "StimDenied" to the user; refilled on respawn and by refill() = supply crates).
+-- Fx "Stim" to everyone / "StimDenied" to the user; refilled on respawn and by refill() = supply crates; a stim also
+-- starts a stim sprint, Config.Stims.Sprint s of full stamina, MovementService.boost).
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
@@ -229,7 +230,20 @@ function PlayerService.refill(p: Player, opts: { grenades: number? }?)
 	PlayerService.publish(p)
 end
 
--- Stim: server-validated quick heal (Config.Stims). Returns false + reason ("dead" | "busy" | "empty" | "full").
+-- Stim sprint length: Config.Stims.Sprint, or the Studio A/B attribute Feel_StimSprint (seconds, 0 = off; mirrored from
+-- the client by the "studioFeel" action, sent by client/Movement.luau).
+local function stimSprintTime(): number
+	if IS_STUDIO then
+		local a = workspace:GetAttribute("Feel_StimSprint")
+		if type(a) == "number" then
+			return math.clamp(a, 0, 30)
+		end
+	end
+	return Config.Stims.Sprint or 0
+end
+
+-- Stim: server-validated quick heal (Config.Stims), plus a stim sprint (MovementService.boost).
+-- Returns false + reason ("dead" | "busy" | "empty" | "full").
 function PlayerService.useStim(p: Player): (boolean, string?)
 	local r = recs[p]
 	if not r or not PlayerService.isAlive(p) then
@@ -258,6 +272,7 @@ function PlayerService.useStim(p: Player): (boolean, string?)
 	r.stimEnd = r.stimStart + cfg.Duration
 	local root = PlayerService.getRoot(p)
 	S.Fx.play("Stim", { u = p.UserId, p = root and root.Position, t = cfg.Delay + cfg.Duration })
+	Movement.boost(p, stimSprintTime()) -- stim sprint: unlimited stamina for a few seconds
 	dirty[p] = true
 	return true
 end
@@ -298,13 +313,18 @@ function PlayerService.damage(p: Player, amount: number, fromPos: Vector3?, opts
 	dirty[p] = true
 end
 
+-- debug god mode (server/DevTools sets MaxHealth to 1e6): no shoves or knockdowns, so test screenshots keep their framing
+function PlayerService.isGod(p: Player): boolean
+	local hum = PlayerService.getHumanoid(p)
+	return hum ~= nil and hum.MaxHealth >= 1e6
+end
+
 function PlayerService.knock(p: Player, fromPos: Vector3, force: number)
 	local root = PlayerService.getRoot(p)
 	if not root then
 		return
 	end
-	local hum = PlayerService.getHumanoid(p)
-	if hum and hum.MaxHealth >= 1e6 then -- debug god mode: no shoves, so test screenshots keep their framing
+	if PlayerService.isGod(p) then
 		return
 	end
 	local d = root.Position - fromPos
@@ -356,11 +376,22 @@ function PlayerService.dropTo(p: Player, pos: Vector3, fallTime: number?)
 			root.Anchored = false
 		end
 		r.dropping = false
-		-- impact shockwave hurts enemies
-		if S.Enemies then
+		-- impact shockwave hurts enemies and knocks nearby squadmates (shared blast path: server/Explosions.luau)
+		if S.Explosions and S.Explosions.blast then
+			S.Explosions.blast(ground, {
+				radius = 7,
+				core = 3,
+				damage = 300,
+				ap = 3,
+				size = "M",
+				style = "spark",
+				knock = 70,
+				skipPlayer = p,
+			}, { player = p, kind = "explosion", id = "POD" })
+		elseif S.Enemies then
 			S.Enemies.explode(ground, 7, 3, 300, 3, { player = p, kind = "explosion", id = "POD" })
+			S.Fx.play("Explosion", { p = ground, r = 7, size = "M", style = "spark" })
 		end
-		S.Fx.play("Explosion", { p = ground, r = 7, size = "M", style = "spark" })
 		S.Fx.play("Shockwave", { p = ground, r = 14 })
 		S.Fx.play("Shake", { p = ground, mag = 1.2, r = 60 })
 		PlayerService.publish(p)
@@ -448,6 +479,7 @@ local function buildMe(p: Player)
 		stims = r.stims, -- HUD "STIM x3/3"
 		stimsMax = Config.Stims.Max,
 		stimEnd = r.stimEnd, -- server time the running stim heal ends (0 = none)
+		sprintBoostEnd = Movement.boostEnd(p), -- server time the stim sprint ends (client/Movement keeps stamina full until then)
 		reloadUntil = r.reloadUntil,
 		callins = ci,
 		reinforceReadyAt = ci and ci.reinforceReadyAt or 0,

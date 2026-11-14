@@ -1,7 +1,11 @@
--- Right-side objective checklist (y 16 % .. 36 % of the screen height). Dark panels, checkbox rows. The primary
--- (first main) objective shows a right-aligned cyan title, a 3 px cyan progress bar and a one-line instruction (the
--- active step). Checkbox rows follow for the remaining main steps and for side objectives.
+-- Objective block + checklist. PC: right side from y 16 %. Touch: inside the top-left column (HUD), under the area info,
+-- because the touch buttons own the right edge. The primary (first main) objective is the big block: cyan title,
+-- the active step in larger wrapping text with its "[k/n]" counter on the right, a 5 px progress bar, and an arrow +
+-- distance to its marker. Checkbox rows follow for the remaining main steps and for side objectives.
 -- render() returns the objectives / steps that turned done since the previous render so HUD can announce them.
+-- step(cam) runs per frame (HUD) for the distance / arrow.
+local Players = game:GetService("Players")
+
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
 
@@ -11,15 +15,29 @@ local ui: { [string]: any } = {}
 local touch = false
 local prevDone: { [string]: boolean }? = nil
 local MAX_ROWS = 8
+local MAX_ROWS_TOUCH = 2
+local target: Vector3? = nil
+local lastDist = -1
 
-function ObjectiveList.build(parent: Instance, isTouch: boolean)
+local TITLE_SIZE = 18
+local STEP_SIZE = 16
+local COUNTER_SIZE = 18
+local COUNTER_W = 62
+
+-- order: when given, the block is a child of a vertical list (touch left column) instead of a right-anchored holder
+function ObjectiveList.build(parent: Instance, isTouch: boolean, order: number?)
 	touch = isTouch
 	local holder = Instance.new("Frame")
 	holder.Name = "Objectives"
 	holder.BackgroundTransparency = 1
-	holder.AnchorPoint = Vector2.new(1, 0)
-	holder.Position = UDim2.new(1, -Style.MARGIN, 0.16, if isTouch then 0 else 0)
-	holder.Size = UDim2.fromOffset(if isTouch then 210 else 270, 0)
+	if order then
+		holder.LayoutOrder = order
+		holder.Size = UDim2.new(1, 0, 0, 0)
+	else
+		holder.AnchorPoint = Vector2.new(1, 0)
+		holder.Position = UDim2.new(1, -Style.MARGIN, 0.16, 0)
+		holder.Size = UDim2.fromOffset(if isTouch then 210 else 300, 0)
+	end
 	holder.AutomaticSize = Enum.AutomaticSize.Y
 	holder.Visible = false
 	holder.Parent = parent
@@ -106,6 +124,8 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 		return newlyDone, newlyStep, false
 	end
 	clear()
+	target = nil
+	ui.distRow, ui.dist, ui.arrow = nil, nil, nil
 	if type(objs) ~= "table" or #objs == 0 then
 		prevDone = nil
 		return newlyDone, newlyStep, false
@@ -147,14 +167,14 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 			LayoutOrder = nextOrder(),
 			Parent = ui.holder,
 		})
-		Theme.pad(p, 8, 6, 8, 7)
-		Theme.list(p, Enum.FillDirection.Vertical, 4)
+		Theme.pad(p, 10, 8, 10, 9)
+		Theme.list(p, Enum.FillDirection.Vertical, 5)
 		Style.label({
 			Text = (if primary.done then "DONE - " else "") .. (primary.title or "MISSION"),
-			TextSize = Style.TEXT,
+			TextSize = TITLE_SIZE,
 			Color = if primary.done then Style.Green else Style.Cyan,
-			XAlign = Enum.TextXAlignment.Right,
-			Size = UDim2.new(1, 0, 0, 16),
+			XAlign = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, 0, 0, 22),
 			LayoutOrder = 1,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			Parent = p,
@@ -176,37 +196,86 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 		if primary.done then
 			frac = 1
 		end
-		local bar = Style.bar({ Size = UDim2.new(1, 0, 0, 3), Color = Style.Cyan, LayoutOrder = 2, Parent = p })
-		bar.set(frac)
 		if act or primary.done then
 			local text = if primary.done then "OBJECTIVE COMPLETE" else act.text
-			-- a trailing "[k/n]" counter (haul: "Load cells into the cargo lifter [2/7]") gets its own right-aligned
-			-- label so truncation never eats it
+			-- a trailing "[k/n]" counter (haul: "Load cells into the cargo lifter [2/7]") gets its own big right-aligned
+			-- label; the step text wraps onto a second line instead of being cut
 			local body, counter = nil, nil
 			if not primary.done and type(text) == "string" then
 				body, counter = string.match(text, "^(.-)%s*(%[%d+/%d+%])$")
 			end
-			local line = Style.label({
+			local line = Instance.new("Frame")
+			line.Name = "Step"
+			line.BackgroundTransparency = 1
+			line.Size = UDim2.new(1, 0, 0, 0)
+			line.AutomaticSize = Enum.AutomaticSize.Y
+			line.LayoutOrder = 2
+			line.Parent = p
+			local stepLabel = Style.label({
 				Text = body or text,
+				TextSize = STEP_SIZE,
 				Color = if primary.done then Style.Green else Style.White,
 				XAlign = Enum.TextXAlignment.Left,
-				Size = UDim2.new(1, if counter then -54 else 0, 0, 16),
-				LayoutOrder = 3,
-				TextTruncate = Enum.TextTruncate.AtEnd,
-				Parent = p,
+				YAlign = Enum.TextYAlignment.Top,
+				Wrap = true,
+				Size = UDim2.new(1, if counter then -COUNTER_W else 0, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Parent = line,
 			})
+			stepLabel.Name = "StepText"
 			if counter then
-				Style.label({
-					Text = counter,
+				local cl = Style.label({
+					Text = string.sub(counter, 2, -2), -- "2/7"
+					TextSize = COUNTER_SIZE,
 					Color = Style.Cyan,
 					XAlign = Enum.TextXAlignment.Right,
-					AnchorPoint = Vector2.new(0, 0.5),
-					Position = UDim2.new(1, 0, 0.5, 0),
-					Size = UDim2.fromOffset(54, 16),
+					YAlign = Enum.TextYAlignment.Top,
+					AnchorPoint = Vector2.new(1, 0),
+					Position = UDim2.new(1, 0, 0, -1),
+					Size = UDim2.fromOffset(COUNTER_W, 22),
 					Parent = line,
 				})
+				cl.Name = "Counter"
 			end
 		end
+		local bar = Style.bar({ Size = UDim2.new(1, 0, 0, 5), Color = Style.Cyan, LayoutOrder = 3, Parent = p })
+		bar.set(frac)
+
+		-- arrow + distance to the objective marker (filled per frame by step)
+		local marker: Vector3? = nil
+		if not primary.done and typeof(primary.marker) == "Vector3" then
+			marker = primary.marker
+		end
+		target = marker
+		lastDist = -1
+		ui.distRow, ui.dist, ui.arrow = nil, nil, nil
+		if marker then
+			local row = Instance.new("Frame")
+			row.Name = "Distance"
+			row.BackgroundTransparency = 1
+			row.Size = UDim2.new(1, 0, 0, 22)
+			row.LayoutOrder = 4
+			row.Parent = p
+			local arrow = Style.glyph("up", {
+				Size = 14,
+				Color = Style.Cyan,
+				Box = UDim2.fromOffset(22, 22),
+				Parent = row,
+			})
+			arrow.AnchorPoint = Vector2.new(0, 0)
+			local dist = Style.label({
+				Text = "",
+				TextSize = COUNTER_SIZE,
+				Color = Style.Cyan,
+				Size = UDim2.new(1, -28, 1, 0),
+				Position = UDim2.fromOffset(28, 0),
+				Parent = row,
+			})
+			ui.distRow, ui.dist, ui.arrow = row, dist, arrow
+		end
+	else
+		target = nil
+		ui.distRow, ui.dist, ui.arrow = nil, nil, nil
 	end
 
 	-- checklist panel: remaining main steps + side objectives
@@ -238,7 +307,9 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 		end
 		addRow(text, o.done == true, true, Style.Green)
 	end
-	if #rows > MAX_ROWS then
+	-- touch: the block shares the left column with the uplink list and must end above the FEED button (y 50 %)
+	local maxRows = if touch then MAX_ROWS_TOUCH else MAX_ROWS
+	if #rows > maxRows then
 		-- keep unfinished rows first, then trim
 		table.sort(rows, function(a, b)
 			if a.done ~= b.done then
@@ -246,7 +317,7 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 			end
 			return false
 		end)
-		while #rows > MAX_ROWS do
+		while #rows > maxRows do
 			table.remove(rows)
 		end
 	end
@@ -265,6 +336,28 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 		end
 	end
 	return newlyDone, newlyStep, true
+end
+
+-- Per frame: distance + arrow towards the primary objective's marker, relative to the camera heading.
+function ObjectiveList.step(cam: Camera)
+	local tgt = target
+	local dist, arrow = ui.dist, ui.arrow
+	if not tgt or not dist or not arrow or not ui.holder or not ui.holder.Visible then
+		return
+	end
+	local char = Players.LocalPlayer.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local from = if root then root.Position else cam.CFrame.Position
+	local d = tgt - from
+	local m = math.floor(Vector3.new(d.X, 0, d.Z).Magnitude + 0.5)
+	if m ~= lastDist then
+		lastDist = m
+		dist.Text = string.format("%d M", m)
+	end
+	local look = cam.CFrame.LookVector
+	local camAng = math.deg(math.atan2(look.X, -look.Z))
+	local bearing = math.deg(math.atan2(d.X, -d.Z))
+	arrow.Rotation = (bearing - camAng + 180) % 360 - 180
 end
 
 -- Sample counter parsed from objective texts like "Collect the glowing samples (2/5)"

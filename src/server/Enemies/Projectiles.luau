@@ -13,6 +13,7 @@
 --     puddle: { r: number, dur: number, dps: number }?,
 --     shake: number?,                               -- camera-shake magnitude on impact
 --     owner: any?,
+--     spare: Player?,                               -- never hits this player (enemy warning shots, EnemyAI.shootBolt)
 --   }
 -- Projectiles.count(), Projectiles.clear()
 
@@ -97,16 +98,33 @@ local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, bloc
 	live[n] = nil
 
 	local radius = pr.radius or 0
+	-- cannon / mortar shells go through the shared blast (server/Explosions.luau): its effect and knockdown, no enemy
+	-- damage and no onBlast listeners; trooper damage stays here with the numbers below
+	local shell = radius >= 3 and (pr.style == "cannon" or pr.style == "mortar") and S.Explosions ~= nil
+		and S.Explosions.blast ~= nil
 	if not blocked and not miss then
 		if radius > 0 then
+			local falloff = if S.Explosions and S.Explosions.playerFalloff then S.Explosions.playerFalloff else Damage.falloff
 			for _, e in aliveRoots() do
 				local d = (e.pos - pos).Magnitude
 				if d < radius + 1.2 then
-					local f = Damage.falloff(math.max(d - 1.2, 0), radius * 0.35, radius)
+					local f = falloff(math.max(d - 1.2, 0), radius * 0.35, radius)
 					if f > 0 then
-						damagePlayer(e.p, pr.damage * f, pos, (pr.knockback or 0) * f, pr.kind)
+						damagePlayer(e.p, pr.damage * f, pos, if shell then 0 else (pr.knockback or 0) * f, pr.kind)
 					end
 				end
+			end
+			if shell then
+				S.Explosions.blast(pos, {
+					radius = radius,
+					core = radius * 0.35,
+					damage = 0,
+					noDamage = true,
+					noEmit = true,
+					knock = pr.knockback or 0,
+					size = if radius >= 6 then "L" else "M",
+					style = "fire",
+				}, { kind = pr.kind or "enemy" })
 			end
 		elseif hitPlayer then
 			damagePlayer(hitPlayer, pr.damage, pr.prev or pr.a, pr.knockback, pr.kind)
@@ -134,7 +152,7 @@ local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, bloc
 			data.miss = true
 		end
 		fx.play("BoltEnd", data)
-		if radius >= 3 and not blocked and not miss and (pr.style == "cannon" or pr.style == "mortar") then
+		if not shell and radius >= 3 and not blocked and not miss and (pr.style == "cannon" or pr.style == "mortar") then
 			fx.play("Explosion", { p = pos, r = radius, size = radius >= 6 and "L" or "M", style = "fire" })
 		end
 		if pr.shake and pr.shake > 0 and not blocked and not miss then
@@ -183,6 +201,9 @@ local function step(dt: number)
 				local hitPos = if worldHit then worldHit.Position else nextPos
 				local hr = pr.hitRadius
 				for _, e in roots do
+					if e.p == pr.spare then
+						continue -- warning shot: flies past this player on purpose
+					end
 					local q = closestOnSegment(prev, nextPos, e.pos)
 					if (e.pos - q).Magnitude <= hr then
 						local d = (q - prev).Magnitude
@@ -278,6 +299,7 @@ function Projectiles.fire(spec: any): number?
 		puddle = spec.puddle,
 		shake = spec.shake,
 		owner = spec.owner,
+		spare = spec.spare,
 	}
 	table.insert(live, pr)
 	if S.Fx then

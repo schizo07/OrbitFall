@@ -269,7 +269,11 @@ local function stepExtract(t: number)
 		label, left, total = shuttle .. " ETA - HOLD THE PAD", ex.eta - t, math.max(Config.ExtractEta, ex.eta - t)
 		col = HudStyle.Red
 	elseif not ex.window then
-		label, left, total, col = shuttle .. " DESCENDING", 0, 1, HudStyle.Red
+		-- holding over a hot pad / landing: the server's label, and the paused boarding time when there is one
+		label, left, total, col = ex.label or (shuttle .. " DESCENDING"), 0, 1, HudStyle.Red
+		if type(ex.paused) == "number" then
+			left, total = ex.paused, Config.ExtractWindow
+		end
 	else
 		if lastExtractKey ~= "" then
 			lastExtractKey = ""
@@ -283,7 +287,8 @@ local function stepExtract(t: number)
 		AlertBar.set("extract", label, { color = col, priority = PRIO.extract })
 	end
 	if AlertBar.isShowing("extract") then
-		AlertBar.setClock(if label:find("DESCENDING") then "..." else fmtTime(left), math.clamp(left / math.max(total, 1), 0, 1))
+		local waiting = t >= ex.eta and not (ex.window and t < ex.window) and type(ex.paused) ~= "number"
+		AlertBar.setClock(if waiting then "..." else fmtTime(left), math.clamp(left / math.max(total, 1), 0, 1))
 	end
 	-- last 10 s of the ETA: a tick per second
 	if t < ex.eta and left <= 10 then

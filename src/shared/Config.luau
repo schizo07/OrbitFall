@@ -15,7 +15,7 @@ Config.DropHeight = 600 -- drop capsule start Y
 Config.MapSize = 640 -- studs, square, centred at origin
 
 -- Mission tuning
-Config.MissionTime = 25 * 60
+Config.MissionTime = 18 * 60 -- was 25 min; Studio A/B Feel_MissionTime (minutes) overrides it in server/Mission.luau
 Config.StartCountdown = 10
 Config.ResultsTime = 12
 Config.FailedTime = 8
@@ -36,6 +36,7 @@ Config.Stims = {
 	Delay = 0.08, -- seconds before the heal starts
 	Duration = 1.0, -- seconds the heal is spread over
 	Critical = 0.3, -- health share below which the HUD bar turns red and the "use stim" prompt shows
+	Sprint = 5, -- seconds of unlimited stamina after a stim (server/MovementService.boost; Studio A/B Feel_StimSprint, 0 = off)
 }
 -- Passive regen (server/PlayerService). Studio A/B: workspace attribute Feel_Regen = "off" | "slow" | "current".
 Config.Regen = {

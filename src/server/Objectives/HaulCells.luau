@@ -134,6 +134,17 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	lifter.Name = "CargoLifter"
 	lifter.Parent = root
 	ctx.part(lifter, Vector3.new(26, slabH, 26), plaza * CFrame.new(0, -slabH / 2, 0), CONCRETE, Enum.Material.Concrete, { CastShadow = false })
+	-- the silo apron's hazard bollards (server/World/MapBuilder.luau) poke through the slab: clear the ones in its footprint
+	if map.folder then
+		for _, d in map.folder:GetDescendants() do
+			if d.Name == "HazardBollard" and d:IsA("BasePart") then
+				local lp = plaza:PointToObjectSpace(d.Position)
+				if math.abs(lp.X) <= 14 and math.abs(lp.Z) <= 14 then
+					d:Destroy()
+				end
+			end
+		end
+	end
 	-- floor grates along the side edges
 	for _, gx in { -10.5, 10.5 } do
 		for _, gz in { -7, 0, 7 } do

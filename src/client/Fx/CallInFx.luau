@@ -1,5 +1,6 @@
 -- Client renderers for the call-in system (server: src/server/CallIns/*).
--- Fx kinds: Beacon, BeaconEnd, LanceStart/Move/End, Bomb, Jet, Shell, Gas, Smoke, Dome, DropPod, Crater.
+-- Fx kinds: Beacon, BeaconEnd, LanceStart/Move/End, Bomb, Jet, Shell, Gas, Smoke, Dome, DropPod, Crater,
+-- GravWell, CryoFreeze, Shatter, Railshot, Firestorm.
 -- Everything lives in workspace.CurrentCamera.CallInFx (local only, no collisions, auto-cleaned).
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -241,6 +242,10 @@ local BEACON_HOLD = {
 	TOXIN = 0.7,
 	SMOKE = 0.6,
 	LANCE = 0.2,
+	GRAVWELL = 0.6, -- FALL
+	CRYO = 0.7, -- FALL
+	RAILSHOT = 0.9, -- charge
+	FIRESTORM = 0.9, -- jet reaches the strip start
 }
 local BEACON_RAMP = 1.2 -- the beam heats up over the last this-many seconds before BeaconEnd
 
@@ -996,6 +1001,405 @@ local function registerPods(Fx: any)
 end
 
 -- ---------------------------------------------------------------------------------------------
+-- Gravity Well / Cryo Bomb / Railshot / Firestorm Line (+ Shatter from server/Explosions)
+-- ---------------------------------------------------------------------------------------------
+-- Screen moment strength: Studio A/B group CALL-IN PUNCH (Feel_CallInPunch, default 1) scales the flashes and colour
+-- punches below; shakes follow the explosion group BLAST SHAKE (Feel_BlastShake).
+local FxRef: any = nil
+local SpectacleRef: any = nil
+local VOID = Color3.fromRGB(150, 70, 240)
+local ICE = Color3.fromRGB(150, 220, 255)
+local RAIL = Color3.fromRGB(140, 225, 255)
+local FIRE = Color3.fromRGB(255, 140, 50)
+local HIGHLIGHT_CAP = 14
+local liveHighlights = 0
+
+local function attrNum(name: string, default: number): number
+	local v = workspace:GetAttribute(name)
+	return if typeof(v) == "number" then v else default
+end
+local function punchMult(): number
+	return attrNum("Feel_CallInPunch", 1)
+end
+local function shakeMult(): number
+	return attrNum("Feel_BlastShake", 1)
+end
+local function quality(): number
+	return FxRef and FxRef.quality or 1
+end
+local function qn(n: number): number
+	return math.max(1, math.floor(n * quality() + 0.5))
+end
+local function camDist(p: Vector3): number
+	local cam = workspace.CurrentCamera
+	return if cam then (cam.CFrame.Position - p).Magnitude else 0
+end
+local function punch(tint: Color3, strength: number, dur: number, sat: number?, p: Vector3)
+	local m = punchMult()
+	if m <= 0 or not Juice or not Juice.colorPunch then
+		return
+	end
+	-- full strength within 40 studs, gone at 220
+	local k = math.clamp(1 - (camDist(p) - 40) / 180, 0, 1)
+	if k > 0 then
+		pcall(Juice.colorPunch, tint, strength * m * k, dur, sat)
+	end
+end
+local function flashAt(color: Color3, alpha: number, dur: number, p: Vector3)
+	local m = punchMult()
+	if m > 0 and Juice and Juice.flashAt then
+		pcall(Juice.flashAt, color, math.min(alpha * m, 0.9), dur, p, 500)
+	end
+end
+local function trauma(mag: number, dur: number, p: Vector3, range: number)
+	local m = shakeMult()
+	if m > 0 and Juice and Juice.trauma then
+		pcall(Juice.trauma, mag * m, dur, p, range)
+	end
+end
+local function orbitalMini(p: Vector3, sc: number, tint: Color3)
+	if SpectacleRef and SpectacleRef.orbital then
+		pcall(SpectacleRef.orbital, p, sc, { mini = true, tint = tint })
+	end
+end
+
+local function registerNew(Fx: any)
+	-- Gravity Well: inward particle swirl, orbiting motes, a dark core that swells, then the server's "void" blast
+	Fx.register("GravWell", function(d)
+		local p: Vector3, r: number, dur: number = d.p, d.r or 18, math.max(d.t or 3, 0.5)
+		local centre = p + Vector3.new(0, 3, 0)
+		local core = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.one * 1.5, Color = Color3.fromRGB(25, 5, 45), Material = Enum.Material.SmoothPlastic, CFrame = CFrame.new(centre) })
+		local shell = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.one * 3, Color = VOID, Transparency = 0.55, CFrame = CFrame.new(centre) })
+		local disc = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.12, r * 2, r * 2),
+			Color = VOID,
+			Transparency = 0.82,
+			CFrame = CFrame.new(p + Vector3.new(0, 0.15, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		local l = light(shell, VOID, r * 1.4, 3)
+		local anchor = mkPart({ Size = Vector3.one, Transparency = 1, CFrame = CFrame.new(centre) })
+		local swirl = emitter(anchor, {
+			Texture = TEX_SPARK,
+			Color = ColorSequence.new(Color3.fromRGB(230, 190, 255), VOID),
+			Size = seq(0.9, 0.3),
+			Transparency = seq(0.2, 0.05, 1),
+			Lifetime = NumberRange.new(1.0, 1.3),
+			Speed = NumberRange.new(r * 0.8, r * 0.95),
+			Rate = 60 * quality(),
+			LightEmission = 1,
+			Shape = Enum.ParticleEmitterShape.Sphere,
+			ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface,
+			ShapeInOut = Enum.ParticleEmitterShapeInOut.Inward,
+			RotSpeed = NumberRange.new(-180, 180),
+		})
+		anchor.Size = Vector3.new(r * 2, 4, r * 2)
+		local dust = emitter(anchor, {
+			Texture = TEX_SMOKE,
+			Color = ColorSequence.new(Color3.fromRGB(120, 95, 140)),
+			Size = seq(2.5, 0.8),
+			Transparency = seq(0.6, 0.85, 1),
+			Lifetime = NumberRange.new(1.1, 1.4),
+			Speed = NumberRange.new(r * 0.7, r * 0.85),
+			Rate = 18 * quality(),
+			Shape = Enum.ParticleEmitterShape.Sphere,
+			ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface,
+			ShapeInOut = Enum.ParticleEmitterShapeInOut.Inward,
+		})
+		-- orbiting motes on a shrinking spiral
+		local motes = {}
+		for i = 1, qn(10) do
+			motes[i] = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.one * 0.7, Color = Color3.fromRGB(220, 170, 255), CFrame = CFrame.new(centre) })
+		end
+		local loop = loopAt("LanceHum", anchor, p)
+		trauma(0.8, dur, p, 70)
+		animate(dur, function(a)
+			local t = os.clock()
+			core.Size = Vector3.one * (1.5 + 3.5 * a)
+			shell.Size = Vector3.one * (3 + 4 * a + math.sin(t * 20) * 0.4)
+			shell.Transparency = 0.55 - 0.2 * a
+			disc.Size = Vector3.new(0.12, r * 2 * (1 - 0.6 * a), r * 2 * (1 - 0.6 * a))
+			disc.CFrame = CFrame.new(p + Vector3.new(0, 0.15, 0)) * CFrame.Angles(0, t * 3, 0) * CFrame.Angles(0, 0, math.pi / 2)
+			l.Brightness = 3 + 4 * a
+			for i, m in motes do
+				local ang = t * (3 + 4 * a) + i * (math.pi * 2 / #motes)
+				local rad = r * (0.85 - 0.7 * a) * (0.6 + 0.4 * ((i % 3) / 2))
+				m.CFrame = CFrame.new(centre + Vector3.new(math.cos(ang) * rad, math.sin(t * 2 + i) * 1.5, math.sin(ang) * rad))
+			end
+		end, function()
+			stopLoop(loop)
+			swirl.Enabled = false
+			dust.Enabled = false
+			for _, m in motes do
+				m:Destroy()
+			end
+			core:Destroy()
+			disc:Destroy()
+			-- implosion snap: the shell collapses to a point right as the server blast goes off
+			tween(shell, 0.12, { Size = Vector3.one * 0.5, Transparency = 0 })
+			Debris:AddItem(shell, 0.15)
+			Debris:AddItem(anchor, 1.6)
+			orbitalMini(p, 1.1, VOID)
+			punch(VOID, 0.9, 0.7, -0.3, p)
+			flashAt(Color3.fromRGB(235, 210, 255), 0.45, 0.3, p)
+		end)
+	end)
+
+	-- Cryo Bomb: frost disc, ice spikes, ice tint (Highlight) on enemies whose FrozenUntil lies ahead
+	Fx.register("CryoFreeze", function(d)
+		local p: Vector3, r: number, dur: number = d.p, d.r or 14, d.t or 4
+		local frost = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.2, r * 0.6, r * 0.6),
+			Color = Color3.fromRGB(205, 240, 255),
+			Material = Enum.Material.Ice,
+			Transparency = 0.25,
+			CFrame = CFrame.new(p + Vector3.new(0, 0.1, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		tween(frost, 0.25, { Size = Vector3.new(0.2, r * 2, r * 2) })
+		task.delay(dur, function()
+			tween(frost, 1, { Transparency = 1 })
+		end)
+		Debris:AddItem(frost, dur + 1.1)
+		for _ = 1, qn(9) do
+			local ang = math.random() * math.pi * 2
+			local rad = math.sqrt(math.random()) * r * 0.85
+			local base = p + Vector3.new(math.cos(ang) * rad, 0, math.sin(ang) * rad)
+			local h = rand(2.5, 6)
+			local w = rand(0.8, 1.6)
+			local tilt = CFrame.Angles(rand(-0.35, 0.35), rand(0, 6.28), rand(-0.35, 0.35))
+			local spike = mkPart({
+				Size = Vector3.new(w, 0.2, w),
+				Color = Color3.fromRGB(190, 235, 255),
+				Material = Enum.Material.Ice,
+				Transparency = 0.15,
+				CFrame = CFrame.new(base) * tilt,
+			})
+			tween(spike, 0.14, { Size = Vector3.new(w, h, w), CFrame = CFrame.new(base) * tilt * CFrame.new(0, h * 0.35, 0) }, Enum.EasingStyle.Back)
+			task.delay(dur + rand(0, 0.4), function()
+				if spike.Parent then
+					tween(spike, 0.5, { Transparency = 1, Size = Vector3.new(w * 0.5, h * 0.4, w * 0.5) })
+				end
+			end)
+			Debris:AddItem(spike, dur + 1.1)
+		end
+		ring(p, ICE, 2, r * 1.15, 0.45, 0.4)
+		snd("EMPPulse", p)
+		punch(ICE, 1, 1.1, -0.5, p)
+		flashAt(Color3.fromRGB(225, 245, 255), 0.4, 0.35, p)
+
+		-- ice tint on the frozen enemies (FrozenUntil replicates with the model)
+		task.delay(0.12, function()
+			local ef = workspace:FindFirstChild("Enemies")
+			if not ef then
+				return
+			end
+			local now = workspace:GetServerTimeNow()
+			for _, m in ef:GetChildren() do
+				if liveHighlights >= HIGHLIGHT_CAP then
+					break
+				end
+				local fu = m:GetAttribute("FrozenUntil")
+				local pp = m:IsA("Model") and m.PrimaryPart
+				if pp and type(fu) == "number" and fu > now and (pp.Position - p).Magnitude < r + 8 and not m:FindFirstChild("CryoTint") then
+					local hl = Instance.new("Highlight")
+					hl.Name = "CryoTint"
+					hl.FillColor = Color3.fromRGB(150, 220, 255)
+					hl.FillTransparency = 0.3
+					hl.OutlineColor = Color3.fromRGB(235, 250, 255)
+					hl.OutlineTransparency = 0.2
+					hl.DepthMode = Enum.HighlightDepthMode.Occluded
+					hl.Adornee = m
+					hl.Parent = m
+					liveHighlights += 1
+					local life = math.max(fu - now, 0.2)
+					task.delay(life, function()
+						liveHighlights -= 1
+						if hl.Parent then
+							tween(hl, 0.25, { FillTransparency = 1, OutlineTransparency = 1 })
+							Debris:AddItem(hl, 0.3)
+						end
+					end)
+				end
+			end
+		end)
+	end)
+
+	-- Shatter: a frozen enemy took a blast; ice shards fly off
+	Fx.register("Shatter", function(d)
+		local p: Vector3 = d.p
+		if typeof(p) ~= "Vector3" or camDist(p) > 260 then
+			return
+		end
+		local shards = {}
+		for i = 1, qn(6) do
+			local s = mkPart({
+				Size = Vector3.new(rand(0.3, 0.7), rand(0.6, 1.4), rand(0.3, 0.6)),
+				Color = Color3.fromRGB(200, 240, 255),
+				Material = Enum.Material.Ice,
+				Transparency = 0.1,
+				CFrame = CFrame.new(p + Vector3.new(0, 1.5, 0)),
+			})
+			shards[i] = { part = s, v = Vector3.new(rand(-14, 14), rand(10, 22), rand(-14, 14)), rx = rand(-8, 8), ry = rand(-8, 8) }
+		end
+		snd("HitPartial", p)
+		animate(0.7, function(a, dt)
+			for _, sh in shards do
+				sh.v -= Vector3.new(0, 70 * dt, 0)
+				sh.part.CFrame = (sh.part.CFrame + sh.v * dt) * CFrame.Angles(sh.rx * dt, sh.ry * dt, 0)
+				sh.part.Transparency = 0.1 + 0.9 * a
+			end
+		end, function()
+			for _, sh in shards do
+				sh.part:Destroy()
+			end
+		end)
+	end)
+
+	-- Railshot: targeting laser + shrinking reticle while it charges, then one beam from orbit
+	Fx.register("Railshot", function(d)
+		local p: Vector3, charge: number = d.p, math.max(d.t or 0.9, 0.1)
+		local H = 600
+		local laser = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(H, 0.12, 0.12),
+			Color = Color3.fromRGB(255, 70, 70),
+			Transparency = 0.2,
+			CFrame = CFrame.new(p + Vector3.new(0, H / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		local ret = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.1, 12, 12),
+			Color = Color3.fromRGB(255, 80, 80),
+			Transparency = 0.6,
+			CFrame = CFrame.new(p + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		snd("LanceCharge", p)
+		animate(charge, function(a)
+			local w = 0.12 + 0.25 * a
+			laser.Size = Vector3.new(H, w, w)
+			laser.Transparency = if math.floor(os.clock() * 24) % 2 == 0 then 0.15 else 0.45
+			local s = 12 * (1 - a) + 1.2
+			ret.Size = Vector3.new(0.1, s, s)
+		end, function()
+			laser:Destroy()
+			ret:Destroy()
+			local beam = mkPart({
+				Shape = Enum.PartType.Cylinder,
+				Size = Vector3.new(H, 3.2, 3.2),
+				Color = Color3.fromRGB(235, 250, 255),
+				Transparency = 0,
+				CFrame = CFrame.new(p + Vector3.new(0, H / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+			})
+			local glow = mkPart({
+				Shape = Enum.PartType.Cylinder,
+				Size = Vector3.new(H, 7, 7),
+				Color = RAIL,
+				Transparency = 0.55,
+				CFrame = beam.CFrame,
+			})
+			light(beam, RAIL, 40, 6)
+			tween(beam, 0.3, { Size = Vector3.new(H, 0.1, 0.1) })
+			tween(glow, 0.4, { Size = Vector3.new(H, 0.2, 0.2), Transparency = 1 })
+			Debris:AddItem(beam, 0.35)
+			Debris:AddItem(glow, 0.45)
+			snd("ShotRail", p)
+			ring(p, RAIL, 1, 9, 0.35, 0.3)
+			orbitalMini(p, 0.8, RAIL)
+			trauma(2.2, 0.45, p, 110)
+			punch(RAIL, 1, 0.55, 0.5, p)
+			flashAt(Color3.fromRGB(240, 252, 255), 0.6, 0.25, p)
+		end)
+	end)
+
+	-- Firestorm Line: fire patches ignite along a -> b at the jet's pace, burn for t, then die down
+	Fx.register("Firestorm", function(d)
+		local a: Vector3, b: Vector3 = d.a, d.b
+		local w: number, dur: number = d.w or 7, d.t or 10
+		local n: number = math.max(math.floor((d.n or 8) * math.clamp(quality(), 0.5, 1) + 0.5), 3)
+		local sweep: number = d.s or 0.2
+		local seg = b - a
+		local len = seg.Magnitude
+		if len < 0.5 then
+			return
+		end
+		local dir = seg / len
+		local piece = len / n
+		local loop = nil
+		local scorch = mkPart({
+			Size = Vector3.new(w, 0.08, len),
+			Color = Color3.fromRGB(30, 22, 18),
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 1,
+			CFrame = CFrame.lookAt((a + b) / 2 + Vector3.new(0, 0.06, 0), (a + b) / 2 + Vector3.new(0, 0.06, 0) + dir),
+		})
+		tween(scorch, sweep + 0.3, { Transparency = 0.35 })
+		task.delay(dur + sweep, function()
+			tween(scorch, 4, { Transparency = 1 }, Enum.EasingStyle.Linear)
+		end)
+		Debris:AddItem(scorch, dur + sweep + 4.2)
+		for i = 1, n do
+			task.delay((i - 0.5) / n * sweep, function()
+				local c = a + dir * (piece * (i - 0.5))
+				local anchor = mkPart({
+					Size = Vector3.new(w, 1, piece),
+					Transparency = 1,
+					CFrame = CFrame.lookAt(c + Vector3.new(0, 0.6, 0), c + Vector3.new(0, 0.6, 0) + dir),
+				})
+				local fire = emitter(anchor, {
+					Texture = TEX_FIRE,
+					Color = ColorSequence.new(Color3.fromRGB(255, 225, 120), Color3.fromRGB(255, 90, 30)),
+					Size = seq(2.2, 3.2, 0.6),
+					Transparency = seq(0.15, 0.35, 1),
+					Lifetime = NumberRange.new(0.6, 1.1),
+					Speed = NumberRange.new(4, 9),
+					SpreadAngle = Vector2.new(12, 12),
+					EmissionDirection = Enum.NormalId.Top,
+					Rate = 14 * quality() + 4,
+					LightEmission = 0.9,
+					Rotation = NumberRange.new(0, 360),
+					RotSpeed = NumberRange.new(-90, 90),
+					Shape = Enum.ParticleEmitterShape.Box,
+					ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
+				})
+				local smoke = emitter(anchor, {
+					Texture = TEX_SMOKE,
+					Color = ColorSequence.new(Color3.fromRGB(60, 50, 45)),
+					Size = seq(2.5, 6),
+					Transparency = seq(0.55, 1),
+					Lifetime = NumberRange.new(1.6, 2.4),
+					Speed = NumberRange.new(5, 8),
+					EmissionDirection = Enum.NormalId.Top,
+					Rate = 3 * quality() + 1,
+					Shape = Enum.ParticleEmitterShape.Box,
+				})
+				if i % 3 == 1 then
+					light(anchor, FIRE, w * 2.2, 2.5)
+				end
+				if i == 1 then
+					loop = loopAt("GasHiss", anchor, c)
+				end
+				local burst = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.one * w * 0.6, Color = Color3.fromRGB(255, 190, 80), Transparency = 0.15, CFrame = CFrame.new(c + Vector3.new(0, 1, 0)) })
+				tween(burst, 0.3, { Size = Vector3.one * w * 1.4, Transparency = 1 })
+				Debris:AddItem(burst, 0.35)
+				task.delay(dur, function()
+					fire.Enabled = false
+					smoke.Enabled = false
+					if i == 1 then
+						stopLoop(loop)
+					end
+				end)
+				Debris:AddItem(anchor, dur + 2.6)
+			end)
+		end
+		local mid = (a + b) / 2
+		snd("ExplosionSmall", mid)
+		trauma(1.2, 0.5, mid, 90)
+		punch(FIRE, 0.6, 0.6, 0.3, mid)
+		flashAt(Color3.fromRGB(255, 200, 140), 0.3, 0.25, mid)
+	end)
+end
+
 function CallInFx.init(Fx: any, audio: any, juice: any)
 	Audio = audio
 	Juice = juice
@@ -1005,6 +1409,12 @@ function CallInFx.init(Fx: any, audio: any, juice: any)
 	registerJet(Fx)
 	registerClouds(Fx)
 	registerPods(Fx)
+	FxRef = Fx
+	local okS, mod = pcall(require, script.Parent:FindFirstChild("Spectacle"))
+	if okS and type(mod) == "table" then
+		SpectacleRef = mod
+	end
+	registerNew(Fx)
 end
 
 return CallInFx

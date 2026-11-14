@@ -50,6 +50,10 @@ local STYLES = {
 	emp = { core = C3(225, 250, 255), hot = C3(140, 220, 255), mid = C3(70, 170, 255), edge = C3(40, 110, 240), smoke = C3(70, 100, 140), spark = C3(150, 225, 255), light = C3(100, 200, 255) },
 	gas = { core = C3(235, 255, 205), hot = C3(190, 255, 120), mid = C3(130, 230, 70), edge = C3(70, 170, 40), smoke = C3(90, 160, 60), spark = C3(190, 255, 120), light = C3(150, 255, 90) },
 	goo = { core = C3(220, 255, 205), hot = C3(170, 250, 120), mid = C3(110, 225, 80), edge = C3(50, 155, 50), smoke = C3(60, 120, 55), spark = C3(160, 255, 110), light = C3(120, 255, 110) },
+	-- call-ins: Cryo Bomb, Gravity Well, Railshot
+	ice = { core = C3(245, 253, 255), hot = C3(200, 240, 255), mid = C3(140, 215, 255), edge = C3(90, 170, 240), smoke = C3(215, 235, 250), spark = C3(220, 248, 255), light = C3(160, 225, 255) },
+	void = { core = C3(250, 235, 255), hot = C3(210, 140, 255), mid = C3(150, 70, 240), edge = C3(80, 30, 170), smoke = C3(50, 30, 75), spark = C3(220, 170, 255), light = C3(170, 90, 255) },
+	rail = { core = C3(255, 255, 255), hot = C3(200, 245, 255), mid = C3(120, 210, 255), edge = C3(70, 120, 255), smoke = C3(70, 75, 90), spark = C3(210, 245, 255), light = C3(150, 220, 255) },
 	spark = { core = C3(255, 255, 230), hot = C3(255, 235, 140), mid = C3(255, 200, 80), edge = C3(255, 150, 40), smoke = C3(100, 96, 92), spark = C3(255, 230, 130), light = C3(255, 225, 120) },
 }
 
@@ -474,6 +478,12 @@ local function playSound(size: string, style: string, p: Vector3, K: number)
 	local key, vol, pitch = "Explosion", 1, 1
 	if style == "emp" then
 		key = "EMP"
+	elseif style == "ice" then
+		key, pitch = "EMP", 1.3
+	elseif style == "void" then
+		key, pitch = "ExplosionHuge", 0.75
+	elseif style == "rail" then
+		key, pitch = "Explosion", 1.15
 	elseif style == "gas" then
 		key = if size == "S" or size == "M" then "SmokePop" else "Explosion"
 	elseif style == "goo" then
@@ -571,7 +581,7 @@ function Blast.play(p: Vector3, opts: any?)
 	local g = gpos or p
 	local n = gn or Vector3.yAxis
 	local FR = 4.2 * K -- fireball diameter unit
-	local isFire = style == "fire" or style == "spark"
+	local isFire = style == "fire" or style == "spark" or style == "rail"
 	local soft = style == "gas" or style == "goo"
 	local mid = p + V3(0, FR * 0.25, 0)
 
@@ -593,7 +603,7 @@ function Blast.play(p: Vector3, opts: any?)
 	ball(Enum.Material.Neon, mid, FR * 0.6, FR * 2.0, FR * 1.6, 0.14, 0.32 + 0.1 * K, st.mid, st.edge, 0.45 + fireTr * 0.4, 1, FR * 0.3, 0.02)
 
 	-- smoke balls: start inside the fireball as it shrinks, grow, rise, fade
-	if style ~= "emp" and d < 600 then
+	if style ~= "emp" and style ~= "ice" and d < 600 then
 		local nSmoke = q(if K >= 2 then 5 elseif K >= 1 then 4 else 2)
 		local smokeLife = 1.4 + 0.5 * K
 		for i = 1, nSmoke do

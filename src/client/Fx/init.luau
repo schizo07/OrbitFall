@@ -950,12 +950,10 @@ function Fx.muzzleFlash(at: any, color: Color3?)
 	local t = typeof(at)
 	if t == "Vector3" then
 		pos = at
-	elseif t == "CFrame" then
-		pos = at.Position
 	elseif t == "Instance" and at:IsA("Attachment") then
 		pos = at.WorldPosition
-	elseif t == "Instance" and at:IsA("BasePart") then
-		pos = at.Position
+	elseif t == "CFrame" or (t == "Instance" and at:IsA("BasePart")) then
+		pos = at.Position -- CFrame and BasePart both expose .Position
 	else
 		return
 	end

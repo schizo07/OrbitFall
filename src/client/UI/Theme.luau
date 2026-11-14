@@ -473,38 +473,89 @@ function Theme.gui(name: string, opts: { [string]: any }?): ScreenGui
 	end)
 	g.Enabled = opts.Enabled ~= false
 	g.Parent = Theme.playerGui()
+	if opts.NoTextFloor ~= true then
+		Theme.textFloor(g)
+	end
 	return g
 end
 
-function Theme.scaleFor(kind: string?): number
+-- Global UI scale ----------------------------------------------------------------------------------------------
+-- Every Theme.root (and so every HUD / menu ScreenGui) is sized here, from the viewport's short side, so 1080p / 1440p
+-- PC, tablets and phones each get a sensible size. On top of that a text floor (Theme.gui) keeps every label at or
+-- above Theme.minTextPx() final pixels. Studio A/B: workspace attribute Feel_UiScale (Variants group "UI SCALE"):
+-- nil = default curve, a number = extra multiplier, "old" = the pre-2026-11-14 curve with no floor.
+local UI_ATTR = "Feel_UiScale"
+
+local function viewport(): Vector2
 	local cam = workspace.CurrentCamera
-	local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
-	local y = math.max(vp.Y, 200)
-	if Theme.isTouch() then
-		if kind == "menu" then
-			return Theme.clamp(y / 480, 0.8, 1.25)
-		end
-		return Theme.clamp(y / 540, 0.72, 1.25)
-	end
-	return Theme.clamp(y / 1080, 0.6, 1.5)
+	return cam and cam.ViewportSize or Vector2.new(1920, 1080)
 end
 
--- Returns a transparent full-size Frame whose children are laid out in "virtual" pixels
--- (1080p on PC, ~830x470 on phones) and uniformly scaled to the real viewport.
-function Theme.root(gui: ScreenGui, kind: string?): (Frame, UIScale)
-	local root = Instance.new("Frame")
-	root.Name = "Root"
-	root.BackgroundTransparency = 1
-	root.BorderSizePixel = 0
-	local us = Instance.new("UIScale")
-	us.Parent = root
-	local function refresh()
-		local s = Theme.scaleFor(kind)
-		us.Scale = s
-		root.Size = UDim2.fromScale(1 / s, 1 / s)
+function Theme.uiOld(): boolean
+	return workspace:GetAttribute(UI_ATTR) == "old"
+end
+
+function Theme.uiMul(): number
+	local v = workspace:GetAttribute(UI_ATTR)
+	if type(v) == "number" and v > 0 then
+		return v
 	end
-	refresh()
-	root.Parent = gui
+	return 1
+end
+
+function Theme.scaleFor(kind: string?): number
+	local vp = viewport()
+	if Theme.uiOld() then
+		local y = math.max(vp.Y, 200)
+		if Theme.isTouch() then
+			if kind == "menu" then
+				return Theme.clamp(y / 480, 0.8, 1.25)
+			end
+			return Theme.clamp(y / 540, 0.72, 1.25)
+		end
+		return Theme.clamp(y / 1080, 0.6, 1.5)
+	end
+	-- short side, softened (^0.6) so small windows shrink less than linearly:
+	-- PC 720 p 0.78, 1080 p 1.0, 1440 p 1.19; touch: phone (390) 0.82, tablet (768) 1.23
+	local short = math.max(math.min(vp.X, vp.Y), 200)
+	local s
+	if Theme.isTouch() then
+		if kind == "menu" then
+			s = Theme.clamp((short / 480) ^ 0.6, 0.85, 1.3)
+		else
+			s = Theme.clamp((short / 540) ^ 0.6, 0.78, 1.3)
+		end
+	else
+		s = Theme.clamp((short / 1080) ^ 0.6, 0.7, 1.5)
+	end
+	return s * Theme.uiMul()
+end
+
+-- Smallest text size in final screen pixels: 12 on a phone (short side 390), 14 at 1080 and above. 0 = no floor.
+function Theme.minTextPx(): number
+	if Theme.uiOld() then
+		return 0
+	end
+	local vp = viewport()
+	local short = math.min(vp.X, vp.Y)
+	local a = Theme.clamp((short - 390) / (1080 - 390), 0, 1)
+	return 12 + 2 * a
+end
+
+-- One watcher for everything that changes the scale: viewport size, camera swap, the Feel_UiScale attribute.
+local scaleListeners: { () -> () } = {}
+local scaleWatching = false
+local function fireScaleChanged()
+	for _, fn in scaleListeners do
+		task.spawn(fn)
+	end
+end
+function Theme.onScaleChanged(fn: () -> ())
+	table.insert(scaleListeners, fn)
+	if scaleWatching then
+		return
+	end
+	scaleWatching = true
 	local camConn: RBXScriptConnection? = nil
 	local function hookCam()
 		if camConn then
@@ -512,13 +563,137 @@ function Theme.root(gui: ScreenGui, kind: string?): (Frame, UIScale)
 		end
 		local cam = workspace.CurrentCamera
 		if cam then
-			camConn = cam:GetPropertyChangedSignal("ViewportSize"):Connect(refresh)
+			camConn = cam:GetPropertyChangedSignal("ViewportSize"):Connect(fireScaleChanged)
 		end
-		refresh()
+		fireScaleChanged()
 	end
 	hookCam()
 	workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(hookCam)
+	workspace:GetAttributeChangedSignal(UI_ATTR):Connect(fireScaleChanged)
+end
+
+-- Marks a UIScale as part of the layout (counted by the text floor). Pop / hover / press UIScales stay unmarked.
+function Theme.layoutScale(us: UIScale): UIScale
+	us:SetAttribute("UiLayout", true)
+	return us
+end
+
+-- Returns a transparent full-size Frame whose children are laid out in "virtual" pixels
+-- (1080p on PC, ~1030x470 on phones) and uniformly scaled to the real viewport.
+function Theme.root(gui: ScreenGui, kind: string?): (Frame, UIScale)
+	local root = Instance.new("Frame")
+	root.Name = "Root"
+	root.BackgroundTransparency = 1
+	root.BorderSizePixel = 0
+	local us = Theme.layoutScale(Instance.new("UIScale"))
+	us.Parent = root
+	local function refresh()
+		if not root.Parent then
+			return
+		end
+		local s = Theme.scaleFor(kind)
+		us.Scale = s
+		root.Size = UDim2.fromScale(1 / s, 1 / s)
+	end
+	root.Parent = gui
+	refresh()
+	Theme.onScaleChanged(refresh)
 	return root, us
+end
+
+-- Text floor ---------------------------------------------------------------------------------------------------
+-- Every TextLabel / TextButton / TextBox in a Theme.gui keeps its authored size as attribute BaseTextSize and is drawn
+-- at max(BaseTextSize, minTextPx / layout scale). Code that changes TextSize later just sets a new base. TextScaled
+-- text and anything with attribute NoTextFloor are left alone.
+local function layoutScaleOf(obj: Instance): number
+	local s = 1
+	local p = obj.Parent
+	while p and not p:IsA("LayerCollector") do
+		for _, c in p:GetChildren() do
+			if c:IsA("UIScale") and c:GetAttribute("UiLayout") then
+				s *= c.Scale
+			end
+		end
+		p = p.Parent
+	end
+	return s
+end
+
+local function isText(d: Instance): boolean
+	return d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox")
+end
+
+local function floorOne(t: any, minPx: number)
+	if t.TextScaled or t:GetAttribute("NoTextFloor") then
+		return
+	end
+	local base = t:GetAttribute("BaseTextSize")
+	if base == nil then
+		base = t.TextSize
+		t:SetAttribute("BaseTextSize", base)
+	end
+	local want = base
+	if minPx > 0 then
+		local s = layoutScaleOf(t)
+		if s > 0 then
+			want = math.max(base, math.min(100, math.ceil(minPx / s)))
+		end
+	end
+	if t.TextSize ~= want then
+		t:SetAttribute("FlooredTo", want)
+		t.TextSize = want
+	end
+end
+
+local function watchText(t: any)
+	if t:GetAttribute("FloorWatch") then
+		return
+	end
+	t:SetAttribute("FloorWatch", true)
+	t:GetPropertyChangedSignal("TextSize"):Connect(function()
+		if t.TextSize == t:GetAttribute("FlooredTo") then
+			return
+		end
+		t:SetAttribute("BaseTextSize", t.TextSize)
+		floorOne(t, Theme.minTextPx())
+	end)
+end
+
+function Theme.textFloor(gui: Instance)
+	local function refreshAll()
+		if not gui.Parent then
+			return
+		end
+		local minPx = Theme.minTextPx()
+		for _, d in gui:GetDescendants() do
+			if isText(d) then
+				floorOne(d, minPx)
+			end
+		end
+	end
+	gui.DescendantAdded:Connect(function(d)
+		if isText(d) then
+			-- deferred: the creator usually sets TextSize / parents the rest of the row right after
+			task.defer(function()
+				if d.Parent then
+					watchText(d)
+					floorOne(d, Theme.minTextPx())
+				end
+			end)
+		end
+	end)
+	Theme.onScaleChanged(function()
+		-- after the roots / boosts have taken the new scale
+		task.defer(refreshAll)
+	end)
+	task.defer(function()
+		for _, d in gui:GetDescendants() do
+			if isText(d) then
+				watchText(d)
+			end
+		end
+		refreshAll()
+	end)
 end
 
 -- Convenience: connect to Store.on without caring about its callback signature.

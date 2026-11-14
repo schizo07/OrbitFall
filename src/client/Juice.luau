@@ -9,6 +9,7 @@
 --   Juice.hitstop(t)                     freezes shake/kick progression and holds the camera for t seconds
 --   Juice.flash(color, alpha, dur)       full-screen colour flash
 --   Juice.vignette(color, alpha, dur)    edge vignette (damage)
+--   Juice.colorPunch(tint, s, dur, sat?) short colour-grade hit (tint + contrast + saturation) easing back to neutral
 --   Juice.step(dt) -> CFrame             combined offset: camera.CFrame = camera.CFrame * Juice.step(dt)
 --   Juice.punchFov(deg)                  optional FOV punch; read the current offset with Juice.getFov()
 --   Juice.intensity                      global multiplier (default 1; 0 disables shake/kick)
@@ -317,6 +318,43 @@ function Juice.flashAt(color: Color3, alpha: number, dur: number, pos: Vector3, 
 	if a >= 0.03 then
 		Juice.flash(color, a, dur)
 	end
+end
+
+-- Colour punch: a short ColorCorrection hit (tint toward `tint`, contrast up, saturation by `sat`, default +0.4) that
+-- eases back to neutral over `dur`. strength 1 = a strong call-in moment. One shared effect in Lighting (client only).
+local punchCC: ColorCorrectionEffect? = nil
+local punchTween: Tween? = nil
+function Juice.colorPunch(tint: Color3, strength: number, dur: number, sat: number?)
+	local s = math.clamp(strength * Juice.intensity, 0, 1.5)
+	if s <= 0.01 then
+		return
+	end
+	local cc = punchCC
+	if not cc or not cc.Parent then
+		local e = Instance.new("ColorCorrectionEffect")
+		e.Name = "JuicePunch"
+		e.Parent = game:GetService("Lighting")
+		punchCC = e
+		cc = e
+	end
+	if not cc then
+		return
+	end
+	if punchTween then
+		punchTween:Cancel()
+	end
+	cc.Enabled = true
+	cc.TintColor = Color3.new(1, 1, 1):Lerp(tint, math.clamp(0.45 * s, 0, 0.7))
+	cc.Contrast = 0.3 * s
+	cc.Saturation = (sat or 0.4) * s
+	cc.Brightness = 0.06 * s
+	punchTween = TweenService:Create(cc, TweenInfo.new(math.max(dur, 0.1), Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TintColor = Color3.new(1, 1, 1),
+		Contrast = 0,
+		Saturation = 0,
+		Brightness = 0,
+	})
+	punchTween:Play()
 end
 
 function Juice.vignette(color: Color3, alpha: number, dur: number)

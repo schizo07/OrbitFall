@@ -20,6 +20,8 @@
 --
 -- Fx sent (client/Fx/LumenFx.luau): LumenCharge, LumenBeam, LumenPulse, Blink, RiftGate (+ Telegraph via EnemyAI).
 
+local EnemyData = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Enemies"))
+
 local LumenAI = {}
 
 local S: { [string]: any } = {}
@@ -40,6 +42,11 @@ function LumenAI.init(s: { [string]: any })
 end
 
 -- Attacks ----------------------------------------------------------------------------------
+-- Needle aim uses the shared ENEMY AIM model (EnemyAI aimSpread, numbers in Data/Enemies Enemies.Aim / per-unit `aim`),
+-- rolled once per VOLLEY: a fresh target first gets warning volleys that streak past one side (and can never hit that
+-- player), then the cone tightens over time and widens against movement / sprinting / range.
+--   small volleys (count < 5): each needle jitters inside the current cone (Feel_EnemyAim "old": the def's `spread`)
+--   fans (count >= 5): the designed left-to-right fan stays, its centre is thrown off by the current cone ("old": centred)
 local function needleShot(e: any, a: any, atk: any, k: number)
 	local t = H.targetEntry(e)
 	if not t then
@@ -47,25 +54,44 @@ local function needleShot(e: any, a: any, atk: any, k: number)
 	end
 	local from = H.muzzleWorld(e)
 	local speed = atk.speed or 140
+	local n = atk.count or 1
+	local fan = n >= 5
+	local spread = atk.spread or 2
+	if k == 1 or a.aimSpread == nil then
+		local s, warn = H.aimSpread(e, t, from, if fan then 0 else spread, workspace:GetServerTimeNow())
+		a.aimSpread = s
+		a.warn = warn
+		a.warnSide = if rng:NextNumber() < 0.5 then 1 else -1
+		a.warnDist = rng:NextNumber(EnemyData.Aim.warnOffset[1], EnemyData.Aim.warnOffset[2])
+		a.warnUp = rng:NextNumber(0, 1.6)
+		a.yawOff = if fan then rng:NextNumber(-1, 1) * s else 0
+		a.pitchOff = if fan then rng:NextNumber(-0.5, 0.5) * s else 0
+	end
 	local pt = H.aimPoint(from, t, speed, 0.5)
+	if a.warn then
+		-- near miss: the whole volley flies past the same side, a little high
+		local side = flat(pt - from)
+		side = if side.Magnitude > 0.05 then side.Unit:Cross(Vector3.yAxis) else Vector3.xAxis
+		pt += side * a.warnSide * a.warnDist + Vector3.new(0, a.warnUp, 0)
+	end
 	local dir = (pt - from)
 	if dir.Magnitude < 0.1 then
 		return false
 	end
 	dir = dir.Unit
-	local n = atk.count or 1
-	local spread = atk.spread or 2
 	-- big volleys fan out evenly left-to-right; small ones jitter
-	if n >= 5 then
+	if fan then
 		local frac = if n > 1 then (k - 1) / (n - 1) - 0.5 else 0
-		dir = CFrame.Angles(0, math.rad(spread * frac * 2), 0) * dir
+		local look = CFrame.lookAt(Vector3.zero, dir)
+		dir = (CFrame.Angles(0, math.rad(spread * frac * 2 + a.yawOff), 0) * look * CFrame.Angles(math.rad(a.pitchOff), 0, 0)).LookVector
 		dir = H.spreadDir(dir, 1)
 	else
-		dir = H.spreadDir(dir, spread)
+		dir = H.spreadDir(dir, if a.warn then 0.6 else a.aimSpread)
 	end
 	S.Projectiles.fire({
 		a = from,
 		v = dir * speed,
+		spare = if a.warn then t.p else nil,
 		style = "bolt",
 		c = NEEDLE,
 		damage = atk.damage,
@@ -320,6 +346,12 @@ function LumenAI.update(e: any, dt: number, now: number)
 		return
 	end
 	local stunned = e.status.stun ~= nil and e.status.stun.untilT > now
+	-- frozen (call-in hook, model attribute FrozenUntil, read like EnemyAI.think): no blinking, nodes hold their state
+	local fz = e.model:GetAttribute("FrozenUntil")
+	local frozen = type(fz) == "number" and fz > now
+	if frozen and L.nodeNext then
+		L.nodeNext = math.max(L.nodeNext, fz)
+	end
 
 	-- hard-light shield drops while stunned (EnemyService.resolveZone already lets shots through)
 	if #L.shields > 0 and stunned ~= L.shieldOff then
@@ -341,7 +373,9 @@ function LumenAI.update(e: any, dt: number, now: number)
 
 	-- blink when aimed at
 	local bl = e.def.blink
-	if bl and not stunned then
+	if bl and frozen then
+		L.aimT = 0
+	elseif bl and not stunned then
 		local aimer: Vector3? = nil
 		for _, t in H.targets do
 			local look = flat(t.root.CFrame.LookVector)

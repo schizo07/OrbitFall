@@ -484,7 +484,7 @@ local function buildOwnCard(parent: Instance)
 	hpRow.LayoutOrder = 4
 	hpRow.Parent = card
 	ui.callsign = Style.label({
-		Text = "A1",
+		Text = "S1",
 		TextSize = 17,
 		Color = Style.Amber,
 		Size = UDim2.fromOffset(32, 22),
@@ -541,33 +541,79 @@ end
 local function buildMain()
 	local gui = Theme.gui("OrbitHUD", { DisplayOrder = 10, Insets = "CoreUISafeInsets" })
 	ui.mainGui = gui
-	local screen = Theme.root(gui, "hud")
+	local screen, screenScale = Theme.root(gui, "hud")
 	ui.screen = screen
+	ui.screenScale = screenScale
 	local root = Style.content(screen, touch) -- 0.8 x on touch
 	ui.root = root
 
-	-- top-left column: ship info (lobby), uplink list (squad cards live on the left edge at y 58-78 %)
+	-- top-left column: ship info (lobby), area info, uplink list (squad cards sit above the own card, bottom-left).
+	-- Touch: the right edge belongs to the touch buttons, so the objective block moves into this column and the uplink
+	-- list becomes a second narrow column beside it (LEFT_TOUCH_W + 8 + CALLIN_TOUCH_W wide).
 	local left = Instance.new("Frame")
 	left.Name = "LeftColumn"
 	left.BackgroundTransparency = 1
 	left.Position = UDim2.fromOffset(Style.MARGIN, Style.MARGIN)
-	left.Size = UDim2.fromOffset(if touch then 190 else 230, 0)
-	left.AutomaticSize = Enum.AutomaticSize.Y
 	left.Parent = root
-	Theme.list(left, Enum.FillDirection.Vertical, 8)
 	Style.applyBoost(left, touch) -- bigger text / rows (viewport scale comes from Theme.root + Style.content)
 	ui.left = left
 
-	buildShipPanel(left)
-	AreaInfo.build(left, touch, 1)
-	CallInList.build(left, touch, 2)
+	local col1 = left
+	local col2: Frame? = nil
+	if touch then
+		left.Size = UDim2.fromOffset(0, 0)
+		left.AutomaticSize = Enum.AutomaticSize.XY
+		Theme.list(left, Enum.FillDirection.Horizontal, 8)
+		col1 = Instance.new("Frame")
+		col1.Name = "Main"
+		col1.BackgroundTransparency = 1
+		col1.Size = UDim2.fromOffset(Style.LEFT_TOUCH_W, 0)
+		col1.AutomaticSize = Enum.AutomaticSize.Y
+		col1.LayoutOrder = 1
+		col1.Parent = left
+		local c2 = Instance.new("Frame")
+		c2.Name = "Uplink"
+		c2.BackgroundTransparency = 1
+		c2.Size = UDim2.fromOffset(Style.CALLIN_TOUCH_W, 0)
+		c2.AutomaticSize = Enum.AutomaticSize.Y
+		c2.LayoutOrder = 2
+		c2.Parent = left
+		Theme.list(c2, Enum.FillDirection.Vertical, 8)
+		col2 = c2
+	else
+		left.Size = UDim2.fromOffset(Style.LEFT_PC_W, 0)
+		left.AutomaticSize = Enum.AutomaticSize.Y
+	end
+	Theme.list(col1, Enum.FillDirection.Vertical, 8)
+
+	buildShipPanel(col1)
+	AreaInfo.build(col1, touch, 1)
+	if col2 then
+		ObjectiveList.build(col1, touch, 2)
+		CallInList.build(col2, touch, 1)
+	else
+		CallInList.build(col1, touch, 2)
+	end
 
 	ui.compassMarkerLayer = Compass.build(root, touch)
 	TopRight.build(root, touch)
-	ObjectiveList.build(root, touch)
+	if not col2 then
+		ObjectiveList.build(root, touch)
+	end
 	ui.objReady = true
 	buildOwnCard(root)
 	SquadCards.build(root, touch)
+	-- squad cards stack upward from just above the own card (+ its radio line), whatever the card's height
+	local function placeSquad()
+		local k = ui.screenScale.Scale * (if touch then 0.8 else 1)
+		if k <= 0 or not ui.ownCard then
+			return
+		end
+		SquadCards.setBottom(Style.MARGIN + ui.ownCard.AbsoluteSize.Y / k + 40)
+	end
+	ui.ownCard:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSquad)
+	ui.screenScale:GetPropertyChangedSignal("Scale"):Connect(placeSquad)
+	task.defer(placeSquad)
 	EventFeed.build(root, touch)
 	PickupToast.build(root, touch)
 	SquadComms.build(ui.ownCard, touch)
@@ -1061,7 +1107,7 @@ function HUD.refreshMarkers()
 		world.BackgroundTransparency = 1
 		world.AnchorPoint = Vector2.new(0.5, 0.5)
 		world.Size = UDim2.fromOffset(120, 60)
-		local us = Instance.new("UIScale")
+		local us = Theme.layoutScale(Instance.new("UIScale"))
 		us.Scale = math.max(s, 0.8)
 		us.Parent = world
 		Style.label({
@@ -1711,6 +1757,7 @@ local function step(dt: number)
 		Compass.step(cam, markers)
 		stepMarkers(cam)
 		AreaInfo.step(cam)
+		ObjectiveList.step(cam)
 		if ui.promptFrame.Visible then
 			ui.promptScale.Scale = 1 + 0.06 * math.sin(os.clock() * 7)
 		end

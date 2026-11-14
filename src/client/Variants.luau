@@ -63,6 +63,17 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/UI/Theme: global HUD / menu scale (short side of the viewport) + text floor (12 px phone, 14 px 1080p)
+		name = "UI SCALE",
+		keys = { "Feel_UiScale" },
+		presets = {
+			{ name = "A new (short-side scale + text floor)", set = {} },
+			{ name = "B new x0.9", set = { Feel_UiScale = 0.9 } },
+			{ name = "C new x1.15", set = { Feel_UiScale = 1.15 } },
+			{ name = "D old (x1, no floor)", set = { Feel_UiScale = "old" } },
+		},
+	},
+	{
 		-- server/PlayerService passive regen (mirrored to the server by client/Fx/VitalsFx, Action "studioFeel")
 		name = "REGEN",
 		keys = { "Feel_Regen" },
@@ -116,6 +127,17 @@ local GROUPS = {
 		},
 	},
 	{
+		-- server/Enemies/EnemyAI shootBolt (mirrored to the server by client/Fx/EnemyFx, Action "studioFeel"); numbers in
+		-- shared/Data/Enemies.luau (per-unit `aim`, Enemies.Aim)
+		name = "ENEMY AIM",
+		keys = { "Feel_EnemyAim" },
+		presets = {
+			{ name = "A new (wide -> tight, warning shots)", set = {} },
+			{ name = "B harsh (tighter, faster, 1 fewer warning)", set = { Feel_EnemyAim = "harsh" } },
+			{ name = "C old (fixed cone, no warnings)", set = { Feel_EnemyAim = "old" } },
+		},
+	},
+	{
 		-- haul objective (client/CellCarry forwards it to the server, shared/Carry.luau): what a core-cell carrier may use
 		name = "CARRY RULES",
 		keys = { "CarryTune_Rule" },
@@ -132,6 +154,109 @@ local GROUPS = {
 			{ name = "A fade when close / at screen centre", set = {} },
 			{ name = "B always solid", set = { TagTune_Mode = "solid" } },
 			{ name = "C off", set = { TagTune_Mode = "off" } },
+		},
+	},
+	{
+		-- client/Audio: Kill / KillWeak / DeathScrap swap to the `_PopB/C/D` entries in shared/Sounds
+		name = "POP SOUND",
+		keys = { "Feel_PopSound" },
+		presets = {
+			{ name = "A current (bright pop)", set = {} },
+			{ name = "B heavier (pop pitched down + low thump)", set = { Feel_PopSound = "B" } },
+			{ name = "C heaviest (no pop: deep thump + thud)", set = { Feel_PopSound = "C" } },
+			{ name = "D thump only", set = { Feel_PopSound = "D" } },
+		},
+	},
+	{
+		-- client/WeaponController.shoot: when the own shot sound starts within the shot frame
+		name = "SHOT SOUND PATH",
+		keys = { "Feel_ShotSoundPath" },
+		presets = {
+			{ name = "A new (sound before traces + effects)", set = {} },
+			{ name = "B old (sound after traces + effects)", set = { Feel_ShotSoundPath = "old" } },
+		},
+	},
+	{
+		-- client/Movement.twistStep: leg joints while lying prone (one owner, blended in / out)
+		name = "PRONE LEGS",
+		keys = { "Feel_ProneLegs" },
+		presets = {
+			{ name = "A lying pose + crawl flutter", set = {} },
+			{ name = "B lying pose, legs still", set = { Feel_ProneLegs = "still" } },
+			{ name = "C old (Animator drives the legs)", set = { Feel_ProneLegs = "anim" } },
+		},
+	},
+	{
+		-- server/MovementService.boost (mirrored by client/Movement): full stamina for N s after a stim
+		name = "STIM SPRINT",
+		keys = { "Feel_StimSprint" },
+		presets = {
+			{ name = "A 5 s", set = {} },
+			{ name = "B 4 s", set = { Feel_StimSprint = 4 } },
+			{ name = "C 6 s", set = { Feel_StimSprint = 6 } },
+			{ name = "D off", set = { Feel_StimSprint = 0 } },
+		},
+	},
+	{
+		-- client/ThrowArc: predicted path + landing ring while a beacon is armed or the grenade button is held
+		name = "THROW ARC",
+		keys = { "Feel_ThrowArc" },
+		presets = {
+			{ name = "A dots + ring", set = {} },
+			{ name = "B ring only", set = { Feel_ThrowArc = "ring" } },
+			{ name = "C off", set = { Feel_ThrowArc = "off" } },
+		},
+	},
+	{
+		-- client/ThrowArc.grenadeEdge (called from WeaponController's Grenade handler)
+		name = "GRENADE THROW",
+		keys = { "Feel_GrenadeThrow" },
+		presets = {
+			{ name = "A hold to aim, throw on release", set = {} },
+			{ name = "B old (throw on press, no arc)", set = { Feel_GrenadeThrow = "press" } },
+		},
+	},
+	{
+		-- client/Fx/CallInFx: flash + colour punch of Gravity Well / Cryo / Railshot / Firestorm (shake = BLAST SHAKE)
+		name = "CALL-IN PUNCH",
+		keys = { "Feel_CallInPunch" },
+		presets = {
+			{ name = "A normal (x1)", set = {} },
+			{ name = "B soft (x0.5)", set = { Feel_CallInPunch = 0.5 } },
+			{ name = "C strong (x1.5)", set = { Feel_CallInPunch = 1.5 } },
+			{ name = "D off (no flash / colour punch)", set = { Feel_CallInPunch = 0 } },
+		},
+	},
+	{
+		-- server/Objectives/Extraction (mirrored to the server by client/Fx/SkiffFx, Action "studioFeel"); takes effect on
+		-- the next Skiff descent. Numbers: SK table at the top of Extraction.luau
+		name = "SKIFF",
+		keys = { "Feel_SkiffMode" },
+		presets = {
+			{ name = "A hover until clear + door gun", set = {} },
+			{ name = "B hover until clear, no gun", set = { Feel_SkiffMode = "nogun" } },
+			{ name = "C old (lands on time)", set = { Feel_SkiffMode = "old" } },
+		},
+	},
+	{
+		-- server/Explosions.playerFalloff: splash share troopers take from mortars / cannons / acid (server = mirrored)
+		name = "PLAYER SPLASH",
+		keys = { "Feel_PlayerSplash" },
+		server = true,
+		presets = {
+			{ name = "A steep (linear, 25 % at the edge)", set = {} },
+			{ name = "B same as enemies (45 % at the edge, soft)", set = { Feel_PlayerSplash = "enemy" } },
+		},
+	},
+	{
+		-- server/Mission.luau mission clock, minutes; applies from the next drop (server = mirrored)
+		name = "MISSION TIME",
+		keys = { "Feel_MissionTime" },
+		server = true,
+		presets = {
+			{ name = "A 18 min", set = {} },
+			{ name = "B 14 min", set = { Feel_MissionTime = 14 } },
+			{ name = "C 25 min (old)", set = { Feel_MissionTime = 25 } },
 		},
 	},
 }
@@ -178,6 +303,13 @@ local function apply()
 	local p = g.presets[presetIdx]
 	for _, k in g.keys do
 		workspace:SetAttribute(k, (p.set or {})[k])
+	end
+	-- groups marked `server` are read by server code: mirror them (server/PlayerService Action "studioFeel")
+	if g.server then
+		local Net = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Net"))
+		for _, k in g.keys do
+			Net.event("Action"):FireServer("studioFeel", k, (p.set or {})[k])
+		end
 	end
 	applySounds(g, p)
 	if label then

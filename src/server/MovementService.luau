@@ -23,6 +23,7 @@ type MoveRec = {
 	lastDrain: number,
 	lastDive: number,
 	sentStamina: number,
+	boostEnd: number, -- stim sprint: server time until which stamina stays full (0 = none)
 }
 local moves: { [Player]: MoveRec } = {}
 
@@ -31,7 +32,7 @@ local function now()
 end
 
 local function fresh(): MoveRec
-	return { stamina = 1, exhausted = false, sprinting = false, stance = "stand", lastDrain = 0, lastDive = -99, sentStamina = 1 }
+	return { stamina = 1, exhausted = false, sprinting = false, stance = "stand", lastDrain = 0, lastDive = -99, sentStamina = 1, boostEnd = 0 }
 end
 
 local function get(p: Player): MoveRec
@@ -69,6 +70,21 @@ function MovementService.state(p: Player): (number, boolean, string)
 	return m.stamina, m.exhausted, st
 end
 
+-- Stim sprint: stamina stays full (no drain, never exhausted) for `seconds` from now. Sent in `me` as sprintBoostEnd.
+function MovementService.boost(p: Player, seconds: number)
+	if seconds <= 0 then
+		return
+	end
+	local m = get(p)
+	m.boostEnd = now() + seconds
+	m.stamina, m.exhausted = 1, false
+end
+
+-- Server time the running stim sprint ends (0 = none); merged into `me` by PlayerService.buildMe.
+function MovementService.boostEnd(p: Player): number
+	return get(p).boostEnd
+end
+
 function MovementService.getStance(p: Player): string
 	return get(p).stance
 end
@@ -76,6 +92,7 @@ end
 function MovementService.onCharacter(p: Player, c: Model)
 	local m = get(p)
 	m.stamina, m.exhausted, m.sprinting, m.stance = 1, false, false, "stand"
+	m.boostEnd = 0
 	c:SetAttribute("Stance", "stand")
 	c:SetAttribute("Twist", 0)
 	PS.publish(p)
@@ -169,7 +186,13 @@ function MovementService.step(p: Player, dt: number)
 		local v = root.AssemblyLinearVelocity
 		moving = Vector3.new(v.X, 0, v.Z).Magnitude > 6
 	end
-	if m.sprinting and moving and not m.exhausted then
+	if t < m.boostEnd then
+		-- stim sprint: pinned full
+		m.stamina, m.exhausted = 1, false
+		if m.sprinting and moving then
+			m.lastDrain = t
+		end
+	elseif m.sprinting and moving and not m.exhausted then
 		m.stamina = math.max(0, m.stamina - dt / M.SprintTime)
 		m.lastDrain = t
 		if m.stamina <= 0 then

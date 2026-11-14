@@ -18,6 +18,7 @@ local Input = require(script.Parent.Input)
 local Audio = require(script.Parent.Audio)
 local Cam = require(script.Parent.CameraController)
 local Codes = require(script.Parent.UI.UplinkCodes)
+local ThrowArc = require(script.Parent.ThrowArc)
 
 local CallInController = {}
 local actionEv: RemoteEvent
@@ -107,6 +108,7 @@ end
 local function throw()
 	local p = aimPointFn(45, 0)
 	actionEv:FireServer("callin_throw", p)
+	ThrowArc.thrown()
 	Store.set("holding", nil)
 	Codes.setArmed(nil)
 	refreshHints()
@@ -272,6 +274,7 @@ function CallInController.init(dialModule, aimPoint: (number, number?) -> Vector
 	actionEv = Net.event("Action")
 	Codes.init()
 	refreshHints()
+	ThrowArc.init(aimPoint, CallInController.isHolding, heldId)
 
 	Input.on("Dial", function(down)
 		if down then

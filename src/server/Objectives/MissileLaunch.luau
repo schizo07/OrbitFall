@@ -941,14 +941,25 @@ function MissileLaunch.start(ctx: any, onComplete: () -> ()): any
 						ctx.sound("MissileLaunch", siloCF.Position)
 						ctx.fx("Shake", { p = siloCF.Position, mag = 3, r = 1200 })
 						ctx.fx("Shake", { p = siloMouth, mag = 4, r = 120 }) -- strong shake for anyone close to the silo
-						ctx.fx("Explosion", { p = siloMouth, r = 30, size = "XL", style = "fire" })
-						-- scorch whatever stands at the base
-						if S and S.Enemies and S.Enemies.explode then
-							pcall(S.Enemies.explode, siloCF.Position, 40, 18, 600, 5, { kind = "objective", id = "MissileLaunch" })
-						end
-						if S and S.Players and S.Players.knock then
-							for _, pl in ctx.playersNear(siloCF.Position, 26) do
-								pcall(S.Players.knock, pl, siloCF.Position, 90)
+						-- scorch whatever stands at the base (shared blast path: damage, trooper knockdown, effect)
+						if S and S.Explosions and S.Explosions.blast then
+							local ok, err = pcall(S.Explosions.blast, siloCF.Position, {
+								radius = 40,
+								core = 18,
+								damage = 600,
+								ap = 5,
+								size = "XL",
+								style = "fire",
+								vis = 3.5,
+								knock = 90,
+							}, { kind = "objective", id = "MissileLaunch" })
+							if not ok then
+								warn("[MissileLaunch] blast failed:", err)
+							end
+						else
+							ctx.fx("Explosion", { p = siloMouth, r = 30, size = "XL", style = "fire" })
+							if S and S.Enemies and S.Enemies.explode then
+								pcall(S.Enemies.explode, siloCF.Position, 40, 18, 600, 5, { kind = "objective", id = "MissileLaunch" })
 							end
 						end
 						-- fly: reparent out of the objective folder so it survives Objectives.stop()

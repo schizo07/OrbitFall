@@ -1,6 +1,7 @@
 -- Top-left area / mission info panel (above the UPLINK list): where we are and what to do next.
 --   zone     planet name (big), sector + biome line, enemy faction + difficulty
 --   objective  active step of the primary objective, with a rotating arrow and the distance (m) to its marker
+--              (PC only; on touch the objective block of UI/ObjectiveList sits right below this panel instead)
 --   threat   Director pacing state (calm / building / breach / lull) + live hostile count  (PC only)
 --   extract  skiff ETA / boarding window countdown once the extraction is called, or "extraction active"
 -- Pure display. Data (all already replicated, HUD forwards it): Store "mission" { planet, planetName, factionName,
@@ -39,7 +40,7 @@ function AreaInfo.build(parent: Instance, isTouch: boolean, order: number?)
 	touch = isTouch
 	local p = Style.panel({
 		Name = "AreaInfo",
-		Size = if isTouch then UDim2.fromOffset(176, 0) else UDim2.new(1, 0, 0, 0),
+		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		LayoutOrder = order or 1,
 		Visible = false,
@@ -212,7 +213,7 @@ function AreaInfo.update(m: any, objs: any, it: any, t: number)
 		sectorLine = (sec and sec.name or "") .. (if BIOME_NAMES[planet.biome] then "  /  " .. BIOME_NAMES[planet.biome] else "")
 	end
 	ui.sector.Text = Style.up(sectorLine)
-	ui.sector.Visible = sectorLine ~= ""
+	ui.sector.Visible = sectorLine ~= "" and not touch -- phones: short panel, the objective block sits right under it
 	local fac = m.factionName
 	if type(fac) == "string" and fac ~= "" then
 		ui.faction.Text = Style.up(fac) .. "  -  DIFF " .. tostring(m.difficulty or 1)
@@ -224,6 +225,11 @@ function AreaInfo.update(m: any, objs: any, it: any, t: number)
 	-- objective
 	local text, marker = primaryObjective(objs)
 	target = marker
+	-- touch: UI/ObjectiveList sits in the same column right below and shows the step + distance itself
+	if touch then
+		text, marker = nil, nil
+		target = nil
+	end
 	ui.objText.Visible = text ~= nil
 	ui.divider.Visible = text ~= nil or ui.sector.Visible
 	if text then
@@ -261,7 +267,7 @@ function AreaInfo.update(m: any, objs: any, it: any, t: number)
 			line = "BOARD NOW  " .. Theme.formatTime(ex.window - t)
 			blinkExtract = true
 		else
-			line = "SKIFF ON STATION"
+			line = if type(ex.label) == "string" then ex.label else "SKIFF ON STATION"
 		end
 	elseif m.state == "Extract" then
 		line = "EXTRACTION ACTIVE"

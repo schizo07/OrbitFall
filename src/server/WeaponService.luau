@@ -7,6 +7,7 @@ local Weapons = require(Shared.Data.Weapons)
 local EnemiesData = require(Shared.Data.Enemies)
 local Aim = require(Shared.Aim)
 local Blasts = require(Shared.Data.Blasts)
+local Throw = require(Shared.Throw)
 
 local WeaponService = {}
 local S
@@ -376,6 +377,17 @@ local function traceShot(p: Player, w, origin: Vector3, dir: Vector3, pierceLeft
 				return
 			end
 			local hr = S.Enemies.hit(inst, w.damage, w.ap, { player = p, kind = "bullet", id = w.id }, endPos)
+			-- Cryo Bomb shatter: frozen enemies take the extra share of whatever got through the armour
+			if hr and hr.dealt > 0 and not hr.killed and S.Explosions and S.Explosions.frozenMult and S.Enemies.getById then
+				local fe = S.Enemies.getById(inst:GetAttribute("EnemyId"))
+				local mult = if fe then S.Explosions.frozenMult(fe) else 1
+				if mult > 1 then
+					local extra = S.Enemies.damage(fe, hr.dealt * (mult - 1), 6, { player = p, kind = "bullet", id = w.id }, "body")
+					if extra and extra.killed then
+						hr.killed = true
+					end
+				end
+			end
 			if hr then
 				if report then
 					hitConfirm:FireClient(p, hr.result, endPos, hr.killed, hr.weak)
@@ -581,7 +593,8 @@ local function onGrenade(p: Player, aimPoint: any)
 	local folder = workspace:FindFirstChild("CallInObjects") or Instance.new("Folder")
 	folder.Name = "CallInObjects"
 	folder.Parent = workspace
-	local startPos = origin + (aimPoint - origin).Unit * 2
+	local launch = Throw.grenade(origin, aimPoint, workspace.Gravity)
+	local startPos = launch.origin
 	local g: Part? = GRENADE_MESH[gw.id] and buildMeshProjectile(GRENADE_MESH[gw.id], CFrame.new(startPos)) or nil
 	local meshGrenade = g ~= nil
 	if not g then
@@ -601,14 +614,7 @@ local function onGrenade(p: Player, aimPoint: any)
 	light.Range = 6
 	light.Brightness = 2
 	light.Parent = g
-	local d = aimPoint - origin
-	local flat = Vector3.new(d.X, 0, d.Z)
-	local dist = math.clamp(flat.Magnitude, 4, 40)
-	local speed = 55
-	local tFlight = dist / speed
-	local vy = (d.Y + 0.5 * workspace.Gravity * tFlight * tFlight) / tFlight
-	vy = math.clamp(vy, -10, 60)
-	local launchVel = (flat.Magnitude > 0.1 and flat.Unit or Vector3.new(0, 0, -1)) * speed + Vector3.new(0, vy, 0)
+	local launchVel = launch.velocity -- shared/Throw (client/ThrowArc predicts the same path)
 	g.AssemblyLinearVelocity = launchVel
 	g.Parent = folder
 	if meshGrenade then

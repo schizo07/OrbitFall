@@ -231,6 +231,37 @@ local S: { [string]: Entry } = {
 		{ id = "rbxassetid://4612374495", desc = "satisfying pop burst", vol = 0.6, pitch = { 1.0, 1.15 }, maxDist = 250 },
 	}, { limit = { count = 3, window = 0.3 } }),
 
+	-- POP SOUND A/B (Feel_PopSound "B" / "C" / "D"): Audio.play swaps Kill / KillWeak / DeathScrap for the
+	-- matching `<key>_PopB/C/D` entry. Existing ids only: pitched-down pop, low thump from the small-boom body.
+	Kill_PopB = K(I, 3, {
+		{ id = "rbxassetid://140323850218372", desc = "pop, pitched down", vol = 0.45, pitch = { 0.7, 0.78 }, maxDist = 250 },
+		{ id = "rbxassetid://129848017786439", desc = "low thump (small boom body, pitched down)", vol = 0.6, pitch = { 0.62, 0.7 }, maxDist = 250 },
+		{ id = "rbxassetid://72264591133889", desc = "scrap metal clatter small, lower", vol = 0.45, delay = { 0.03, 0.1 }, pitch = { 0.75, 0.9 }, maxDist = 200 },
+	}, { limit = { count = 4, window = 0.3 } }),
+	Kill_PopC = K(I, 3, {
+		{ id = "rbxassetid://129848017786439", desc = "low thump, deep", vol = 0.75, pitch = { 0.52, 0.58 }, maxDist = 250 },
+		{ id = "rbxassetid://9120885468", desc = "dull thud", vol = 0.55, pitch = { 0.6, 0.7 }, maxDist = 220 },
+		{ id = "rbxassetid://72264591133889", desc = "scrap metal clatter, dark", vol = 0.35, delay = { 0.03, 0.1 }, pitch = { 0.65, 0.8 }, maxDist = 200 },
+	}, { limit = { count = 4, window = 0.3 } }),
+	Kill_PopD = K(I, 3, {
+		{ id = "rbxassetid://129848017786439", desc = "low thump only", vol = 0.75, pitch = { 0.58, 0.64 }, maxDist = 250 },
+	}, { limit = { count = 4, window = 0.3 } }),
+
+	KillWeak_PopB = K(I, 3, {
+		{ id = "rbxassetid://4612374393", desc = "critical kill ding", vol = 0.8, pitch = { 1.05, 1.2 }, minDist = 20, maxDist = 300 },
+		{ id = "rbxassetid://4612374495", desc = "pop burst, pitched down", vol = 0.4, pitch = { 0.7, 0.8 }, maxDist = 250 },
+		{ id = "rbxassetid://129848017786439", desc = "low thump", vol = 0.55, pitch = { 0.62, 0.7 }, maxDist = 250 },
+	}, { limit = { count = 3, window = 0.3 } }),
+	KillWeak_PopC = K(I, 3, {
+		{ id = "rbxassetid://4612374393", desc = "critical kill ding, lower", vol = 0.7, pitch = { 0.9, 1.0 }, minDist = 20, maxDist = 300 },
+		{ id = "rbxassetid://129848017786439", desc = "low thump, deep", vol = 0.75, pitch = { 0.52, 0.58 }, maxDist = 250 },
+		{ id = "rbxassetid://9120885468", desc = "dull thud", vol = 0.5, pitch = { 0.6, 0.7 }, maxDist = 220 },
+	}, { limit = { count = 3, window = 0.3 } }),
+	KillWeak_PopD = K(I, 3, {
+		{ id = "rbxassetid://4612374393", desc = "critical kill ding", vol = 0.8, pitch = { 1.05, 1.2 }, minDist = 20, maxDist = 300 },
+		{ id = "rbxassetid://129848017786439", desc = "low thump only", vol = 0.75, pitch = { 0.58, 0.64 }, maxDist = 250 },
+	}, { limit = { count = 3, window = 0.3 } }),
+
 	Footstep = K(I, 1, {
 		{ id = "rbxassetid://98912102275037", desc = "boot footstep on dirt/gravel, soft", vol = 0.35, pitch = { 0.85, 1.15 }, minDist = 4, maxDist = 60, volVar = 0.2, start = 0.07 }, -- start: onset 101 -> 17 ms
 	}, { limit = { count = 4, window = 0.3 } }),
@@ -274,6 +305,20 @@ local S: { [string]: Entry } = {
 		{ id = "rbxassetid://9120253198", desc = "robot explosion pop, small burst, cartoony", vol = 0.8, pitch = { 0.9, 1.1 }, maxDist = 280, start = 0.64 }, -- start: onset 667 -> 32 ms
 		{ id = "rbxassetid://9119068481", desc = "scrap metal clatter falling parts", vol = 0.65, delay = { 0.05, 0.2 }, pitch = { 0.9, 1.15 }, maxDist = 220 },
 		{ id = "rbxassetid://9120253198", desc = "bolts and screws scatter tinkle", vol = 0.35, delay = { 0.15, 0.4 }, pitch = { 1.0, 1.3 }, maxDist = 120 },
+	}, { limit = { count = 3, window = 0.3 } }),
+	DeathScrap_PopB = K(E, 3, {
+		{ id = "rbxassetid://9120253198", desc = "robot burst, pitched down", vol = 0.55, pitch = { 0.7, 0.8 }, maxDist = 280, start = 0.64 },
+		{ id = "rbxassetid://129848017786439", desc = "low thump (small boom body)", vol = 0.7, pitch = { 0.62, 0.72 }, maxDist = 260 },
+		{ id = "rbxassetid://9119068481", desc = "scrap metal clatter falling parts", vol = 0.65, delay = { 0.05, 0.2 }, pitch = { 0.85, 1.0 }, maxDist = 220 },
+		{ id = "rbxassetid://9120253198", desc = "bolts scatter, lower", vol = 0.25, delay = { 0.15, 0.4 }, pitch = { 0.8, 1.0 }, maxDist = 120 },
+	}, { limit = { count = 3, window = 0.3 } }),
+	DeathScrap_PopC = K(E, 3, {
+		{ id = "rbxassetid://129848017786439", desc = "low thump, deep", vol = 0.8, pitch = { 0.55, 0.62 }, maxDist = 260 },
+		{ id = "rbxassetid://9116546326", desc = "boom body with metal groan, small", vol = 0.5, pitch = { 0.95, 1.1 }, maxDist = 240 },
+		{ id = "rbxassetid://9119068481", desc = "scrap metal clatter, dark", vol = 0.7, delay = { 0.05, 0.2 }, pitch = { 0.75, 0.9 }, maxDist = 220 },
+	}, { limit = { count = 3, window = 0.3 } }),
+	DeathScrap_PopD = K(E, 3, {
+		{ id = "rbxassetid://129848017786439", desc = "low thump only", vol = 0.85, pitch = { 0.58, 0.66 }, maxDist = 260 },
 	}, { limit = { count = 3, window = 0.3 } }),
 
 	DeathGoo = K(E, 3, {

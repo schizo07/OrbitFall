@@ -8,7 +8,8 @@
 -- Off while airborne, diving, mantling, knocked down, prone or dead (checked: enabled() returns false for stance "prone"
 -- and for any Movement mode; while prone the Humanoid state was also Freefall before the prone hover-height fix).
 -- NOTE: PreSimulation handlers of one signal run in REVERSE connection order (measured in Studio), so this one, connected
--- last in Main, actually runs FIRST in the frame, before CombatPose and Movement; it only needs the Animator's values.
+-- last in Main, runs before CombatPose and Movement.step (only Movement's delayed twist / lying-pose handler runs earlier);
+-- it only needs the Animator's values. While prone the leg joints belong to Movement's lying pose, not to this module.
 -- Studio: workspace attribute FootPlant=false turns it off live for A/B.
 
 local Players = game:GetService("Players")
@@ -18,6 +19,8 @@ local FootPlant = {}
 
 local player = Players.LocalPlayer
 local Movement: any = nil
+local BodyDebug = require(script.Parent.BodyDebug)
+local lastOn = false -- enabled() result of the last step (BodyDebug readout)
 
 local MIN_PEN = 0.03 -- ignore sinkage smaller than this (studs)
 local MAX_LIFT = 1.6 -- never lift a foot by more than this (big ledges: the leg simply cannot reach)
@@ -58,6 +61,9 @@ end
 local function writeT(j: any, base: CFrame, t: CFrame)
 	j.Transform = t
 	written[j] = { mine = j.Transform, base = base }
+	if BodyDebug.on then
+		BodyDebug.mark(j, "T", "FootPlant")
+	end
 end
 -- Part1 world = Part0 world * C0 * Transform * C1^-1 (Motor6D and AnimationConstraint alike)
 local function child(parentCF: CFrame, j: any): CFrame
@@ -116,33 +122,42 @@ local function build(c: Model)
 	rig = { root = root, rootJ = rootJ, hum = hum, char = c, legs = legs }
 end
 
-local function enabled(): boolean
+-- Second result true = only a "soft" reason (FloorMaterial Air / Freefall / Jumping) turned it off. Those flip for a
+-- frame or two when walking over bumps; step() keeps the planting on through them for SOFT_HOLD seconds (hysteresis)
+-- instead of dropping and re-raising the feet. A real fall needs no gate: the rays find no ground near the feet.
+local function enabled(): (boolean, boolean)
 	local r = rig
 	if not r or not r.char.Parent or r.hum.Health <= 0 then
-		return false
+		return false, false
 	end
 	if RunService:IsStudio() and workspace:GetAttribute("FootPlant") == false then
-		return false
+		return false, false
 	end
-	if r.hum.FloorMaterial == Enum.Material.Air or r.root.Anchored then
-		return false
+	if r.root.Anchored then
+		return false, false
 	end
 	local st = r.hum:GetState()
-	if st == Enum.HumanoidStateType.Freefall or st == Enum.HumanoidStateType.Jumping or st == Enum.HumanoidStateType.Seated or st == Enum.HumanoidStateType.PlatformStanding then
-		return false
+	if st == Enum.HumanoidStateType.Seated or st == Enum.HumanoidStateType.PlatformStanding then
+		return false, false
 	end
+	local soft = r.hum.FloorMaterial == Enum.Material.Air or st == Enum.HumanoidStateType.Freefall or st == Enum.HumanoidStateType.Jumping
 	if Movement then
 		local okM, mode = pcall(Movement.getMode)
 		if okM and mode ~= "none" then
-			return false
+			return false, false
 		end
 		local okS, stance = pcall(Movement.getStance)
 		if okS and stance == "prone" then
-			return false
+			return false, false
 		end
 	end
-	return true
+	if soft then
+		return false, true
+	end
+	return true, false
 end
+local SOFT_HOLD = 0.12
+local softFor = 0
 
 local function groundHit(p: Vector3, from: number): RaycastResult?
 	return workspace:Raycast(Vector3.new(p.X, from, p.Z), Vector3.new(0, -(from - p.Y) - 2.5, 0), rayParams)
@@ -155,8 +170,15 @@ local function step(dt: number)
 	if not r then
 		return
 	end
-	local on = enabled()
-	local ex = { r.char, workspace.CurrentCamera }
+	local on, soft = enabled()
+	if soft then
+		softFor += dt
+		on = softFor < SOFT_HOLD
+	else
+		softFor = 0
+	end
+	lastOn = on
+	local ex ={ r.char, workspace.CurrentCamera }
 	local en = workspace:FindFirstChild("Enemies")
 	if en then
 		table.insert(ex, en)
@@ -210,6 +232,9 @@ local function step(dt: number)
 				if w then
 					if j.Transform == w.mine then
 						j.Transform = w.base
+						if BodyDebug.on then
+							BodyDebug.mark(j, "T", "FootPlant")
+						end
 					end
 					written[j] = nil
 				end
@@ -262,6 +287,15 @@ local function step(dt: number)
 		writeT(leg.knee, animT(leg.knee), transformFor(newUl, leg.knee, newLl))
 		writeT(leg.ankle, animT(leg.ankle), transformFor(newLl, leg.ankle, newFt))
 	end
+end
+
+-- BodyDebug readout: (enabled last step, left lift, right lift) in studs
+function FootPlant.debugState(): (boolean, number, number)
+	local r = rig
+	if not r then
+		return false, 0, 0
+	end
+	return lastOn, r.legs[1] and r.legs[1].lift or 0, r.legs[2] and r.legs[2].lift or 0
 end
 
 function FootPlant.init(movement: any)

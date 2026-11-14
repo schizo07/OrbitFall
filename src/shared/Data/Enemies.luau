@@ -55,7 +55,14 @@ export type Enemy = {
 	static: boolean?,
 	turn: number?,
 	wreck: boolean?, -- leaves a wreck model for ~60 s (server/Enemies/Wrecks.luau)
+	-- ENEMY AIM (bolt / burst shooters, server/Enemies/EnemyAI.luau shootBolt). Cone half-angles in degrees. Missing = Enemies.AimDefault.
+	aim: Aim?,
 }
+-- base: spread when the target is first acquired (or comes back out of cover); min: spread after `tighten` s of steady aim.
+-- rangeMul: extra spread per Enemies.Aim.rangeRef studs beyond Enemies.Aim.rangeFrom; moveMul: extra spread for a target
+-- moving at walk speed (more when sprinting, see Enemies.Aim.sprintBonus); warnShots: first shots after spotting a target
+-- deliberately fly past it (near-miss tracers).
+export type Aim = { base: number, min: number, tighten: number, rangeMul: number, moveMul: number, warnShots: number }
 
 local E: { [string]: Enemy } = {
 	-- THE COGWORK LEGION ------------------------------------------------------------
@@ -67,6 +74,7 @@ local E: { [string]: Enemy } = {
 			eye = { armor = 0, mult = 2, fatal = 25 },
 		},
 		attacks = { { kind = "bolt", damage = 15, range = 70, cooldown = 0.85, speed = 110 } },
+		aim = { base = 9, min = 2.2, tighten = 2.5, rangeMul = 0.5, moveMul = 0.6, warnShots = 2 },
 		keepDistance = 30, salvage = 2, xp = 2,
 		desc = "Cheap biped bot. Eye pops with one good shot.",
 	},
@@ -80,6 +88,7 @@ local E: { [string]: Enemy } = {
 			shield = { armor = 3, mult = 0, blocks = true },
 		},
 		attacks = { { kind = "burst", damage = 25, range = 80, cooldown = 2.2, speed = 120, count = 3 } },
+		aim = { base = 7, min = 1.8, tighten = 2.0, rangeMul = 0.4, moveMul = 0.5, warnShots = 2 },
 		keepDistance = 35, salvage = 6, xp = 6,
 		desc = "Front riot shield. Flank it or shoot the eye over the rim.",
 		wreck = true,
@@ -282,6 +291,7 @@ local function fodder(baseId: string, id: string, name: string, speedMult: numbe
 end
 E.TINKER_SWARM = fodder("TINKER", "TINKER_SWARM", "Scrap Swarmer", 1.15,
 	{ kind = "bolt", damage = 6, range = 45, cooldown = 1.4, speed = 100 }, 20)
+E.TINKER_SWARM.aim = { base = 12, min = 4, tighten = 3, rangeMul = 0.6, moveMul = 0.8, warnShots = 1 }
 E.SKITTER_SWARM = fodder("SKITTER", "SKITTER_SWARM", "Skitterling Swarm", 1.05,
 	{ kind = "bite", damage = 8, range = 4.5, cooldown = 1.2, windup = 0.3 }, nil)
 E.SHARDLING_SWARM = fodder("SHARDLING", "SHARDLING_SWARM", "Shard Swarmer", 1.1,
@@ -292,6 +302,26 @@ local Enemies = { byId = E }
 -- STAGED DAMAGE: HP fraction below which each stage shows (stage 1 smoke / drips, 2 glowing breach + sparks, 3 fire / bubbling
 -- ooze). Server: EnemyService writes model attribute DmgStage. Client: client/Fx/EnemyFx.luau.
 Enemies.Stages = { 0.7, 0.4, 0.2 }
+
+-- ENEMY AIM (server/Enemies/EnemyAI.luau). Per-unit numbers live in each def's `aim`; these are the shared rules.
+--   spread = lerp(base, min, aimedFor / tighten) x range x movement x stance
+--   range:    1 + rangeMul * clamp((dist - rangeFrom) / rangeRef, 0, 2)
+--   movement: 1 + moveMul * clamp(speed / walk, 0, 1), x (1 + moveMul * sprintBonus) above sprintAt studs/s
+--   stance:   prone / crouch multipliers
+-- Losing line of sight restarts the tighten clock; out of sight for `reacquire` s also re-arms the warning shots.
+-- Warning shots fly `warnOffset` studs to the side of the target and can never hit that player.
+Enemies.AimDefault = { base = 8, min = 2, tighten = 2.5, rangeMul = 0.5, moveMul = 0.6, warnShots = 1 } :: Aim
+Enemies.Aim = {
+	rangeFrom = 20, rangeRef = 60,
+	sprintAt = 19, sprintBonus = 0.6,
+	prone = 1.45, crouch = 1.15,
+	reacquire = 4,
+	warnOffset = { 3.8, 5.5 },
+	-- Studio A/B Feel_EnemyAim "harsh": spread x harshSpread, tighten time x harshTighten, one warning shot fewer
+	harshSpread = 0.65, harshTighten = 0.6,
+	-- Feel_EnemyAim "old": the previous fixed cones, no warning shots
+	oldBolt = 2.5, oldBurst = 3,
+}
 
 -- BLAST REACTIONS (EnemyService.explode -> EnemyAI.fling). power = falloff (0..1) x clamp((dmg / ref) ^ 0.5, min, max).
 -- Below minPower nothing happens. dist / height in studs at power 1, dur / recover in seconds.

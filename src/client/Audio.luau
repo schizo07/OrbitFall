@@ -9,7 +9,7 @@
 --   Audio.duck(groups, db, seconds)
 --   Audio.setMusic(key|nil, fade?)
 --   Audio.setGroupVolume(group, v) / Audio.setMasterVolume(v)
---   Audio.preload()               background ContentProvider:PreloadAsync of every non-empty id
+--   Audio.preload()               background ContentProvider:PreloadAsync of every non-empty id (run once by init)
 --   Audio.init()                  idempotent (also called lazily)
 --   Audio.stopAll()
 --   Audio.distanceToListener(pos)
@@ -115,6 +115,7 @@ function Audio.init()
 	p.CFrame = CFrame.new(0, 3000, 0)
 	p.Parent = workspace
 	holder = p
+	Audio.preload() -- warm the cache and Sound pool (background), gun shots first
 end
 
 local function ensure()
@@ -190,6 +191,24 @@ local function range(v: any, default: any): number
 	return lo + (hi - lo) * rng:NextNumber()
 end
 
+-- Gun-shot ids keep a bigger pool of loaded Sounds: a fresh Sound instance can start a frame or more late while it
+-- loads, which is heard as a delayed shot during full-auto bursts.
+local WEAPON_POOL = 10
+local weaponIds: { [string]: boolean } = {}
+for _, entry in Sounds do
+	if entry.group == "Weapons" then
+		for _, l in entry.layers do
+			if l.id and l.id ~= "" then
+				weaponIds[l.id] = true
+			end
+		end
+	end
+end
+
+local function poolCap(id: string): number
+	return if weaponIds[id] then WEAPON_POOL else POOL_PER_ID
+end
+
 local function acquireSound(id: string): Sound
 	local list = soundPool[id]
 	local s = list and table.remove(list)
@@ -210,7 +229,7 @@ local function recycleSound(s: Sound)
 		list = {}
 		soundPool[id] = list
 	end
-	if #list < POOL_PER_ID then
+	if #list < poolCap(id) then
 		s.Volume = 0
 		table.insert(list, s)
 	else
@@ -413,7 +432,16 @@ end
 
 -- PLAY ------------------------------------------------------------------------------
 
+-- POP SOUND A/B: Feel_PopSound "B" / "C" / "D" plays `<key>_PopB/C/D` (Sounds.luau) instead of these keys
+local POP_KEYS = { Kill = true, KillWeak = true, DeathScrap = true }
+
 function Audio.play(key: string, at: any?, opts: { volume: number?, pitch: number?, source: any?, priority: number? }?): boolean
+	if POP_KEYS[key] then
+		local v = workspace:GetAttribute("Feel_PopSound")
+		if type(v) == "string" and Sounds[key .. "_Pop" .. v] then
+			key = key .. "_Pop" .. v
+		end
+	end
 	local entry = Sounds[key]
 	if not entry then
 		warnOnce("unknown sound key " .. tostring(key))
@@ -443,16 +471,13 @@ function Audio.play(key: string, at: any?, opts: { volume: number?, pitch: numbe
 	for _, layer in entry.layers do
 		local id = layer.id
 		if id ~= nil and id ~= "" then
-			local ok = true
-			if layer.far and dist < farDist then
-				ok = false
-			elseif layer.near and dist > nearDist then
-				ok = false
-			elseif pos and dist > (layer.maxDist or 450) then
-				ok = false
-			elseif layer.chance and rng:NextNumber() > layer.chance then
-				ok = false
-			end
+			-- skip: far-only layer up close, near-only layer far away, out of range, or lost the chance roll
+			local ok = not (
+				(layer.far and dist < farDist)
+				or (layer.near and dist > nearDist)
+				or (pos and dist > (layer.maxDist or 450))
+				or (layer.chance and rng:NextNumber() > layer.chance)
+			)
 			if ok then
 				played = true
 				local varv = layer.volVar or 0.1
@@ -734,11 +759,21 @@ function Audio.stopAll()
 end
 
 -- Warms the asset cache and the Sound pool. Runs in the background.
+-- Gun-shot ids go first and get several pooled copies each, so the first shots of a mission never wait on a load.
+local preloaded = false
 function Audio.preload()
 	ensure()
+	if preloaded then
+		return
+	end
+	preloaded = true
 	task.spawn(function()
 		local ids: { string } = {}
 		local seen = {}
+		for id in weaponIds do
+			seen[id] = true
+			table.insert(ids, id)
+		end
 		for _, entry in Sounds do
 			for _, l in entry.layers do
 				if l.id and l.id ~= "" and not seen[l.id] then
@@ -751,10 +786,13 @@ function Audio.preload()
 		for i = 1, #ids, BATCH do
 			local batch = {}
 			for j = i, math.min(i + BATCH - 1, #ids) do
-				local s = Instance.new("Sound")
-				s.SoundId = ids[j]
-				s.RollOffMode = Enum.RollOffMode.InverseTapered
-				table.insert(batch, s)
+				local copies = if weaponIds[ids[j]] then 4 else 1
+				for _ = 1, copies do
+					local s = Instance.new("Sound")
+					s.SoundId = ids[j]
+					s.RollOffMode = Enum.RollOffMode.InverseTapered
+					table.insert(batch, s)
+				end
 			end
 			local ok, err = pcall(function()
 				ContentProvider:PreloadAsync(batch)
@@ -768,7 +806,7 @@ function Audio.preload()
 					list = {}
 					soundPool[s.SoundId] = list
 				end
-				if #list < POOL_PER_ID then
+				if #list < poolCap(s.SoundId) then
 					s.Volume = 0
 					table.insert(list, s)
 				else

@@ -2,7 +2,7 @@
 --   own actions  -> a tiny line above the own card:   RELOADING (reload bar starts), GRENADE OUT (grenade count drops),
 --                   CALLING IN <NAME> (a call-in is armed / being held), NEED REINFORCE (local player went down)
 --   spotting     -> a radio line in the event feed:   BREACH - NW! (Fx "Breach"), HEAVY CONTACT - NE (Fx "HeavyContact")
---   squadmates   -> "B2: NEED REINFORCE" in the feed when a squadmate goes from alive to down (Store "squad")
+--   squadmates   -> "S2: NEED REINFORCE" in the feed when a squadmate goes from alive to down (Store "squad")
 --   call-ins     -> "<NAME> ON TARGET" in amber when a beacon lands (Fx "Beacon" / "BeaconEnd")
 --   squad call-ins -> Fx "CallInCard" {u, id, s = "arm"|"throw"} from the server: a card mid-left (UI/CallInCards) for
 --                   every trooper, and on "arm" the callout line "<name>: <line>" (CallIns.callout) in the trooper's colour.

@@ -2173,8 +2173,9 @@ local function dressSite(parent: Instance, name: string, faction: string)
 			local ba = math.rad(45 + k * 90)
 			local bx, bz = c.X + math.cos(ba) * 14, c.Y + math.sin(ba) * 14
 			local bp = onGround(bx, bz, 0.95)
-			part(parent, Vector3.new(0.8, 2.2, 0.8), CFrame.new(bp), RGB(230, 170, 40), Enum.Material.Metal)
-			decor(parent, Vector3.new(0.86, 0.45, 0.86), CFrame.new(bp + Vector3.new(0, 0.3, 0)), RGB(28, 28, 30), Enum.Material.Metal)
+			-- named so objectives that pave the apron (HaulCells cargo lifter plaza) can clear them
+			part(parent, Vector3.new(0.8, 2.2, 0.8), CFrame.new(bp), RGB(230, 170, 40), Enum.Material.Metal, { Name = "HazardBollard" })
+			decor(parent, Vector3.new(0.86, 0.45, 0.86), CFrame.new(bp + Vector3.new(0, 0.3, 0)), RGB(28, 28, 30), Enum.Material.Metal, { Name = "HazardBollard" })
 		end
 		marker(parent, onGround(c.X - 26, c.Y - 26), RGB(255, 120, 70), true)
 		marker(parent, onGround(c.X + 26, c.Y + 26), RGB(255, 120, 70), true)

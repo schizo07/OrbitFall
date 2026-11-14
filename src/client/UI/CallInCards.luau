@@ -40,14 +40,19 @@ local function build()
 	holder.Name = "Cards"
 	holder.BackgroundTransparency = 1
 	holder.Size = UDim2.fromOffset(W, MAX * (H + 4))
-	if touch then
-		-- below the FEED button (y 50 % - 26) so the left column and the feed stay clear
-		holder.AnchorPoint = Vector2.new(0, 0)
-		holder.Position = UDim2.new(0, Style.MARGIN, 0.5, 6)
-	else
-		holder.AnchorPoint = Vector2.new(0, 0.5)
-		holder.Position = UDim2.new(0, Style.MARGIN, 0.56, 0)
+	local function place()
+		if touch then
+			-- below the FEED button (y 50 % - 26), right of the squad cards (140 wide at the left margin)
+			holder.AnchorPoint = Vector2.new(0, 0)
+			holder.Position = UDim2.new(0, Style.MARGIN + 140 + 12, 0.5, 6)
+		else
+			-- mid-left, right of the top-left column (which reaches below 50 % on short screens) and the squad cards
+			holder.AnchorPoint = Vector2.new(0, 0.5)
+			holder.Position = UDim2.new(0, Style.leftColumnRight(false), 0.5, 0)
+		end
 	end
+	place()
+	Theme.onScaleChanged(place)
 	holder.Parent = content
 	Theme.list(holder, Enum.FillDirection.Vertical, 4)
 end
