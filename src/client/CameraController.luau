@@ -26,12 +26,15 @@ local dist = 5 -- smoothed zoom distance
 local distTarget = 5 -- player zoom (mouse wheel / pinch), clamped to [DIST_MIN, DIST_MAX]
 local DIST_MIN, DIST_MAX = 4, 7.5
 local WHEEL_STEP = 0.75
-local PIVOT_UP = 1.6 -- focus height above the root
-local BASE_FOV = 72
-local SHOULDER = Vector3.new(1.7, 0.9, 0) -- default right-shoulder offset
-local SPRINT_SHOULDER = Vector3.new(1.4, 0.8, 0)
-local SPRINT_DIST_ADD = 1 -- 5 -> 6
-local SPRINT_FOV_ADD = 8 -- 72 -> 80
+-- 2026-11-14 playtest pick: "high + back" camera (Variants FRAMING C) with the rifle at the cheek (CombatPose)
+local PIVOT_UP = 1.9 -- focus height above the root
+local BASE_FOV = 66
+local HIP_DIST_ADD = 3 -- added to the wheel zoom distance at hip (5 -> 8)
+local SHOULDER = Vector3.new(2.0, 1.8, 0) -- default right-shoulder offset (X is mirrored by the shoulder swap)
+local SPRINT_SHOULDER_SCALE = Vector3.new(0.8, 0.9, 1) -- sprint pulls the lens a little toward the back
+local SPRINT_DIST_ADD = 1
+local SPRINT_FOV_ADD = 8
+local SIDE_RATE = 10 -- shoulder swap blend speed (exp rate, 1/s)
 local LOW_SHOULDER = Vector3.new(1.2, 0.3, 0) -- prone / dive
 local LOW_DIST = 4.2
 local FOLLOW_RATE = 18 -- horizontal focus follow (exp rate, 1/s): a little weight when moving
@@ -44,6 +47,8 @@ local ADS_SHOULDER = Vector3.new(1.15, 0.55, 0) -- right-shoulder offset while a
 local ADS_FOV_DROP = 24 -- 72 -> 48 FOV at full aim
 local ADS_SENS = 0.5 -- look sensitivity multiplier at full aim
 local lowBlend = 0 -- prone / dive framing
+local side = 1 -- 1 = right shoulder, -1 = left (V / R3)
+local sideBlend = 1
 local rollCur = 0
 local focusXZ: Vector3? = nil
 local lastFade = 0
@@ -75,6 +80,11 @@ end
 
 function CameraController.getYaw(): number
 	return yaw
+end
+
+-- 1 = camera over the right shoulder, -1 = left (smoothed value, for anything that wants to follow the swap)
+function CameraController.getSide(): number
+	return sideBlend
 end
 
 -- Scripted shots (cinematics): fn(dt) -> (CFrame, fov?) takes over the camera; return nil to hand control back. clear with nil.
@@ -117,6 +127,13 @@ end
 
 function CameraController.init()
 	camera.CameraType = Enum.CameraType.Scriptable
+
+	Input.on("Shoulder", function(isDown)
+		if isDown then
+			side = -side
+			Store.set("camSide", side) -- CombatPose: the ADS gun shift only applies over the right shoulder
+		end
+	end)
 
 	UserInputService.InputChanged:Connect(function(io, gp)
 		if io.UserInputType == Enum.UserInputType.MouseMovement then
@@ -242,18 +259,30 @@ function CameraController.init()
 		local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
 		dist += (distTarget - dist) * math.min(1, dt * 8)
 		-- hip framing: default -> sprint (wider, a bit back) -> prone/dive (low and close)
-		local hipDist = dist + tune("DistAdd", 0) + SPRINT_DIST_ADD * sprint
-		local hipShoulder = (tune("Shoulder", SHOULDER) :: Vector3):Lerp(SPRINT_SHOULDER, sprint)
+		local hipDist = dist + tune("DistAdd", HIP_DIST_ADD) + SPRINT_DIST_ADD * sprint
+		local baseShoulder = tune("Shoulder", SHOULDER) :: Vector3
+		local hipShoulder = baseShoulder:Lerp(baseShoulder * SPRINT_SHOULDER_SCALE, sprint)
 		hipDist += (LOW_DIST - hipDist) * lowBlend
 		hipShoulder = hipShoulder:Lerp(LOW_SHOULDER, lowBlend)
 		-- aim-down-sights: pull in tight over the right shoulder (fixed ADS distance, independent of wheel zoom)
 		local ads = aimBlend * aimBlend * (3 - 2 * aimBlend) -- smoothstep: snappy in the middle, soft ends
 		local wantDist = hipDist + (tune("AdsDist", ADS_DIST) - hipDist) * ads
 		local shoulder = hipShoulder:Lerp(tune("AdsShoulder", ADS_SHOULDER), ads)
+		sideBlend += (side - sideBlend) * (1 - math.exp(-dt * SIDE_RATE))
+		shoulder = Vector3.new(shoulder.X * sideBlend, shoulder.Y, shoulder.Z)
 		local desired = CFrame.new(focus) * rot * CFrame.new(shoulder + Vector3.new(0, 0, wantDist))
 		-- collision: pull in toward focus
 		rayParams.FilterDescendantsInstances = camExclude()
 		local fromP = (CFrame.new(focus) * rot * CFrame.new(shoulder.X * 0.4, shoulder.Y, 0)).Position
+		-- the shoulder start point sits ~1.8 studs above the focus: under a low roof / arch it can start inside or above
+		-- the geometry, so first clamp it along focus -> start
+		do
+			local up = fromP - focus
+			local upHit = if up.Magnitude > 0.05 then workspace:Spherecast(focus, 0.4, up, rayParams) else nil
+			if upHit then
+				fromP = focus + up.Unit * math.max(0, upHit.Distance - 0.15)
+			end
+		end
 		local toP = desired.Position
 		-- spherecast so the lens never clips into walls; snap in instantly, ease back out (no popping)
 		local offset = toP - fromP
@@ -278,7 +307,9 @@ function CameraController.init()
 
 		-- lens jammed against the trooper (wall pull-in): fade the local character so it never fills the screen
 		if c then
-			local d = (camPos - focus).Magnitude
+			-- the high shoulder keeps the lens >= ~2 studs from the focus even when pulled fully in, so also use how far
+			-- the collision pulled it toward the shoulder start point
+			local d = math.min((camPos - focus).Magnitude, camDist)
 			local fade = if d < FADE_DIST then math.clamp((FADE_DIST - d) / 1.0, 0, 0.85) else 0
 			fade = math.floor(fade * 20 + 0.5) / 20
 			if fade ~= lastFade then

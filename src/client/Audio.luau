@@ -284,7 +284,7 @@ local function startVoice(layer, entry, pos: Vector3?, volume: number, pitch: nu
 	snd.Volume = volume
 	snd.PlaybackSpeed = pitch
 	snd.SoundGroup = group
-	snd.TimePosition = 0
+	snd.TimePosition = layer.start or 0 -- skip leading silence (Sounds.luau `start`)
 
 	local att: Attachment? = nil
 	if pos then

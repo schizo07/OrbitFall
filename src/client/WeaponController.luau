@@ -7,6 +7,7 @@ local Net = require(Shared.Net)
 local Weapons = require(Shared.Data.Weapons)
 local Enemies = require(Shared.Data.Enemies)
 local Damage = require(Shared.Damage)
+local Aim = require(Shared.Aim)
 
 local Store = require(script.Parent.Store)
 local Input = require(script.Parent.Input)
@@ -86,14 +87,22 @@ end
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
+-- rebuilt at most once per frame (the barrel reticle traces twice every frame)
+local exclCache: { Instance }? = nil
+local exclFrame = -1
 local function excludes(): { Instance }
+	local f = workspace.DistributedGameTime
+	if exclCache and exclFrame == f then
+		return exclCache
+	end
 	local list: { Instance } = {}
+	exclCache, exclFrame = list, f
 	for _, p in Players:GetPlayers() do
 		if p.Character then
 			table.insert(list, p.Character)
 		end
 	end
-	for _, n in { "ClientFx", "CallInObjects" } do
+	for _, n in { "ClientFx", "CallInObjects", "Ship" } do -- Ship: the server's shot trace skips it too
 		local f = workspace:FindFirstChild(n)
 		if f then
 			table.insert(list, f)
@@ -150,6 +159,32 @@ local function muzzle(): (Vector3, Attachment?)
 	return head and head.Position or Cam.aimRay(), nil
 end
 
+-- Two-reticle aim. The server traces every bullet from shared/Aim.origin (root + stance height + right shoulder)
+-- along (crosshair point - origin) for the weapon's range, so cover between the gun and the crosshair target takes
+-- the shot. barrelTrace repeats exactly that trace so tracers / impacts / the barrel reticle show where the bullet
+-- really goes. Keep in sync with WeaponService.traceShot (same origin, same range, same exclusions).
+local BLOCK_MARGIN = 1.5 -- studs short of the crosshair point before we call the barrel "blocked"
+
+-- crosshair point -> (where the bullet lands, its RaycastResult, blocked by something before the crosshair point)
+local function barrelTrace(p: Vector3, res: RaycastResult?, range: number): (Vector3, RaycastResult?, boolean)
+	local o = Aim.origin(player.Character)
+	if not o then
+		return p, res, false
+	end
+	local to = p - o
+	local len = to.Magnitude
+	if len < 0.5 then
+		return p, res, false
+	end
+	local dir = to.Unit
+	rayParams.FilterDescendantsInstances = excludes()
+	local hit = workspace:Raycast(o, dir * range, rayParams)
+	if hit then
+		return hit.Position, hit, len - hit.Distance > BLOCK_MARGIN
+	end
+	return o + dir * range, nil, false
+end
+
 local function predictResult(res: RaycastResult?, w): (string, string)
 	if not res then
 		return "pen", "ground"
@@ -181,6 +216,7 @@ local function shoot(w, slot: number)
 		fireEv:FireServer(slot, centre, seq)
 		for i = 1, math.min(w.pellets, 6) do
 			local p, res = WeaponController.aimPoint(w.range or 120, w.spread * 1.0)
+			p, res = barrelTrace(p, res, w.range or 400)
 			Fx.tracer(mPos, p, w.tracer or Color3.new(1, 0.8, 0.4), 0.12)
 			if res and i <= 3 then
 				local r, m = predictResult(res, w)
@@ -190,6 +226,7 @@ local function shoot(w, slot: number)
 	else
 		local p, res = WeaponController.aimPoint(w.range or 400, spread)
 		fireEv:FireServer(slot, p, seq)
+		p, res = barrelTrace(p, res, w.range or 400) -- the server traces from the barrel too: show where it really lands
 		Fx.tracer(mPos, p, w.tracer or Color3.new(1, 0.8, 0.4), w.kind == "rail" and 0.5 or w.kind == "rocket" and 0.6 or 0.14)
 		if res then
 			local r, m = predictResult(res, w)
@@ -198,7 +235,8 @@ local function shoot(w, slot: number)
 	end
 	GunFeel.shot(w, aim) -- grip recoil, star muzzle flash + light, casing, gatling heat (client/Fx/GunFeel.luau)
 	Audio.play(w.sound, mAtt or mPos, { source = "local" })
-	local kick = (w.recoil or 0.5) * (aim and 0.6 or 1) * feel("CamKick")
+	-- x2.2 camera kick: 2026-11-14 playtest pick (GUN FEEL D)
+	local kick = (w.recoil or 0.5) * (aim and 0.6 or 1) * 2.2 * feel("CamKick")
 	Juice.kick(kick, (math.random() - 0.5) * kick * 0.6)
 	if w.kind == "rocket" or w.kind == "rail" then
 		Juice.shake(0.35, 0.25)
@@ -355,7 +393,7 @@ function WeaponController.init()
 		end
 		if killed then
 			Audio.play2D(weak and "KillWeak" or "Kill")
-			Juice.hitstop((weak and 0.05 or 0.03) * feel("HitStop"))
+			Juice.hitstop((weak and 0.05 or 0.03) * 1.5 * feel("HitStop")) -- x1.5: GUN FEEL D pick
 		end
 	end)
 
@@ -391,6 +429,18 @@ function WeaponController.init()
 		end
 		if HUD and HUD.setSpread and w then
 			HUD.setSpread((w.spread or 1) * (Input.isDown("Aim") and 0.45 or 1) * (1 + bloom))
+		end
+		-- barrel reticle: where the gun really hits (centre crosshair = where you look). Only differs from the centre
+		-- when cover sits between the barrel and what the crosshair is on.
+		if HUD and HUD.setBarrelReticle then
+			if w and w.kind ~= "melee" and not blocked() then
+				local p, res = WeaponController.aimPoint(w.range or 400, 0)
+				local hitP, _, isBlocked = barrelTrace(p, res, w.range or 400)
+				local sp, onScreen = workspace.CurrentCamera:WorldToViewportPoint(hitP)
+				HUD.setBarrelReticle(if onScreen then Vector2.new(sp.X, sp.Y) else nil, isBlocked)
+			else
+				HUD.setBarrelReticle(nil, false)
+			end
 		end
 		if not w or not ws or not slot then
 			return

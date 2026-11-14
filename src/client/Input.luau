@@ -18,6 +18,8 @@ local KEYS: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.Two] = "Swap2",
 	[Enum.KeyCode.Three] = "Swap3",
 	[Enum.KeyCode.Tab] = "Scoreboard",
+	[Enum.KeyCode.V] = "Shoulder", -- swap camera shoulder (CameraController)
+	[Enum.KeyCode.ButtonR3] = "Shoulder",
 	[Enum.KeyCode.ButtonR2] = "Fire",
 	[Enum.KeyCode.ButtonL2] = "Aim",
 	[Enum.KeyCode.ButtonX] = "Reload",
@@ -58,7 +60,14 @@ function Input.set(action: string, isDown: boolean)
 	end
 end
 
+-- Studio-only: workspace attribute DebugHold_<Action> = true holds an action down for scripted tests
+-- (simulated mouse holds are unreliable). Live games skip the attribute read.
+local IS_STUDIO = game:GetService("RunService"):IsStudio()
+
 function Input.isDown(action: string): boolean
+	if IS_STUDIO and workspace:GetAttribute("DebugHold_" .. action) == true then
+		return true
+	end
 	return down[action] == true
 end
 

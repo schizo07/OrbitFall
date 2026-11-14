@@ -5,6 +5,7 @@ local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 local Weapons = require(Shared.Data.Weapons)
 local EnemiesData = require(Shared.Data.Enemies)
+local Aim = require(Shared.Aim)
 
 local WeaponService = {}
 local S
@@ -308,18 +309,9 @@ local function excludeList(shooter: Player): { Instance }
 	return list
 end
 
+-- shared with the client's barrel trace (shared/Aim.luau): root + stance height + right shoulder
 local function muzzleOrigin(p: Player): Vector3?
-	local c = p.Character
-	if not c then
-		return nil
-	end
-	local head = c:FindFirstChild("Head") :: BasePart?
-	local root = c:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not root then
-		return nil
-	end
-	local base = head and head.Position or root.Position + Vector3.new(0, 1.5, 0)
-	return base + root.CFrame.RightVector * 1.0
+	return Aim.origin(p.Character)
 end
 
 local function materialFor(inst: Instance): string

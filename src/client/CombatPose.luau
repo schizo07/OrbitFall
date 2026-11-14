@@ -16,6 +16,8 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Net = require(Shared.Net)
+local Input = require(script.Parent.Input)
+local Store = require(script.Parent.Store)
 
 local CombatPose = {}
 
@@ -48,10 +50,14 @@ local clamp, exp, sqrt, abs = math.clamp, math.exp, math.sqrt, math.abs
 -- Roblox arms are short for the torso width (shoulder->wrist 1.64 studs, shoulders 1.5 off-centre), so a square
 -- stance cannot get the left hand onto a rifle: the chest is BLADED (yawed so the left shoulder comes forward), the
 -- head counter-turns to stay on target, and the gun sits near the centre line under the eye.
-local POCKET = Vector3.new(0.42, 0.48, -0.45) -- rifle butt on the right shoulder (square chest frame; visible from the shoulder cam)
+-- 2026-11-14 playtest pick (Variants FRAMING D): rifle raised to cheek height, out of the right glove's shadow
+local POCKET = Vector3.new(0.85, 0.95, -0.4) -- rifle butt (square chest frame; was 0.42, 0.48, -0.45)
 local GRIP_FROM_POCKET = Vector3.new(0, -0.32, -0.85) -- gun-space offset of the grip (handle origin) from the pocket
-local BLADE = 0.55 -- chest yaw (rad) while holding a long gun; the left shoulder comes forward
+local BLADE = 0.35 -- chest yaw (rad) while holding a long gun; the left shoulder comes forward (was 0.55)
 local HEAD_SHARE = 0.6 -- part of the remaining aim pitch taken by the neck
+-- local player aiming down sights: the cheek pocket sits flush against the (2-stud) helmet, so from the ADS camera
+-- the gun hides behind the head / right glove. Slide it out to the right (square chest frame) while aiming.
+local ADS_POCKET_SHIFT = Vector3.new(0.45, -0.1, 0)
 local PISTOL_POCKET = Vector3.new(0.18, 0.38, -0.55)
 local PISTOL_REACH = 1.55 -- how far forward of the pocket the pistol grip sits (arms almost straight)
 local WAIST_SHARE = 0.45 -- part of the aim pitch taken by the spine
@@ -95,6 +101,7 @@ type Rig = {
 	gripHandle: BasePart?,
 	pitch: number,
 	low: number,
+	ads: number, -- local aim-down-sights blend (0..1)
 	active: boolean,
 }
 local rigs: { [Model]: Rig } = {}
@@ -157,6 +164,7 @@ local function buildRig(c: Model): Rig?
 		L = L,
 		pitch = 0,
 		low = 0,
+		ads = 0,
 		active = false,
 	}
 end
@@ -340,7 +348,10 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 		local pocket = square * tune("PistolPocket", PISTOL_POCKET)
 		gunCF = CFrame.new(pocket) * aimRot * CFrame.new(0, -0.1, -tune("PistolReach", PISTOL_REACH))
 	else
-		local pocket = square * tune("Pocket", POCKET)
+		-- right-handed gun: pushing it right only helps over the right shoulder (left shoulder: see docs left-hand design)
+		local wantAds = if isLocal and Input.isDown("Aim") and Store.get("camSide") ~= -1 then 1 else 0
+		r.ads += (wantAds - r.ads) * (1 - exp(-dt * 14)) -- same rate as the camera's aim blend
+		local pocket = square * (tune("Pocket", POCKET) + tune("AdsShift", ADS_POCKET_SHIFT) * r.ads * (1 - low))
 		gunCF = CFrame.new(pocket) * aimRot * CFrame.new(tune("Grip", GRIP_FROM_POCKET))
 	end
 	if isLocal and GunFeel then

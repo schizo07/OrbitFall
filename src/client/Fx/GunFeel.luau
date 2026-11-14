@@ -627,8 +627,9 @@ function GunFeel.shot(w: any, aiming: boolean?)
 	if not Fx then
 		return
 	end
-	local kick = (KICK[w.id] or 0.6) * (if aiming then 0.7 else 1)
-	if RunService:IsStudio() then -- Studio-only A/B multiplier (Variants.luau "GUN FEEL")
+	-- x0.8: 2026-11-14 playtest pick (GUN FEEL D "big camera, steady gun")
+	local kick = (KICK[w.id] or 0.6) * (if aiming then 0.7 else 1) * 0.8
+	if RunService:IsStudio() then -- Studio-only A/B multiplier on top (Variants.luau)
 		local m = workspace:GetAttribute("Feel_GunKick")
 		if type(m) == "number" then
 			kick *= m

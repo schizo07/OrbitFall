@@ -5,6 +5,8 @@
 --   K / L  (or [ / ])   previous / next preset in the current group
 --   J      (or \)       next group (when there is more than one)
 -- A small label in the top-centre shows the group and preset. Live games never load this (Main.client: IsStudio).
+-- Picked presets get baked into the code defaults and their group is removed (2026-11-14: framing, gun feel,
+-- enemy hit, feet picked; the store sound candidates were rejected in favour of in-house sounds).
 
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -14,90 +16,18 @@ local Variants = {}
 
 -- Every preset lists the full set of keys its group touches, so switching never leaves a stale value behind.
 -- nil-valued keys are written as "clear" (attribute removed -> the code's default is used).
+-- A preset may also carry `sounds = { SoundKey = { [layerIndex] = "rbxassetid://..." } }` to swap sound layers.
 local GROUPS = {
 	{
 		name = "FRAMING",
 		keys = { "CamTune_Shoulder", "CamTune_PivotUp", "CamTune_Fov", "CamTune_DistAdd", "PoseTune_Pocket", "PoseTune_Blade" },
+		-- A = the 2026-11-14 pick baked into the code (camera "high + back" + rifle at the cheek); B-D are small
+		-- variations around it, since the pick was a hybrid of two presets.
 		presets = {
-			{ name = "A current", set = {} },
-			{
-				-- trooper smaller in the frame, camera further back and a bit lower (closer to the user's mood reference)
-				name = "B further back, lower",
-				set = { CamTune_Shoulder = Vector3.new(2.4, 0.5, 0), CamTune_PivotUp = 1.5, CamTune_DistAdd = 3, CamTune_Fov = 66 },
-			},
-			{
-				name = "C high + back",
-				set = { CamTune_Shoulder = Vector3.new(2.0, 1.8, 0), CamTune_PivotUp = 1.9, CamTune_DistAdd = 3, CamTune_Fov = 66 },
-			},
-			{
-				-- current camera, rifle raised to cheek height and out of the right glove's shadow
-				name = "D gun at cheek",
-				set = { PoseTune_Pocket = Vector3.new(0.85, 0.95, -0.4), PoseTune_Blade = 0.35 },
-			},
-		},
-	},
-	{
-		-- per-shot camera kick (Juice.kick), the gun's own recoil in the hands (GunFeel), freeze-frame on kills
-		name = "GUN FEEL",
-		keys = { "Feel_CamKick", "Feel_GunKick", "Feel_HitStop" },
-		presets = {
-			{ name = "A current", set = {} },
-			{ name = "B heavy", set = { Feel_CamKick = 1.8, Feel_GunKick = 1.5, Feel_HitStop = 2 } },
-			{ name = "C light + snappy", set = { Feel_CamKick = 0.6, Feel_GunKick = 0.7, Feel_HitStop = 0.5 } },
-			{ name = "D big camera, steady gun", set = { Feel_CamKick = 2.2, Feel_GunKick = 0.8, Feel_HitStop = 1.5 } },
-		},
-	},
-	{
-		-- client/Fx/EnemyAnim.luau hit-reaction spring: how far an enemy's body jolts per bullet
-		name = "ENEMY HIT",
-		keys = { "Feel_EnemyFlinch" },
-		presets = {
-			{ name = "A current", set = {} },
-			{ name = "B bigger jolt (x1.8)", set = { Feel_EnemyFlinch = 1.8 } },
-			{ name = "C huge jolt (x2.6)", set = { Feel_EnemyFlinch = 2.6 } },
-			{ name = "D subtle (x0.5)", set = { Feel_EnemyFlinch = 0.5 } },
-		},
-	},
-	{
-		-- client/FootPlant.luau: leg IK that keeps feet on slopes / bumps instead of sinking into them
-		name = "FEET",
-		keys = { "FootPlant" },
-		presets = {
-			{ name = "A planted (new)", set = {} },
-			{ name = "B old (feet sink on slopes)", set = { FootPlant = false } },
-		},
-	},
-	{
-		-- carbine main crack layer (Sounds.ShotRifle layer 1); the body thump / click / sub / far-tail layers stay.
-		-- Candidates from a Creator Store search; names that say they are ripped from other games were skipped.
-		name = "CARBINE SHOT",
-		keys = {},
-		presets = {
-			{ name = "A current", sounds = {} },
-			{ name = "B store 113879008765178", sounds = { ShotRifle = { [1] = "rbxassetid://113879008765178" } } },
-			{ name = "C store 131480162950556", sounds = { ShotRifle = { [1] = "rbxassetid://131480162950556" } } },
-			{ name = "D store 122876890028097", sounds = { ShotRifle = { [1] = "rbxassetid://122876890028097" } } },
-		},
-	},
-	{
-		-- bullet-on-robot clang (HitMetal layer 1) + robot death (DeathScrap layer 1). B-D death sounds are from the
-		-- Pro Sound Effects library on the Creator Store ("Servo Pig Motor Burst Robot Death").
-		name = "ROBOT HIT + DEATH",
-		keys = {},
-		presets = {
-			{ name = "A current", sounds = {} },
-			{
-				name = "B clang 3 + death 6 (1.3 s)",
-				sounds = { HitMetal = { [1] = "rbxassetid://93157546246483" }, DeathScrap = { [1] = "rbxassetid://9118994605" } },
-			},
-			{
-				name = "C clang 2 + death 1 (1.6 s)",
-				sounds = { HitMetal = { [1] = "rbxassetid://79474907970393" }, DeathScrap = { [1] = "rbxassetid://9118993118" } },
-			},
-			{
-				name = "D clang 7 + death 1b (1.8 s)",
-				sounds = { HitMetal = { [1] = "rbxassetid://7842412909" }, DeathScrap = { [1] = "rbxassetid://9118994143" } },
-			},
+			{ name = "A picked (C camera + D gun)", set = {} },
+			{ name = "B a bit lower", set = { CamTune_Shoulder = Vector3.new(2.0, 1.35, 0), CamTune_PivotUp = 1.75 } },
+			{ name = "C a bit closer", set = { CamTune_DistAdd = 1.8 } },
+			{ name = "D wider shoulder", set = { CamTune_Shoulder = Vector3.new(2.5, 1.8, 0) } },
 		},
 	},
 }

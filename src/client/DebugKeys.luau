@@ -4,7 +4,7 @@
 --   4 Tinker Drone      5 Skitterling       6 Tinker swarm x6    7 Skitter swarm x6
 --   8 Rivet (COG medium)  9 Spitter (Brood medium)  0 clear enemies
 --   -  god mode toggle  =  Director auto pacing toggle   T force breach (starts the Director)
---   Y  refill ammo + reset call-in cooldowns             V switch faction (what the Director spawns)
+--   Y  refill ammo + reset call-in cooldowns             B switch faction (what the Director spawns)
 --   H  hide / show this label
 -- The label shows only while workspace attribute TestArena is true (set by server/World/TestArena.luau). The spawn / god / refill
 -- keys also work during a normal Studio mission (the server needs a built map); director / breach / faction are arena-only.
@@ -27,7 +27,7 @@ local KEYMAP: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.Equals] = "director",
 	[Enum.KeyCode.T] = "breach",
 	[Enum.KeyCode.Y] = "refill",
-	[Enum.KeyCode.V] = "faction",
+	[Enum.KeyCode.B] = "faction", -- V is shoulder swap
 }
 
 local function onOff(v: any): string
@@ -46,7 +46,7 @@ local function helpText(): string
 		"= Auto pacing: " .. onOff(workspace:GetAttribute("ArenaDirector")),
 		"T Force breach",
 		"Y Refill + call-in reset",
-		"V Faction: " .. (if type(fac) == "string" then fac else "COG"),
+		"B Faction: " .. (if type(fac) == "string" then fac else "COG"),
 	}, "\n")
 end
 
