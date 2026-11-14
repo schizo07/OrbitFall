@@ -11,6 +11,8 @@
 --   vol       base volume 0..~1.5 (default 1)
 --   pitch     {min, max} playback speed range (default {0.95, 1.05}); number = fixed
 --   delay     seconds (number) or {min, max} random (default 0)
+--   start     seconds into the file to start playing (skips leading silence; default 0). Gun shots must be heard
+--             on the frame they fire: measure the onset (PlaybackLoudness) and trim it here or in the file.
 --   group     SoundGroup name (defaults to the key's group)
 --   minDist / maxDist   3D rolloff (default 10 / 450)
 --   chance    0..1 probability the layer plays (default 1)
@@ -33,6 +35,7 @@ export type Layer = {
 	vol: number?,
 	pitch: (number | { number })?,
 	delay: (number | { number })?,
+	start: number?,
 	group: string?,
 	minDist: number?,
 	maxDist: number?,
@@ -79,16 +82,17 @@ local S: { [string]: Entry } = {
 
 	-- WEAPONS ----------------------------------------------------------------------
 	ShotRifle = K(W, 2, {
-		{ id = "rbxassetid://18835647605", desc = "sharp rifle crack, short transient, dry", vol = 0.9, pitch = { 0.96, 1.04 } },
+		-- start: these two files open with ~0.12 s / ~0.10 s of silence (measured 2026-11-14), heard as a delayed shot
+		{ id = "rbxassetid://18835647605", desc = "sharp rifle crack, short transient, dry", vol = 0.9, pitch = { 0.96, 1.04 }, start = 0.12 },
 		{ id = "rbxassetid://88162798516964", desc = "rifle shot low body thump, punchy", vol = 0.7, pitch = { 0.9, 1.0 } },
-		{ id = "rbxassetid://134975275558568", desc = "mechanical bolt/action click", vol = 0.3, near = true, pitch = { 0.95, 1.1 }, maxDist = 60 },
+		{ id = "rbxassetid://134975275558568", desc = "mechanical bolt/action click", vol = 0.3, near = true, pitch = { 0.95, 1.1 }, maxDist = 60, start = 0.1 },
 		{ id = "rbxassetid://88162798516964", desc = "felt sub-bass punch (shooter only)", vol = 0.5, near = true, felt = true, pitch = { 0.55, 0.62 }, maxDist = 40 },
 		{ id = "rbxassetid://18835710353", desc = "distant muffled rifle shot with echo tail", vol = 0.6, far = true, delay = 0.1, maxDist = 900 },
 	}, { limit = GUN, perSource = true, nearDist = 30, farDist = 130 }),
 
 	ShotShotgun = K(W, 3, {
 		{ id = "rbxassetid://5651137842", desc = "shotgun blast crack, loud and snappy", vol = 1.0, pitch = { 0.95, 1.03 } },
-		{ id = "rbxassetid://18878161489", desc = "shotgun boom low body thump", vol = 0.85, pitch = { 0.85, 0.95 } },
+		{ id = "rbxassetid://18878161489", desc = "shotgun boom low body thump", vol = 0.85, pitch = { 0.85, 0.95 }, start = 0.58 }, -- start: onset 616 -> 16 ms
 		{ id = "rbxassetid://113837896417526", desc = "shotgun pump action rack click", vol = 0.5, near = true, delay = 0.38, maxDist = 60 },
 		{ id = "rbxassetid://5651137842", desc = "distant muffled shotgun boom echo", vol = 0.6, far = true, delay = 0.12, maxDist = 900 },
 	}, { limit = { count = 3, window = 0.25 }, perSource = true, nearDist = 30, farDist = 130 }),
@@ -136,13 +140,13 @@ local S: { [string]: Entry } = {
 
 	ShotRail = K(W, 4, {
 		{ id = "rbxassetid://77016949836420", desc = "sci-fi railgun discharge, sharp electric crack", vol = 1.0, pitch = { 0.97, 1.03 } },
-		{ id = "rbxassetid://104211574669495", desc = "sci-fi heavy energy boom low", vol = 0.8, pitch = { 0.7, 0.85 } },
+		{ id = "rbxassetid://104211574669495", desc = "sci-fi heavy energy boom low", vol = 0.8, pitch = { 0.7, 0.85 }, start = 0.06 }, -- start: onset 83 -> 17 ms
 		{ id = "rbxassetid://77016949836420", desc = "electric crackle zap decay", vol = 0.5, delay = 0.08, pitch = { 1.0, 1.2 } },
 		{ id = "rbxassetid://104211574669495", desc = "distant sci-fi cannon boom", vol = 0.6, far = true, delay = 0.15, maxDist = 1000 },
 	}, { limit = { count = 2, window = 0.4 }, perSource = true }),
 
 	ShotVolt = K(W, 2, {
-		{ id = "rbxassetid://92090867642655", desc = "sci-fi laser pulse zap, electric", vol = 0.85, pitch = { 0.95, 1.1 } },
+		{ id = "rbxassetid://92090867642655", desc = "sci-fi laser pulse zap, electric", vol = 0.85, pitch = { 0.95, 1.1 }, start = 0.43 }, -- start: onset 449 -> 16 ms
 		{ id = "rbxassetid://97096310054904", desc = "electric arc crackle short", vol = 0.5, delay = 0.02, pitch = { 1.0, 1.25 } },
 		{ id = "rbxassetid://92090867642655", desc = "distant electric zap", vol = 0.5, far = true, delay = 0.1, maxDist = 700 },
 	}, { limit = { count = 5, window = 0.25 }, perSource = true }),
@@ -161,7 +165,7 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 3, window = 0.25 }, perSource = true }),
 
 	Swap = K(W, 2, {
-		{ id = "rbxassetid://99050406637477", desc = "weapon swap/draw rustle and metal clack", vol = 0.55, pitch = { 0.95, 1.05 }, minDist = 6, maxDist = 100 },
+		{ id = "rbxassetid://99050406637477", desc = "weapon swap/draw rustle and metal clack", vol = 0.55, pitch = { 0.95, 1.05 }, minDist = 6, maxDist = 100, start = 0.3 }, -- start: onset 334 -> 32 ms
 	}, { limit = { count = 2, window = 0.3 }, perSource = true }),
 
 	Grenade = K(W, 2, {
@@ -228,15 +232,15 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 3, window = 0.3 } }),
 
 	Footstep = K(I, 1, {
-		{ id = "rbxassetid://98912102275037", desc = "boot footstep on dirt/gravel, soft", vol = 0.35, pitch = { 0.85, 1.15 }, minDist = 4, maxDist = 60, volVar = 0.2 },
+		{ id = "rbxassetid://98912102275037", desc = "boot footstep on dirt/gravel, soft", vol = 0.35, pitch = { 0.85, 1.15 }, minDist = 4, maxDist = 60, volVar = 0.2, start = 0.07 }, -- start: onset 101 -> 17 ms
 	}, { limit = { count = 4, window = 0.3 } }),
 
 	Jump = K(I, 1, {
-		{ id = "rbxassetid://135162567109750", desc = "short jump grunt-less cloth whoosh and boot push", vol = 0.35, pitch = { 0.95, 1.1 }, minDist = 4, maxDist = 60 },
+		{ id = "rbxassetid://135162567109750", desc = "short jump grunt-less cloth whoosh and boot push", vol = 0.35, pitch = { 0.95, 1.1 }, minDist = 4, maxDist = 60, start = 0.09 }, -- start: onset 116 -> 17 ms
 	}, { limit = { count = 3, window = 0.3 } }),
 
 	Land = K(I, 1, {
-		{ id = "rbxassetid://9119641416", desc = "boots landing thud on dirt with gear rattle", vol = 0.5, pitch = { 0.9, 1.1 }, minDist = 4, maxDist = 70 },
+		{ id = "rbxassetid://9119641416", desc = "boots landing thud on dirt with gear rattle", vol = 0.5, pitch = { 0.9, 1.1 }, minDist = 4, maxDist = 70, start = 0.21 }, -- start: onset 235 -> 16 ms
 	}, { limit = { count = 3, window = 0.3 } }),
 
 	PlayerHurt = K(I, 5, {
@@ -245,18 +249,18 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 3, window = 0.3 } }),
 
 	PlayerDown = K(I, 5, {
-		{ id = "rbxassetid://9113469292", desc = "heavy body collapse crash with sci-fi power down", vol = 0.9, pitch = { 0.9, 1.0 } },
+		{ id = "rbxassetid://9113469292", desc = "heavy body collapse crash with sci-fi power down", vol = 0.9, pitch = { 0.9, 1.0 }, start = 0.26 }, -- start: onset 282 -> 16 ms (lead-in is faint, not silent)
 		{ id = "rbxassetid://9120256999", desc = "descending power-down whine", vol = 0.6, delay = 0.1, pitch = 1.0 },
 	}, { limit = { count = 2, window = 0.5 } }),
 
 	LowHealth = K(U, 5, {
-		{ id = "rbxassetid://6202853067", desc = "heartbeat thump low warning, single beat", vol = 0.9, pitch = 1.0, volVar = 0.03 },
+		{ id = "rbxassetid://6202853067", desc = "heartbeat thump low warning, single beat", vol = 0.9, pitch = 1.0, volVar = 0.03, start = 0.06 }, -- start: onset 83 -> 16 ms
 		{ id = "rbxassetid://139481207162657", desc = "soft alarm beep warning", vol = 0.25, delay = 0.02, pitch = 1.0 },
 	}, { limit = { count = 2, window = 0.5 } }),
 
 	-- DEATHS (Enemies) -------------------------------------------------------------
 	DeathScrap = K(E, 3, {
-		{ id = "rbxassetid://9120253198", desc = "robot explosion pop, small burst, cartoony", vol = 0.8, pitch = { 0.9, 1.1 }, maxDist = 280 },
+		{ id = "rbxassetid://9120253198", desc = "robot explosion pop, small burst, cartoony", vol = 0.8, pitch = { 0.9, 1.1 }, maxDist = 280, start = 0.64 }, -- start: onset 667 -> 32 ms
 		{ id = "rbxassetid://9119068481", desc = "scrap metal clatter falling parts", vol = 0.65, delay = { 0.05, 0.2 }, pitch = { 0.9, 1.15 }, maxDist = 220 },
 		{ id = "rbxassetid://9120253198", desc = "bolts and screws scatter tinkle", vol = 0.35, delay = { 0.15, 0.4 }, pitch = { 1.0, 1.3 }, maxDist = 120 },
 	}, { limit = { count = 3, window = 0.3 } }),
@@ -268,9 +272,9 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 3, window = 0.3 } }),
 
 	DeathBig = K(E, 4, {
-		{ id = "rbxassetid://9116546968", desc = "giant robot explosion crack, heavy metal", vol = 1.0, pitch = { 0.9, 1.0 } },
+		{ id = "rbxassetid://9116546968", desc = "giant robot explosion crack, heavy metal", vol = 1.0, pitch = { 0.9, 1.0 }, start = 0.14 }, -- start: onset 183 -> 17 ms
 		{ id = "rbxassetid://9116546326", desc = "deep boom body with metal groan", vol = 0.9, delay = 0.03, pitch = { 0.8, 0.95 } },
-		{ id = "rbxassetid://9116546968", desc = "sub bass thump", vol = 0.8, near = true, pitch = { 0.5, 0.6 } },
+		{ id = "rbxassetid://9116546968", desc = "sub bass thump", vol = 0.8, near = true, pitch = { 0.5, 0.6 }, start = 0.14 },
 		{ id = "rbxassetid://9116546326", desc = "heavy metal debris crash and clatter rain", vol = 0.7, delay = { 0.15, 0.6 }, pitch = { 0.85, 1.05 } },
 	}, { limit = { count = 2, window = 0.4 }, nearDist = 60, farDist = 160 }),
 
@@ -321,7 +325,7 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 2, window = 0.4 } }),
 
 	ShipRadio = K(C, 4, {
-		{ id = "rbxassetid://9118027586", desc = "radio static blip, communication chirp, ship acknowledges", vol = 0.7, pitch = { 0.95, 1.05 } },
+		{ id = "rbxassetid://9118027586", desc = "radio static blip, communication chirp, ship acknowledges", vol = 0.7, pitch = { 0.95, 1.05 }, start = 0.18 }, -- start: onset 200 -> 16 ms
 		{ id = "rbxassetid://123582950451975", desc = "short radio squelch click", vol = 0.4, delay = 0.35 },
 	}, { limit = { count = 2, window = 0.4 } }),
 
@@ -342,7 +346,7 @@ local S: { [string]: Entry } = {
 
 	BombWhistle = K(C, 4, {
 		{ id = "rbxassetid://127333563637736", desc = "falling bomb whistle descending, classic", vol = 0.9, pitch = { 0.95, 1.05 }, maxDist = 600 },
-		{ id = "rbxassetid://116150406781332", desc = "jet engine distant roar overhead", vol = 0.5, pitch = 1.0, maxDist = 600 },
+		{ id = "rbxassetid://116150406781332", desc = "jet engine distant roar overhead", vol = 0.5, pitch = 1.0, maxDist = 600, start = 0.72 }, -- start: onset 716 -> 16 ms
 	}, { limit = { count = 2, window = 0.5 } }),
 
 	JetFlyby = K(C, 4, {
@@ -351,16 +355,16 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 2, window = 0.5 } }),
 
 	ShellWhistle = K(C, 3, {
-		{ id = "rbxassetid://81509845941651", desc = "artillery shell incoming whistle, short descending", vol = 0.8, pitch = { 0.9, 1.15 }, maxDist = 500 },
+		{ id = "rbxassetid://81509845941651", desc = "artillery shell incoming whistle, short descending", vol = 0.8, pitch = { 0.9, 1.15 }, maxDist = 500, start = 0.08 }, -- start: onset 133 -> 33 ms
 	}, { limit = { count = 4, window = 0.3 } }),
 
 	GasHiss = K(C, 3, {
 		{ id = "rbxassetid://102999890133674", desc = "gas canister release hiss, pressurised spray, looping", vol = 0.7, loop = true, minDist = 10, maxDist = 200 },
-		{ id = "rbxassetid://137858412731781", desc = "canister pop and burst", vol = 0.6, pitch = { 0.95, 1.05 }, maxDist = 200 },
+		{ id = "rbxassetid://137858412731781", desc = "canister pop and burst", vol = 0.6, pitch = { 0.95, 1.05 }, maxDist = 200, start = 0.06 }, -- start: onset 100 -> 32 ms
 	}, { limit = { count = 2, window = 0.4 } }),
 
 	EMPPulse = K(C, 4, {
-		{ id = "rbxassetid://9126067243", desc = "electromagnetic pulse charge-up buzz and ping, sci-fi", vol = 0.8, pitch = { 0.95, 1.05 } },
+		{ id = "rbxassetid://9126067243", desc = "electromagnetic pulse charge-up buzz and ping, sci-fi", vol = 0.8, pitch = { 0.95, 1.05 }, start = 0.19 }, -- start: onset 232 -> 17 ms
 		{ id = "rbxassetid://135847326073354", desc = "electric zap crackle", vol = 0.5, delay = 0.05, pitch = { 1.0, 1.2 } },
 	}, { limit = { count = 2, window = 0.4 } }),
 
@@ -369,32 +373,32 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 4, window = 0.4 } }),
 
 	MineBeep = K(C, 1, {
-		{ id = "rbxassetid://140006631574809", desc = "single short proximity mine beep", vol = 0.4, pitch = { 0.98, 1.02 }, minDist = 5, maxDist = 60 },
+		{ id = "rbxassetid://140006631574809", desc = "single short proximity mine beep", vol = 0.4, pitch = { 0.98, 1.02 }, minDist = 5, maxDist = 60, start = 0.11 }, -- start: onset 166 -> 33 ms
 	}, { limit = { count = 3, window = 0.4 } }),
 
 	PodFall = K(C, 4, {
-		{ id = "rbxassetid://116150406781332", desc = "drop pod re-entry roar, falling fireball whoosh", vol = 0.9, pitch = { 0.95, 1.05 }, maxDist = 600 },
-		{ id = "rbxassetid://89485009204188", desc = "descending whistle", vol = 0.5, pitch = 1.0, maxDist = 600 },
+		{ id = "rbxassetid://116150406781332", desc = "drop pod re-entry roar, falling fireball whoosh", vol = 0.9, pitch = { 0.95, 1.05 }, maxDist = 600, start = 0.72 }, -- start: onset 716 -> 16 ms
+		{ id = "rbxassetid://89485009204188", desc = "descending whistle", vol = 0.5, pitch = 1.0, maxDist = 600, start = 0.11 }, -- start: onset 133 -> 16 ms
 	}, { limit = { count = 4, window = 0.5 } }),
 
 	PodImpact = K(C, 5, {
-		{ id = "rbxassetid://9119641416", desc = "heavy metal capsule crash impact, ground slam", vol = 1.0, pitch = { 0.9, 1.0 } },
+		{ id = "rbxassetid://9119641416", desc = "heavy metal capsule crash impact, ground slam", vol = 1.0, pitch = { 0.9, 1.0 }, start = 0.21 }, -- start: onset 235 -> 16 ms
 		{ id = "rbxassetid://91288569991875", desc = "sub bass slam thump", vol = 0.9, near = true, pitch = { 0.5, 0.6 } },
 		{ id = "rbxassetid://9119641416", desc = "metal creak and debris settle", vol = 0.5, delay = { 0.2, 0.5 }, pitch = { 0.9, 1.1 } },
 	}, { limit = { count = 3, window = 0.4 }, duck = { groups = { "Ambience" }, db = -4, seconds = 0.3 } }),
 
 	CrateOpen = K(C, 3, {
-		{ id = "rbxassetid://5582720822", desc = "supply crate latch unlock and lid open clunk", vol = 0.8, pitch = { 0.95, 1.05 }, maxDist = 150 },
+		{ id = "rbxassetid://5582720822", desc = "supply crate latch unlock and lid open clunk", vol = 0.8, pitch = { 0.95, 1.05 }, maxDist = 150, start = 0.22 }, -- start: onset 250 -> 18 ms
 		{ id = "rbxassetid://17419512544", desc = "pressurised hydraulic hiss", vol = 0.5, delay = 0.1, maxDist = 120 },
 	}, { limit = { count = 2, window = 0.4 } }),
 
 	ShieldUp = K(C, 3, {
-		{ id = "rbxassetid://126809328894734", desc = "energy shield dome activation hum swell, sci-fi", vol = 0.85, pitch = { 0.95, 1.05 }, maxDist = 300 },
+		{ id = "rbxassetid://126809328894734", desc = "energy shield dome activation hum swell, sci-fi", vol = 0.85, pitch = { 0.95, 1.05 }, maxDist = 300, start = 0.11 }, -- start: onset 167 -> 33 ms
 		{ id = "rbxassetid://92636095967110", desc = "short electric zap shimmer", vol = 0.5, delay = 0.05, maxDist = 250 },
 	}, { limit = { count = 2, window = 0.4 } }),
 
 	SmokePop = K(C, 2, {
-		{ id = "rbxassetid://118435762926567", desc = "smoke grenade pop and hiss", vol = 0.7, pitch = { 0.95, 1.05 }, maxDist = 200 },
+		{ id = "rbxassetid://118435762926567", desc = "smoke grenade pop and hiss", vol = 0.7, pitch = { 0.95, 1.05 }, maxDist = 200, start = 0.1 }, -- start: onset 133 -> 17 ms
 	}, { limit = { count = 3, window = 0.3 } }),
 
 	Pickup = K(C, 3, {
@@ -437,9 +441,9 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 2, window = 0.5 } }),
 
 	Breach = K(E, 4, {
-		{ id = "rbxassetid://9113223222", desc = "ground burst, dirt eruption rumble and rock crack", vol = 1.0, pitch = { 0.85, 1.0 }, maxDist = 500 },
+		{ id = "rbxassetid://9113223222", desc = "ground burst, dirt eruption rumble and rock crack", vol = 1.0, pitch = { 0.85, 1.0 }, maxDist = 500, start = 0.24 }, -- start: onset 283 -> 33 ms
 		{ id = "rbxassetid://120212342534790", desc = "bug screech roar", vol = 0.6, delay = 0.15, pitch = { 0.9, 1.1 }, maxDist = 400 },
-		{ id = "rbxassetid://9113223222", desc = "sub rumble", vol = 0.8, near = true, pitch = { 0.5, 0.6 } },
+		{ id = "rbxassetid://9113223222", desc = "sub rumble", vol = 0.8, near = true, pitch = { 0.5, 0.6 }, start = 0.24 },
 	}, { limit = { count = 2, window = 0.5 } }),
 
 	RobotStep = K(E, 1, {
@@ -447,23 +451,23 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 4, window = 0.3 } }),
 
 	BugScreech = K(E, 2, {
-		{ id = "rbxassetid://9118199536", desc = "alien insect screech chitter, short cartoony", vol = 0.7, pitch = { 0.85, 1.25 }, maxDist = 250 },
+		{ id = "rbxassetid://9118199536", desc = "alien insect screech chitter, short cartoony", vol = 0.7, pitch = { 0.85, 1.25 }, maxDist = 250, start = 0.72 }, -- start: onset 717 -> 49 ms
 	}, { limit = { count = 3, window = 0.4 } }),
 
 	ChargerRoar = K(E, 4, {
-		{ id = "rbxassetid://133651202885353", desc = "big beetle roar growl windup, heavy", vol = 1.0, pitch = { 0.8, 0.95 }, maxDist = 400 },
+		{ id = "rbxassetid://133651202885353", desc = "big beetle roar growl windup, heavy", vol = 1.0, pitch = { 0.8, 0.95 }, maxDist = 400, start = 0.44 }, -- start: onset 466 -> 33 ms
 		{ id = "rbxassetid://9113980319", desc = "stomping thud rumble", vol = 0.5, delay = 0.1, near = true, pitch = { 0.6, 0.8 } },
 	}, { limit = { count = 2, window = 0.5 } }),
 
 	TitanRoar = K(E, 5, {
-		{ id = "rbxassetid://110716346002611", desc = "colossal monster roar, huge deep creature bellow", vol = 1.2, pitch = { 0.7, 0.85 }, minDist = 30, maxDist = 900 },
+		{ id = "rbxassetid://110716346002611", desc = "colossal monster roar, huge deep creature bellow", vol = 1.2, pitch = { 0.7, 0.85 }, minDist = 30, maxDist = 900, start = 0.26 }, -- start: onset 283 -> 17 ms
 		{ id = "rbxassetid://140183060324629", desc = "deep sub rumble", vol = 0.9, near = true, pitch = { 0.5, 0.6 } },
 		{ id = "rbxassetid://110716346002611", desc = "distant monster bellow echo", vol = 0.8, far = true, delay = 0.4, pitch = { 0.7, 0.85 }, maxDist = 1500 },
 	}, { limit = { count = 1, window = 1.0 }, nearDist = 100, farDist = 250 }),
 
 	ColossusHorn = K(E, 5, {
 		{ id = "rbxassetid://70444139603815", desc = "giant mechanical war horn blast, low brass-like foghorn, ominous", vol = 1.2, pitch = { 0.8, 0.9 }, minDist = 40, maxDist = 1200 },
-		{ id = "rbxassetid://127364360574780", desc = "deep sub drone", vol = 0.8, near = true, pitch = { 0.5, 0.6 } },
+		{ id = "rbxassetid://127364360574780", desc = "deep sub drone", vol = 0.8, near = true, pitch = { 0.5, 0.6 }, start = 0.1 }, -- start: onset 117 -> 17 ms
 	}, { limit = { count = 1, window = 1.0 }, nearDist = 120 }),
 
 	LaserSweep = K(E, 4, {
@@ -493,7 +497,7 @@ local S: { [string]: Entry } = {
 	-- TODO(audio): swap in dedicated assets when available: a distant subterranean tremor for WarnRumble, a distant dropship/
 	-- servo swell for WarnMachinery, a proper 3-note breach siren for BreachHorn, a short ominous sting for HeavyContact.
 	WarnRumble = K(E, 4, {
-		{ id = "rbxassetid://9113223222", desc = "low distant ground rumble, burrowing tremor (reuses the Breach rumble, pitched down)", vol = 0.9, pitch = { 0.45, 0.6 }, minDist = 220, maxDist = 1400 },
+		{ id = "rbxassetid://9113223222", desc = "low distant ground rumble, burrowing tremor (reuses the Breach rumble, pitched down)", vol = 0.9, pitch = { 0.45, 0.6 }, minDist = 220, maxDist = 1400, start = 0.24 },
 		{ id = "rbxassetid://140183060324629", desc = "deep sub rumble swell", vol = 0.8, delay = 0.25, pitch = { 0.55, 0.7 }, minDist = 220, maxDist = 1400 },
 		{ id = "rbxassetid://120212342534790", desc = "far-off bug screech echo", vol = 0.35, delay = { 0.6, 1.4 }, pitch = { 0.6, 0.8 }, chance = 0.6, minDist = 220, maxDist = 1400 },
 	}, { limit = { count = 2, window = 1.5 }, priority = 4 }),
@@ -508,7 +512,7 @@ local S: { [string]: Entry } = {
 		{ id = "rbxassetid://3165700530", desc = "klaxon siren blast, breach inbound (reuses Klaxon)", vol = 1.0, pitch = { 0.82, 0.9 } },
 		{ id = "rbxassetid://70444139603815", desc = "giant war horn blast (reuses ColossusHorn)", vol = 1.1, pitch = { 0.78, 0.86 }, delay = 0.15 },
 		{ id = "rbxassetid://129621997122495", desc = "facility alarm wail tail", vol = 0.55, delay = 0.7, pitch = { 0.95, 1.0 } },
-		{ id = "rbxassetid://127364360574780", desc = "sub drone under the horn", vol = 0.9, pitch = { 0.5, 0.58 } },
+		{ id = "rbxassetid://127364360574780", desc = "sub drone under the horn", vol = 0.9, pitch = { 0.5, 0.58 }, start = 0.1 },
 	}, { limit = { count = 1, window = 2 }, duck = { groups = { "Weapons", "Ambience" }, db = -5, seconds = 1.2 } }),
 
 	HeavyContact = K(U, 5, {
@@ -530,7 +534,7 @@ local S: { [string]: Entry } = {
 	}, { limit = { count = 3, window = 0.2 } }),
 
 	UIOpen = K(U, 4, {
-		{ id = "rbxassetid://80901093788349", desc = "UI panel open swoosh, sci-fi whoosh with chirp", vol = 0.6, pitch = { 0.97, 1.03 } },
+		{ id = "rbxassetid://80901093788349", desc = "UI panel open swoosh, sci-fi whoosh with chirp", vol = 0.6, pitch = { 0.97, 1.03 }, start = 0.09 }, -- start: onset 116 -> 33 ms
 	}, { limit = { count = 2, window = 0.3 } }),
 
 	UIError = K(U, 4, {
