@@ -48,6 +48,17 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/Fx/EnemyAnim.luau hit-reaction spring: how far an enemy's body jolts per bullet
+		name = "ENEMY HIT",
+		keys = { "Feel_EnemyFlinch" },
+		presets = {
+			{ name = "A current", set = {} },
+			{ name = "B bigger jolt (x1.8)", set = { Feel_EnemyFlinch = 1.8 } },
+			{ name = "C huge jolt (x2.6)", set = { Feel_EnemyFlinch = 2.6 } },
+			{ name = "D subtle (x0.5)", set = { Feel_EnemyFlinch = 0.5 } },
+		},
+	},
+	{
 		-- client/FootPlant.luau: leg IK that keeps feet on slopes / bumps instead of sinking into them
 		name = "FEET",
 		keys = { "FootPlant" },
@@ -66,6 +77,27 @@ local GROUPS = {
 			{ name = "B store 113879008765178", sounds = { ShotRifle = { [1] = "rbxassetid://113879008765178" } } },
 			{ name = "C store 131480162950556", sounds = { ShotRifle = { [1] = "rbxassetid://131480162950556" } } },
 			{ name = "D store 122876890028097", sounds = { ShotRifle = { [1] = "rbxassetid://122876890028097" } } },
+		},
+	},
+	{
+		-- bullet-on-robot clang (HitMetal layer 1) + robot death (DeathScrap layer 1). B-D death sounds are from the
+		-- Pro Sound Effects library on the Creator Store ("Servo Pig Motor Burst Robot Death").
+		name = "ROBOT HIT + DEATH",
+		keys = {},
+		presets = {
+			{ name = "A current", sounds = {} },
+			{
+				name = "B clang 3 + death 6 (1.3 s)",
+				sounds = { HitMetal = { [1] = "rbxassetid://93157546246483" }, DeathScrap = { [1] = "rbxassetid://9118994605" } },
+			},
+			{
+				name = "C clang 2 + death 1 (1.6 s)",
+				sounds = { HitMetal = { [1] = "rbxassetid://79474907970393" }, DeathScrap = { [1] = "rbxassetid://9118993118" } },
+			},
+			{
+				name = "D clang 7 + death 1b (1.8 s)",
+				sounds = { HitMetal = { [1] = "rbxassetid://7842412909" }, DeathScrap = { [1] = "rbxassetid://9118994143" } },
+			},
 		},
 	},
 }

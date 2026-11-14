@@ -394,6 +394,12 @@ local function addImpulse(e: Entry, dirW: Vector3?, mag: number, weak: boolean, 
 		hx, hz = lv.X / len, lv.Z / len
 	end
 	local k = mag * (if weak then 1.35 else 1) * IMPULSE
+	if RunService:IsStudio() then -- Studio-only A/B multiplier (Variants.luau "ENEMY HIT")
+		local f = Workspace:GetAttribute("Feel_EnemyFlinch")
+		if type(f) == "number" then
+			k *= f
+		end
+	end
 	e.svx += hx * k
 	e.svz += hz * k
 	-- off-centre hits twist the body a little
@@ -1267,13 +1273,20 @@ local function step(_dt: number)
 			local h = dt / steps
 			local svx, svz, svyaw = clamp(e.svx, -70, 70), clamp(e.svz, -70, 70), clamp(e.svyaw, -40, 40)
 			local sx, sz, syaw = e.sx, e.sz, e.syaw
+			local maxDisp = MAX_DISP
+			if RunService:IsStudio() then -- a bigger A/B flinch also needs room to swing
+				local f = Workspace:GetAttribute("Feel_EnemyFlinch")
+				if type(f) == "number" and f > 1 then
+					maxDisp = MAX_DISP * f
+				end
+			end
 			for _ = 1, steps do
 				svx += (-SPRING_K * sx - SPRING_C * svx) * h
 				svz += (-SPRING_K * sz - SPRING_C * svz) * h
 				svyaw += (-SPRING_K * syaw - SPRING_C * svyaw) * h
-				sx = clamp(sx + svx * h, -MAX_DISP, MAX_DISP)
-				sz = clamp(sz + svz * h, -MAX_DISP, MAX_DISP)
-				syaw = clamp(syaw + svyaw * h, -MAX_DISP, MAX_DISP)
+				sx = clamp(sx + svx * h, -maxDisp, maxDisp)
+				sz = clamp(sz + svz * h, -maxDisp, maxDisp)
+				syaw = clamp(syaw + svyaw * h, -maxDisp, maxDisp)
 			end
 			if abs(sx) + abs(sz) + abs(syaw) + abs(svx) * 0.05 + abs(svz) * 0.05 + abs(svyaw) * 0.05 < 0.004 then
 				sx, sz, syaw, svx, svz, svyaw = 0, 0, 0, 0, 0, 0
