@@ -628,6 +628,12 @@ function GunFeel.shot(w: any, aiming: boolean?)
 		return
 	end
 	local kick = (KICK[w.id] or 0.6) * (if aiming then 0.7 else 1)
+	if RunService:IsStudio() then -- Studio-only A/B multiplier (Variants.luau "GUN FEEL")
+		local m = workspace:GetAttribute("Feel_GunKick")
+		if type(m) == "number" then
+			kick *= m
+		end
+	end
 	kx = math.min(kx + kick, 3)
 	GunFeel.lastShot = os.clock()
 	local cf, handle = getMuzzle()

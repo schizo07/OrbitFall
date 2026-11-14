@@ -18,6 +18,15 @@ local GunFeel = require(script.Parent.Fx.GunFeel)
 
 local WeaponController = {}
 local player = Players.LocalPlayer
+-- Studio-only feel multipliers (workspace attributes Feel_CamKick / Feel_HitStop, switched by Variants.luau)
+local IS_STUDIO = RunService:IsStudio()
+local function feel(name: string): number
+	if not IS_STUDIO then
+		return 1
+	end
+	local v = workspace:GetAttribute("Feel_" .. name)
+	return if type(v) == "number" then v else 1
+end
 local fireEv: RemoteEvent
 local actionEv: RemoteEvent
 local HUD: any = nil
@@ -189,7 +198,7 @@ local function shoot(w, slot: number)
 	end
 	GunFeel.shot(w, aim) -- grip recoil, star muzzle flash + light, casing, gatling heat (client/Fx/GunFeel.luau)
 	Audio.play(w.sound, mAtt or mPos, { source = "local" })
-	local kick = (w.recoil or 0.5) * (aim and 0.6 or 1)
+	local kick = (w.recoil or 0.5) * (aim and 0.6 or 1) * feel("CamKick")
 	Juice.kick(kick, (math.random() - 0.5) * kick * 0.6)
 	if w.kind == "rocket" or w.kind == "rail" then
 		Juice.shake(0.35, 0.25)
@@ -346,7 +355,7 @@ function WeaponController.init()
 		end
 		if killed then
 			Audio.play2D(weak and "KillWeak" or "Kill")
-			Juice.hitstop(weak and 0.05 or 0.03)
+			Juice.hitstop((weak and 0.05 or 0.03) * feel("HitStop"))
 		end
 	end)
 

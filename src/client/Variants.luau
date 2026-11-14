@@ -2,8 +2,8 @@
 -- Studio-only A/B switcher. Each group is a list of named presets; a preset is a set of workspace attributes
 -- (CamTune_* read by CameraController, PoseTune_* read by CombatPose, ...). Keys cycle the active group's presets
 -- live during Play so the user can pick by feel instead of describing it.
---   [  /  ]   previous / next preset in the current group
---   \         next group (when there is more than one)
+--   K / L  (or [ / ])   previous / next preset in the current group
+--   J      (or \)       next group (when there is more than one)
 -- A small label in the top-centre shows the group and preset. Live games never load this (Main.client: IsStudio).
 
 local RunService = game:GetService("RunService")
@@ -34,6 +34,17 @@ local GROUPS = {
 				name = "D gun at cheek",
 				set = { PoseTune_Pocket = Vector3.new(0.85, 0.95, -0.4), PoseTune_Blade = 0.35 },
 			},
+		},
+	},
+	{
+		-- per-shot camera kick (Juice.kick), the gun's own recoil in the hands (GunFeel), freeze-frame on kills
+		name = "GUN FEEL",
+		keys = { "Feel_CamKick", "Feel_GunKick", "Feel_HitStop" },
+		presets = {
+			{ name = "A current", set = {} },
+			{ name = "B heavy", set = { Feel_CamKick = 1.8, Feel_GunKick = 1.5, Feel_HitStop = 2 } },
+			{ name = "C light + snappy", set = { Feel_CamKick = 0.6, Feel_GunKick = 0.7, Feel_HitStop = 0.5 } },
+			{ name = "D big camera, steady gun", set = { Feel_CamKick = 2.2, Feel_GunKick = 0.8, Feel_HitStop = 1.5 } },
 		},
 	},
 	{
@@ -104,7 +115,7 @@ local function apply()
 	end
 	applySounds(g, p)
 	if label then
-		label.Text = string.format("%s: %s  (%d/%d)   [ ] switch   \\ next group", g.name, p.name, presetIdx, #g.presets)
+		label.Text = string.format("%s: %s  (%d/%d)   K / L switch   J next group", g.name, p.name, presetIdx, #g.presets)
 	end
 end
 
@@ -137,13 +148,15 @@ function Variants.init()
 			return
 		end
 		local g = GROUPS[groupIdx]
-		if io.KeyCode == Enum.KeyCode.RightBracket then
+		local k = io.KeyCode
+		-- letters work on every keyboard layout; [ ] \ kept as alternates
+		if k == Enum.KeyCode.L or k == Enum.KeyCode.RightBracket then
 			presetIdx = presetIdx % #g.presets + 1
 			apply()
-		elseif io.KeyCode == Enum.KeyCode.LeftBracket then
+		elseif k == Enum.KeyCode.K or k == Enum.KeyCode.LeftBracket then
 			presetIdx = (presetIdx - 2) % #g.presets + 1
 			apply()
-		elseif io.KeyCode == Enum.KeyCode.BackSlash and #GROUPS > 1 then
+		elseif (k == Enum.KeyCode.J or k == Enum.KeyCode.BackSlash) and #GROUPS > 1 then
 			groupIdx = groupIdx % #GROUPS + 1
 			presetIdx = 1
 			apply()
