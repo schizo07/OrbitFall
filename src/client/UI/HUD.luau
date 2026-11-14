@@ -29,6 +29,7 @@ local Compass = require(script.Parent.Compass)
 local ObjectiveList = require(script.Parent.ObjectiveList)
 local TopRight = require(script.Parent.TopRight)
 local CallInList = require(script.Parent.CallInList)
+local AreaInfo = require(script.Parent.AreaInfo)
 local SquadCards = require(script.Parent.SquadCards)
 local EventFeed = require(script.Parent.EventFeed)
 local PickupToast = require(script.Parent.PickupToast)
@@ -66,6 +67,15 @@ local countdownLast = -1
 local altAcc = 0
 
 local COMBAT = { Active = true, Extract = true }
+
+-- barrel reticle (HUD.setBarrelReticle, fed every frame by WeaponController)
+local BARREL_D = 46 -- circle diameter at zero spread (px)
+local BARREL_BLOCKED = Color3.fromRGB(255, 112, 52)
+local barrelTarget: Vector2? = nil
+local barrelBlocked = false
+local barrelCallT = -100
+local barrelPos: Vector2? = nil
+local barrelWarn = 0 -- 0 white .. 1 blocked colour (eased)
 
 local function missionState(): string
 	local m = Store.get("mission")
@@ -130,6 +140,39 @@ local function buildCrosshair()
 	Theme.stroke(dot, C.Black, 1, 0.1)
 	ui.dot = dot
 
+	-- barrel reticle (HUD.setBarrelReticle): bigger circle where the gun barrel really hits, white / orange when blocked.
+	-- Lives on the gui (not in `cross`, which sits at the screen centre). The gui ignores the GUI inset, so the pixel
+	-- positions of Camera:WorldToViewportPoint apply as they are.
+	local barrel = Instance.new("Frame")
+	barrel.Name = "BarrelReticle"
+	barrel.BackgroundTransparency = 1
+	barrel.AnchorPoint = Vector2.new(0.5, 0.5)
+	barrel.Size = UDim2.fromOffset(BARREL_D, BARREL_D)
+	barrel.Visible = false
+	barrel.ZIndex = 2
+	barrel.Parent = gui
+	Theme.corner(barrel, 100)
+	local bst = Instance.new("UIStroke")
+	bst.Color = C.White
+	bst.Thickness = 2
+	bst.Transparency = 0.15
+	bst.Parent = barrel
+	local outline = Instance.new("Frame")
+	outline.Name = "Outline"
+	outline.BackgroundTransparency = 1
+	outline.AnchorPoint = Vector2.new(0.5, 0.5)
+	outline.Position = UDim2.fromScale(0.5, 0.5)
+	outline.Size = UDim2.new(1, 4, 1, 4)
+	outline.Parent = barrel
+	Theme.corner(outline, 100)
+	local ost = Instance.new("UIStroke")
+	ost.Color = C.Black
+	ost.Thickness = 1
+	ost.Transparency = 0.55
+	ost.Parent = outline
+	ui.barrel = barrel
+	ui.barrelStroke = bst
+
 	-- hitmarker pool
 	for i = 1, 5 do
 		local hm = Instance.new("Frame")
@@ -146,8 +189,8 @@ local function buildCrosshair()
 			for _, sy in { -1, 1 } do
 				local b = Instance.new("Frame")
 				b.AnchorPoint = Vector2.new(0.5, 0.5)
-				b.Size = UDim2.fromOffset(4, 12)
-				b.Position = UDim2.new(0.5, sx * 10, 0.5, sy * 10)
+				b.Size = UDim2.fromOffset(3, 9)
+				b.Position = UDim2.new(0.5, sx * 8, 0.5, sy * 8)
 				b.Rotation = (sx * sy > 0) and 45 or -45
 				b.BackgroundColor3 = C.White
 				b.BorderSizePixel = 0
@@ -159,10 +202,10 @@ local function buildCrosshair()
 		local tag = Theme.label({
 			Text = "",
 			Font = "Black",
-			TextSize = 16,
-			Size = UDim2.fromOffset(120, 20),
+			TextSize = 13,
+			Size = UDim2.fromOffset(120, 16),
 			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.new(0.5, 0, 0, -22),
+			Position = UDim2.new(0.5, 0, 0, -18),
 			Parent = hm,
 		})
 		table.insert(hmPool, { frame = hm, scale = sc, bars = bars, tag = tag, tweens = {} })
@@ -317,7 +360,7 @@ local shotKick = 0 -- 1 right after a shot, decays to 0
 local jitterRng = Random.new()
 
 local MAG_SEGS = 20
-local HP_BAR_W = 190
+local HP_BAR_W = 210
 
 -- Bottom-left own card: weapon name + mag counter, segmented magazine bar, stim / grenade / mag counts, callsign + health bar.
 local function buildOwnCard(parent: Instance)
@@ -325,11 +368,12 @@ local function buildOwnCard(parent: Instance)
 		Name = "OwnCard",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, Style.MARGIN, 1, -Style.MARGIN),
-		Size = UDim2.fromOffset(HP_BAR_W + 62, 0),
+		Size = UDim2.fromOffset(HP_BAR_W + 66, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Parent = parent,
 	})
 	ui.ownCard = card
+	Style.applyBoost(card, touch)
 	Theme.pad(card, 8, 6, 8, 7)
 	Theme.list(card, Enum.FillDirection.Vertical, 4)
 
@@ -337,40 +381,41 @@ local function buildOwnCard(parent: Instance)
 	local top = Instance.new("Frame")
 	top.Name = "Weapon"
 	top.BackgroundTransparency = 1
-	top.Size = UDim2.new(1, 0, 0, 24)
+	top.Size = UDim2.new(1, 0, 0, 32)
 	top.LayoutOrder = 1
 	top.Parent = card
 	ui.ammoName = Style.label({
 		Text = "",
+		TextSize = 17,
 		Color = Style.Amber,
-		Size = UDim2.new(1, -78, 0, 14),
+		Size = UDim2.new(1, -96, 0, 18),
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = top,
 	})
 	ui.ammoState = Style.label({
 		Text = "",
-		TextSize = 12,
+		TextSize = 14,
 		Color = Style.Red,
-		Size = UDim2.new(1, -78, 0, 12),
-		Position = UDim2.fromOffset(0, 12),
+		Size = UDim2.new(1, -96, 0, 14),
+		Position = UDim2.fromOffset(0, 17),
 		Parent = top,
 	})
 	ui.ammoMag = Style.label({
 		Text = "0",
-		TextSize = 24,
+		TextSize = 32,
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -34, 0, -1),
-		Size = UDim2.fromOffset(44, 24),
+		Position = UDim2.new(1, -42, 0, -1),
+		Size = UDim2.fromOffset(54, 32),
 		Parent = top,
 	})
 	ui.ammoSpare = Style.label({
 		Text = "/ 0",
-		TextSize = 14,
+		TextSize = 17,
 		Color = Style.Grey,
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 7),
-		Size = UDim2.fromOffset(32, 14),
+		Position = UDim2.new(1, 0, 0, 9),
+		Size = UDim2.fromOffset(40, 18),
 		Parent = top,
 	})
 	ui.ammoMagPos = ui.ammoMag.Position
@@ -379,7 +424,7 @@ local function buildOwnCard(parent: Instance)
 	local segs = Instance.new("Frame")
 	segs.Name = "MagBar"
 	segs.BackgroundTransparency = 1
-	segs.Size = UDim2.new(1, 0, 0, 5)
+	segs.Size = UDim2.new(1, 0, 0, 6)
 	segs.LayoutOrder = 2
 	segs.Parent = card
 	Theme.list(segs, Enum.FillDirection.Horizontal, 1)
@@ -399,16 +444,17 @@ local function buildOwnCard(parent: Instance)
 	local counts = Instance.new("Frame")
 	counts.Name = "Counts"
 	counts.BackgroundTransparency = 1
-	counts.Size = UDim2.new(1, 0, 0, 16)
+	counts.Size = UDim2.new(1, 0, 0, 20)
 	counts.LayoutOrder = 3
 	counts.Parent = card
-	Theme.list(counts, Enum.FillDirection.Horizontal, 10, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+	Theme.list(counts, Enum.FillDirection.Horizontal, 12, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
 	local function countCell(name: string, glyph: string, order: number): TextLabel
 		local l = Style.label({
 			Name = name,
 			Text = glyph .. " 0",
+			TextSize = 16,
 			Color = Style.Amber,
-			Size = UDim2.fromOffset(0, 16),
+			Size = UDim2.fromOffset(0, 20),
 			AutomaticSize = Enum.AutomaticSize.X,
 			LayoutOrder = order,
 			Parent = counts,
@@ -424,13 +470,14 @@ local function buildOwnCard(parent: Instance)
 	local hpRow = Instance.new("Frame")
 	hpRow.Name = "Health"
 	hpRow.BackgroundTransparency = 1
-	hpRow.Size = UDim2.new(1, 0, 0, 18)
+	hpRow.Size = UDim2.new(1, 0, 0, 22)
 	hpRow.LayoutOrder = 4
 	hpRow.Parent = card
 	ui.callsign = Style.label({
 		Text = "A1",
+		TextSize = 17,
 		Color = Style.Amber,
-		Size = UDim2.fromOffset(26, 18),
+		Size = UDim2.fromOffset(32, 22),
 		Parent = hpRow,
 	})
 	local track = Style.rect({
@@ -438,8 +485,8 @@ local function buildOwnCard(parent: Instance)
 		Color = Style.Black,
 		Transparency = 0.4,
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 28, 0.5, 0),
-		Size = UDim2.fromOffset(HP_BAR_W, 8),
+		Position = UDim2.new(0, 34, 0.5, 0),
+		Size = UDim2.fromOffset(HP_BAR_W, 10),
 		Parent = hpRow,
 	})
 	ui.hpPanel = track
@@ -496,9 +543,11 @@ local function buildMain()
 	left.AutomaticSize = Enum.AutomaticSize.Y
 	left.Parent = root
 	Theme.list(left, Enum.FillDirection.Vertical, 8)
+	Style.applyBoost(left, touch) -- bigger text / rows (viewport scale comes from Theme.root + Style.content)
 	ui.left = left
 
 	buildShipPanel(left)
+	AreaInfo.build(left, touch, 1)
 	CallInList.build(left, touch, 2)
 
 	ui.compassMarkerLayer = Compass.build(root, touch)
@@ -629,13 +678,13 @@ function HUD.hitmarker(result: string, weak: boolean?, killed: boolean?)
 		end
 	end
 	hm.frame.Visible = true
-	-- punchier: bigger overshoot, a crosshair tick kick, and kills snap in with a twist + an expanding ring
-	hitKick = math.max(hitKick, if killed then 16 elseif weak then 10 else 5)
-	hm.scale.Scale = killed and 2.5 or (weak and 1.7 or 1.35)
-	table.insert(hm.tweens, tw(hm.scale, killed and 0.28 or 0.12, { Scale = killed and 1.35 or 1 }, Enum.EasingStyle.Back))
+	-- subtle (about half of the old pulses): small overshoot, a small tick kick, kills get a short twist + a thin ring
+	hitKick = math.max(hitKick, if killed then 8 elseif weak then 5 else 2.5)
+	hm.scale.Scale = killed and 1.7 or (weak and 1.35 or 1.17)
+	table.insert(hm.tweens, tw(hm.scale, killed and 0.2 or 0.1, { Scale = killed and 1.15 or 1 }, Enum.EasingStyle.Back))
 	if killed then
-		hm.frame.Rotation = 30
-		table.insert(hm.tweens, tw(hm.frame, 0.2, { Rotation = 0 }, Enum.EasingStyle.Back))
+		hm.frame.Rotation = 15
+		table.insert(hm.tweens, tw(hm.frame, 0.15, { Rotation = 0 }, Enum.EasingStyle.Back))
 		HUD.killRing(col)
 	else
 		hm.frame.Rotation = 0
@@ -652,8 +701,8 @@ function HUD.hitmarker(result: string, weak: boolean?, killed: boolean?)
 	hm.tag.TextColor3 = col
 	hm.tag.TextTransparency = 0
 	hm.tag.TextStrokeTransparency = 0.4
-	local hold = killed and 0.45 or 0.18
-	local fade = 0.22
+	local hold = killed and 0.3 or 0.12
+	local fade = 0.16
 	hm.gen = (hm.gen or 0) + 1
 	local gen = hm.gen
 	task.delay(hold, function()
@@ -677,16 +726,6 @@ end
 -- Streak = kills landed by the local player with < STREAK_WINDOW s between them. Original wording, no copied names.
 local STREAK_WINDOW = 3.5
 local STREAK_HOLD = 2.0
-local STREAK_NAMES = {
-	{ 2, "DOUBLE TAP" },
-	{ 3, "TRIPLE THREAT" },
-	{ 4, "FOUR ALARM" },
-	{ 5, "CLEAN SWEEP" },
-	{ 7, "SHOCK RUN" },
-	{ 10, "UNSTOPPABLE" },
-	{ 15, "ORBITAL WRATH" },
-	{ 25, "LEGEND OF THE DROP" },
-}
 local MILESTONES = { [3] = true, [5] = true, [7] = true, [10] = true, [15] = true, [25] = true }
 local streak = 0
 local streakLast = -100
@@ -724,29 +763,44 @@ local function buildStreak()
 	f.BackgroundTransparency = 1
 	f.AnchorPoint = Vector2.new(0.5, 0.5)
 	f.Position = UDim2.new(0.5, 0, 0.5, -140)
-	f.Size = UDim2.fromOffset(320, 84)
+	f.Size = UDim2.fromOffset(240, 52)
 	f.Visible = false
 	f.Parent = gui
 	local sc = Instance.new("UIScale")
 	sc.Parent = f
 	ui.streakFrame = f
 	ui.streakScale = sc
+	-- kill streak = drawn skull icon + the number next to it (no text; the HUD font has no skull glyph)
+	Theme.list(f, Enum.FillDirection.Horizontal, 8, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+	ui.streakSkull = Style.glyph("skull", { Size = 40, Color = C.White, Box = UDim2.fromOffset(40, 40), LayoutOrder = 1, Parent = f })
 	ui.streakCount = Theme.label({
 		Text = "",
 		Font = "Black",
-		TextSize = 46,
-		Size = UDim2.new(1, 0, 0, 52),
+		TextSize = 42,
+		XAlign = Enum.TextXAlignment.Left,
+		Size = UDim2.fromOffset(0, 48),
+		AutomaticSize = Enum.AutomaticSize.X,
+		LayoutOrder = 2,
 		Parent = f,
 	})
 	ui.streakCount.TextStrokeTransparency = 0.2
-	ui.streakName = Theme.label({
-		Text = "",
-		Font = "Header",
-		TextSize = 15,
-		Size = UDim2.new(1, 0, 0, 20),
-		Position = UDim2.fromOffset(0, 54),
-		Parent = f,
-	})
+end
+
+-- skull parts (white / dark frames) fade together with the number
+local function fadeSkull(alpha: number, time: number)
+	local skull = ui.streakSkull
+	if not skull then
+		return
+	end
+	for _, d in skull:GetDescendants() do
+		if d:IsA("Frame") then
+			if time > 0 then
+				table.insert(streakTweens, tw(d, time, { BackgroundTransparency = alpha }))
+			else
+				d.BackgroundTransparency = alpha
+			end
+		end
+	end
 end
 
 function HUD.killRing(color: Color3?)
@@ -754,16 +808,16 @@ function HUD.killRing(color: Color3?)
 	if not ring then
 		return
 	end
-	ring.Size = UDim2.fromOffset(26, 26)
+	ring.Size = UDim2.fromOffset(20, 20)
 	ring.Visible = true
 	stroke.Color = color or C.Danger
-	stroke.Transparency = 0.05
-	stroke.Thickness = 4
-	tw(ring, 0.32, { Size = UDim2.fromOffset(104, 104) }, Enum.EasingStyle.Quad)
-	tw(stroke, 0.32, { Transparency = 1, Thickness = 1 }, Enum.EasingStyle.Quad)
+	stroke.Transparency = 0.4
+	stroke.Thickness = 2
+	tw(ring, 0.22, { Size = UDim2.fromOffset(56, 56) }, Enum.EasingStyle.Quad)
+	tw(stroke, 0.22, { Transparency = 1, Thickness = 1 }, Enum.EasingStyle.Quad)
 end
 
-local function showStreak(text: string, sub: string?, color: Color3, big: number)
+local function showStreak(count: number, color: Color3, big: number)
 	local f = ui.streakFrame
 	if not f then
 		return
@@ -775,22 +829,20 @@ local function showStreak(text: string, sub: string?, color: Color3, big: number
 	streakGen += 1
 	local gen = streakGen
 	f.Visible = true
-	ui.streakCount.Text = text
+	ui.streakCount.Text = tostring(count)
 	ui.streakCount.TextColor3 = color
 	ui.streakCount.TextTransparency = 0
 	ui.streakCount.TextStrokeTransparency = 0.2
-	ui.streakName.Text = sub or ""
-	ui.streakName.TextColor3 = C.White
-	ui.streakName.TextTransparency = 0
-	ui.streakName.TextStrokeTransparency = 0.3
-	ui.streakScale.Scale = 1.5 * big
+	Style.tint(ui.streakSkull, color)
+	fadeSkull(0, 0)
+	ui.streakScale.Scale = 1.25 * big
 	table.insert(streakTweens, tw(ui.streakScale, 0.2, { Scale = big }, Enum.EasingStyle.Back))
 	task.delay(STREAK_HOLD, function()
 		if gen ~= streakGen then
 			return
 		end
 		table.insert(streakTweens, tw(ui.streakCount, 0.4, { TextTransparency = 1, TextStrokeTransparency = 1 }))
-		table.insert(streakTweens, tw(ui.streakName, 0.4, { TextTransparency = 1, TextStrokeTransparency = 1 }))
+		fadeSkull(1, 0.4)
 		task.delay(0.45, function()
 			if gen == streakGen then
 				f.Visible = false
@@ -810,29 +862,21 @@ local function onKill(d: any)
 	missionKills += 1
 	TopRight.setResource("kills", missionKills)
 	local class = d.class
-	local name: string? = nil
-	for _, e in STREAK_NAMES do
-		if streak >= e[1] then
-			name = e[2]
-		end
-	end
+	-- skull + number only (no streak names). Heavy / behemoth kills show it in gold even on a streak of 1.
 	if class == "behemoth" then
-		showStreak("BEHEMOTH DOWN", if streak >= 2 then string.format("x%d  %s", streak, name or "") else nil, C.Gold, 1.2)
+		showStreak(streak, C.Gold, 1.2)
 	elseif class == "heavy" then
-		showStreak("HEAVY DOWN", if streak >= 2 then string.format("x%d  %s", streak, name or "") else nil, C.Gold, 1.05)
+		showStreak(streak, C.Gold, 1.05)
 	elseif streak >= 2 then
 		-- colour heats up with the streak: white -> gold -> orange -> red
 		local col = if streak >= 10 then C.Danger elseif streak >= 5 then C.Accent elseif streak >= 3 then C.Gold else C.White
-		showStreak(string.format("x%d", streak), name, col, math.min(0.9 + streak * 0.03, 1.3))
+		showStreak(streak, col, math.min(0.9 + streak * 0.03, 1.3))
 	end
 	-- event feed: heavy kills and streak milestones (own kills = amber)
 	if class == "behemoth" then
 		EventFeed.push("BEHEMOTH DOWN", Style.Amber, "kill")
 	elseif class == "heavy" then
 		EventFeed.push("HEAVY DOWN", Style.Amber, "kill")
-	end
-	if MILESTONES[streak] then
-		EventFeed.push(string.format("x%d STREAK", streak), Style.Amber, "streak")
 	end
 	if MILESTONES[streak] and audioMod and audioMod.play2D then
 		pcall(audioMod.play2D, "KillWeak", { pitch = 0.9 + math.min(streak, 15) * 0.04, volume = 0.8, priority = 5 })
@@ -849,6 +893,55 @@ end
 
 function HUD.setSpread(deg: number)
 	spreadDeg = deg
+end
+
+-- Two-reticle system. screenPos = viewport pixels (Camera:WorldToViewportPoint, no GUI inset) of the point the gun barrel
+-- actually hits; nil hides the big circle. blocked = the barrel ray hits something before the camera's target (cover in
+-- front of the muzzle): the circle turns orange. Call every frame while armed; while the calls keep coming the centre
+-- crosshair shrinks to a small dot (= where the camera looks). ~0.35 s after the last call with a position the HUD falls
+-- back to the classic spread crosshair.
+function HUD.setBarrelReticle(screenPos: Vector2?, blocked: boolean)
+	barrelTarget = screenPos
+	barrelBlocked = blocked == true
+	barrelCallT = os.clock()
+end
+
+local function stepBarrel(dt: number, combat: boolean)
+	local ring = ui.barrel
+	if not ring then
+		return
+	end
+	local target = barrelTarget
+	local dual = combat and target ~= nil and os.clock() - barrelCallT < 0.35 and ui.cross.Visible
+	for _, t in ui.ticks do
+		t.frame.Visible = not dual
+	end
+	local dotSize = if dual then 5 else 4
+	if ui.dot.Size.X.Offset ~= dotSize then
+		ui.dot.Size = UDim2.fromOffset(dotSize, dotSize)
+	end
+	if not dual or not target then
+		if ring.Visible then
+			ring.Visible = false
+		end
+		barrelPos = nil
+		return
+	end
+	if not ring.Visible or not barrelPos then
+		barrelPos = target -- first frame after being hidden: snap, no slide-in
+		barrelWarn = if barrelBlocked then 1 else 0
+		ring.Visible = true
+	else
+		barrelPos = barrelPos:Lerp(target, 1 - math.exp(-40 * dt)) -- fast lerp: removes jitter, adds no visible lag
+	end
+	barrelWarn += ((if barrelBlocked then 1 else 0) - barrelWarn) * (1 - math.exp(-20 * dt))
+	ring.Position = UDim2.fromOffset(barrelPos.X, barrelPos.Y)
+	-- diameter follows the weapon spread a little (the old tick gap), capped
+	local d = BARREL_D + math.min(math.max(gap - 5, 0) * 0.4, 36)
+	ring.Size = UDim2.fromOffset(d, d)
+	ui.barrelStroke.Color = C.White:Lerp(BARREL_BLOCKED, barrelWarn)
+	ui.barrelStroke.Thickness = 2 + barrelWarn
+	ui.barrelStroke.Transparency = 0.15 - 0.1 * barrelWarn
 end
 
 function HUD.setReload(progress: number?)
@@ -1046,6 +1139,14 @@ local function updateCallins()
 	end
 end
 
+-- Area info panel (zone, objective + distance, threat, extraction): mission / objectives / intensity from the Store.
+local function updateArea()
+	local m = Store.get("mission")
+	if m then
+		AreaInfo.update(m, Store.get("objectives"), Store.get("intensity"), now())
+	end
+end
+
 -- Ammo / health ------------------------------------------------------------------------------------------------------------
 local function updateAmmo()
 	local me = Store.get("me")
@@ -1174,6 +1275,7 @@ local function applyVisibility()
 	Compass.setVisible(combat)
 	TopRight.setVisible(combat)
 	CallInList.setVisible(combat)
+	AreaInfo.setVisible(combat)
 	ui.ownCard.Visible = combat
 	EventFeed.setVisible(combat)
 	PickupToast.setVisible(combat)
@@ -1584,6 +1686,7 @@ local function step(dt: number)
 		end
 		Compass.step(cam, markers)
 		stepMarkers(cam)
+		AreaInfo.step(cam)
 		if ui.promptFrame.Visible then
 			ui.promptScale.Scale = 1 + 0.06 * math.sin(os.clock() * 7)
 		end
@@ -1591,6 +1694,7 @@ local function step(dt: number)
 			ui.reloadLabel.TextTransparency = 0.2 + 0.3 * math.abs(math.sin(os.clock() * 6))
 		end
 	end
+	stepBarrel(dt, combat)
 	-- ammo number: red pulse when the magazine is low, count-up + pop after a reload
 	if combat and ui.ammoMag then
 		local scale = ui.ammoScale
@@ -1604,7 +1708,7 @@ local function step(dt: number)
 		if ammoFill and fillT and fillT < 1 then
 			local u = 1 - (1 - fillT) * (1 - fillT)
 			ui.ammoMag.Text = tostring(math.floor(ammoFill.from + (ammoFill.to - ammoFill.from) * u + 0.5))
-			s = 1 + 0.28 * math.sin(fillT * math.pi)
+			s = 1 + 0.14 * math.sin(fillT * math.pi)
 			ui.ammoMag.TextColor3 = C.Friendly:Lerp(C.Text, fillT)
 		elseif ammoFill then
 			ammoFill = nil
@@ -1612,15 +1716,15 @@ local function step(dt: number)
 		elseif ammoLow then
 			local pulse = 0.5 + 0.5 * math.sin(os.clock() * 9)
 			ui.ammoMag.TextColor3 = C.Text:Lerp(C.Danger, 0.45 + 0.55 * pulse)
-			s = 1 + 0.12 * pulse
+			s = 1 + 0.06 * pulse
 		end
-		-- per-shot tick: quick pop + a couple of pixels of shake, decaying in ~0.12 s
+		-- per-shot tick: quick pop + a pixel of shake, decaying in ~0.12 s (halved from the first pass)
 		shotKick = math.max(0, shotKick - dt * 8)
-		s *= 1 + 0.09 * shotKick
+		s *= 1 + 0.045 * shotKick
 		local base = ui.ammoMagPos
 		if base then
 			if shotKick > 0 then
-				local j = 2.5 * shotKick
+				local j = 1.2 * shotKick
 				ui.ammoMag.Position = base + UDim2.fromOffset(jitterRng:NextNumber(-j, j), jitterRng:NextNumber(-j, j) * 0.6)
 			elseif ui.ammoMag.Position ~= base then
 				ui.ammoMag.Position = base
@@ -1699,6 +1803,7 @@ local function onMission()
 	updateObjectives()
 	updateTimer()
 	updateOverlay()
+	updateArea()
 end
 
 function HUD.init()
@@ -1752,6 +1857,7 @@ function HUD.init()
 	end)
 	Store.on("holding", updatePrompt)
 	Store.on("objectives", updateObjectives)
+	Store.on("objectives", updateArea)
 	Store.on("squad", updateSquad)
 	Store.on("profile", updateShip)
 	Store.on("menuOpen", applyVisibility)
@@ -1777,6 +1883,7 @@ function HUD.init()
 		updateCallins()
 		updateTimer()
 		updateOverlay()
+		updateArea()
 		SquadCards.tick(Store.get("me"), Store.get("mission"), now())
 		EventFeed.tick()
 	end)

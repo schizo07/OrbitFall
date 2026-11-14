@@ -17,7 +17,7 @@ local rows: { any } = {}
 local rowKey: string? = nil
 
 local function rowHeight(): number
-	return if touch then 30 else 36
+	return if touch then 30 else 38
 end
 
 local function makeRow(def: any, order: number, reinforce: boolean, slotIndex: number?): any
@@ -26,17 +26,18 @@ local function makeRow(def: any, order: number, reinforce: boolean, slotIndex: n
 	tick.Position = UDim2.fromOffset(0, 0)
 	local icon = Style.label({
 		Text = Style.callinCode(def), -- ASCII code; the data icons are dingbats the HUD font lacks
-		TextSize = if touch then 11 else 12,
+		TextSize = if touch then 13 else 15,
 		Color = Style.Amber,
 		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.new(0, 24, 1, 0),
+		Size = UDim2.new(0, 32, 1, 0),
 		Position = UDim2.fromOffset(12, 0),
 		Parent = row,
 	})
 	local name = Style.label({
 		Text = if reinforce then "REINFORCE" else (def and def.name or "?"),
-		Size = UDim2.new(1, -(if touch then 84 else 96), 1, 0),
-		Position = UDim2.fromOffset(40, 0),
+		TextSize = 16,
+		Size = UDim2.new(1, -(if touch then 90 else 112), 1, 0),
+		Position = UDim2.fromOffset(48, 0),
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Visible = not touch, -- phones: icons only
 		Parent = row,
@@ -51,7 +52,7 @@ local function makeRow(def: any, order: number, reinforce: boolean, slotIndex: n
 	Theme.list(pips, Enum.FillDirection.Horizontal, 2, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
 	local badge = Style.label({
 		Text = "",
-		TextSize = 12,
+		TextSize = 14,
 		Color = Style.Amber,
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0),
@@ -70,10 +71,10 @@ local function makeRow(def: any, order: number, reinforce: boolean, slotIndex: n
 	})
 	local secs = Style.label({
 		Text = "",
-		TextSize = if touch then 14 else 16,
+		TextSize = if touch then 15 else 18,
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -6, 0.5, 0),
-		Size = UDim2.fromOffset(44, 20),
+		Size = UDim2.fromOffset(48, 22),
 		XAlign = Enum.TextXAlignment.Right,
 		ZIndex = 4,
 		Parent = row,
@@ -109,7 +110,7 @@ function CallInList.build(parent: Instance, isTouch: boolean, order: number?)
 	touch = isTouch
 	local p = Style.panel({
 		Name = "CallIns",
-		Size = if isTouch then UDim2.fromOffset(104, 0) else UDim2.new(1, 0, 0, 0), -- phones: narrow icon column
+		Size = if isTouch then UDim2.fromOffset(112, 0) else UDim2.new(1, 0, 0, 0), -- phones: narrow icon column
 		AutomaticSize = Enum.AutomaticSize.Y,
 		LayoutOrder = order or 1,
 		Visible = false,
@@ -119,9 +120,9 @@ function CallInList.build(parent: Instance, isTouch: boolean, order: number?)
 	Theme.list(p, Enum.FillDirection.Vertical, 2)
 	Style.label({
 		Text = "UPLINK",
-		TextSize = 12,
+		TextSize = 14,
 		Color = Style.Grey,
-		Size = UDim2.new(1, 0, 0, 16),
+		Size = UDim2.new(1, 0, 0, 18),
 		LayoutOrder = 0,
 		Parent = p,
 	})
@@ -215,7 +216,7 @@ function CallInList.update(me: any, t: number)
 						Style.rect({
 							Color = if i <= have then Style.Amber else Style.Grey,
 							Transparency = if i <= have then 0 else 0.55,
-							Size = UDim2.fromOffset(9, 4),
+							Size = UDim2.fromOffset(10, 4),
 							LayoutOrder = i,
 							Parent = r.pips,
 						})

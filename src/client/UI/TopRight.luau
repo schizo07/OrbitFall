@@ -32,6 +32,7 @@ function TopRight.build(parent: Instance, touch: boolean)
 	holder.Size = UDim2.fromOffset(0, 0)
 	holder.AutomaticSize = Enum.AutomaticSize.XY
 	holder.Parent = parent
+	Style.applyBoost(holder, touch, 0.92) -- timer / lives / chips a bit larger (about 1.2 x PC, 1.1 x phone)
 	Theme.list(holder, Enum.FillDirection.Vertical, 6, Enum.HorizontalAlignment.Right)
 	ui.holder = holder
 

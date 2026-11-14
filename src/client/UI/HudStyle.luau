@@ -180,7 +180,7 @@ end
 -- Roblox fonts only cover ASCII reliably (symbols such as arrows, diamonds, gears, stars and emoji render as empty boxes),
 -- so every icon-like mark is built from plain Frames. Style.glyph(shape, props) returns a transparent host Frame; recolour it
 -- with Style.tint(host, colour), fade it with Style.glyphAlpha(host, t) / Style.glyphTween(host, time, t).
--- shapes: diamond, diamondHollow, square, dot, ring, reticle, up, down, right, left, cross, plus, bar, dash, star, cog, token, lock, check
+-- shapes: diamond, diamondHollow, square, dot, ring, reticle, up, down, right, left, cross, plus, bar, dash, star, cog, token, lock, check, skull
 local SQ2 = math.sqrt(2)
 
 local function gpart(host: Instance, hollow: boolean?): Frame
@@ -344,6 +344,41 @@ function Style.glyph(shape: string, props: { [string]: any }?): Frame
 		b.Rotation = -45
 		b.Position = UDim2.fromScale(0.62, 0.5)
 		gsize(b, 2, size * 0.8)
+	elseif shape == "skull" then
+		-- rounded cranium + narrower jaw; eye sockets, nose and tooth gaps are dark "Eye" frames (not tinted by Style.tint)
+		local function dark(w: number, h: number, x: number, y: number, round: boolean): Frame
+			local e = Instance.new("Frame")
+			e.Name = "Eye"
+			e.BorderSizePixel = 0
+			e.BackgroundColor3 = Style.Black
+			e.AnchorPoint = Vector2.new(0.5, 0.5)
+			e.Position = UDim2.fromScale(x, y)
+			gsize(e, w, h)
+			if round then
+				local c = Instance.new("UICorner")
+				c.CornerRadius = UDim.new(0.5, 0)
+				c.Parent = e
+			end
+			e.Parent = host
+			return e
+		end
+		local skullPart = gpart(host)
+		skullPart.Position = UDim2.fromScale(0.5, 0.4)
+		gsize(skullPart, size * 0.88, size * 0.72)
+		local cc = Instance.new("UICorner")
+		cc.CornerRadius = UDim.new(0.42, 0)
+		cc.Parent = skullPart
+		local jaw = gpart(host)
+		jaw.Position = UDim2.fromScale(0.5, 0.8)
+		gsize(jaw, size * 0.5, size * 0.34)
+		local jc = Instance.new("UICorner")
+		jc.CornerRadius = UDim.new(0.2, 0)
+		jc.Parent = jaw
+		dark(size * 0.22, size * 0.24, 0.31, 0.42, true)
+		dark(size * 0.22, size * 0.24, 0.69, 0.42, true)
+		dark(size * 0.08, size * 0.12, 0.5, 0.6, false)
+		dark(math.max(1, size * 0.05), size * 0.2, 0.42, 0.88, false)
+		dark(math.max(1, size * 0.05), size * 0.2, 0.58, 0.88, false)
 	end
 	Style.tint(host, p.Color or Style.White)
 	host.Parent = parent
@@ -447,6 +482,26 @@ function Style.content(root: Frame, touch: boolean): Frame
 	us.Parent = f
 	f.Parent = root
 	return f
+end
+
+-- Extra size of the main readable boxes (uplink / area info column, own weapon card, timer block) on top of the viewport
+-- scale that Theme.root + Style.content already apply. Phones are boosted too because content is drawn at 0.8 x there, but
+-- less than PC so the left column still ends above the FEED button (y 50 %).
+Style.BOOST_PC = 1.3
+Style.BOOST_TOUCH = 1.2
+
+function Style.boost(touch: boolean): number
+	return if touch then Style.BOOST_TOUCH else Style.BOOST_PC
+end
+
+-- UIScale child on a (top-left / bottom-left / top-right anchored) frame: the frame grows by `Style.boost`, its position
+-- offsets (screen margins) stay as they are. Returns the UIScale.
+function Style.applyBoost(frame: GuiObject, touch: boolean, extra: number?): UIScale
+	local us = Instance.new("UIScale")
+	us.Name = "Boost"
+	us.Scale = Style.boost(touch) * (extra or 1)
+	us.Parent = frame
+	return us
 end
 
 -- Callsigns: squad members sorted by userId get A1, B2, C3 ... and a stable colour. The local player is always amber.
