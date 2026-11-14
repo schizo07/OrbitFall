@@ -83,6 +83,11 @@ do -- two-handed weapon hold + aim pose for every armed character (client/Combat
 	if Pose then
 		safeCall("CombatPose", Pose.init, GunFeelMod, MovementMod, fxFolder and safeRequire(fxFolder:FindFirstChild("ArmorFx")))
 	end
+	-- feet on the ground on slopes / bumps (connects PreSimulation after Movement and CombatPose)
+	local Feet = safeRequire(root:FindFirstChild("FootPlant"))
+	if Feet then
+		safeCall("FootPlant", Feet.init, MovementMod)
+	end
 end
 if Weapon then
 	Weapon.setHUD(HUD)

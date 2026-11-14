@@ -37,6 +37,15 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/FootPlant.luau: leg IK that keeps feet on slopes / bumps instead of sinking into them
+		name = "FEET",
+		keys = { "FootPlant" },
+		presets = {
+			{ name = "A planted (new)", set = {} },
+			{ name = "B old (feet sink on slopes)", set = { FootPlant = false } },
+		},
+	},
+	{
 		-- carbine main crack layer (Sounds.ShotRifle layer 1); the body thump / click / sub / far-tail layers stay.
 		-- Candidates from a Creator Store search; names that say they are ripped from other games were skipped.
 		name = "CARBINE SHOT",
