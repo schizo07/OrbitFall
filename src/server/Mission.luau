@@ -1,6 +1,7 @@
 -- Mission state machine (docs/spec.md §2.1):
 -- Ship -> Countdown -> Drop -> Active -> Extract -> Results -> Ship   (or -> Failed -> Ship)
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Enemies = require(Shared.Data.Enemies)
@@ -19,6 +20,7 @@ Mission.objective = "MISSILE"
 Mission.extract = nil :: any
 Mission.kills = {} :: { [Player]: number }
 Mission.lastBeacon = nil :: Vector3?
+Mission.arena = false -- Studio test arena (World/TestArena): an "Active" mission with no objectives, no Director, no tick loop
 
 local token = 0 -- invalidates stale timers when the mission changes
 local OBJECTIVE_NAMES = { MISSILE = "Missile Launch", UPLINK = "Uplink Relay" }
@@ -92,7 +94,9 @@ function Mission.onPlayerDied(_p: Player)
 end
 
 function Mission.onPlayerJoined(p: Player)
-	if inMission() and S.Map.current then
+	if Mission.arena and S.TestArena then
+		S.TestArena.spawnPlayer(p)
+	elseif inMission() and S.Map.current then
 		S.Players.respawnAt(p, S.Map.current.insertion.Position)
 	else
 		S.Players.spawnOnShip(p)
@@ -127,6 +131,12 @@ local function cleanup()
 end
 
 local function returnToShip()
+	if Mission.arena then
+		Mission.arena = false
+		if S.TestArena then
+			pcall(S.TestArena.onClosed)
+		end
+	end
 	cleanup()
 	Mission.extract = nil
 	Mission.lastBeacon = nil
@@ -143,6 +153,11 @@ end
 
 local function finish(success: boolean)
 	if not inMission() then
+		return
+	end
+	if Mission.arena then -- the arena has no results screen or rewards: just leave it
+		token += 1
+		returnToShip()
 		return
 	end
 	token += 1
@@ -249,7 +264,11 @@ function Mission.start(p: Player?, args)
 	end
 	args = type(args) == "table" and args or {}
 	Mission.planet = nil
-	if args.planet ~= nil and S.War then
+	-- Studio only (DebugHook `start`, QuickStart): args.quickBiome builds that biome for either faction, no war-map planet needed
+	local biomeOverride: string? = if RunService:IsStudio() and type(args.quickBiome) == "string" then args.quickBiome else nil
+	if biomeOverride then
+		-- planet-less test mission: Mission.planet stays nil (no war contribution)
+	elseif args.planet ~= nil and S.War then
 		local ok, factionOrReason = S.War.canPlay(args.planet)
 		if not ok then
 			return false, factionOrReason
@@ -273,7 +292,7 @@ function Mission.start(p: Player?, args)
 		local built = false
 		local okBuild, err = pcall(function()
 			local pl = Mission.planet and Planets.get(Mission.planet)
-			S.Map.build(Mission.faction, pl and pl.biome or nil)
+			S.Map.build(Mission.faction, biomeOverride or (pl and pl.biome) or nil)
 		end)
 		if not okBuild then
 			warn("[Mission] map build failed:", err)
@@ -331,6 +350,29 @@ function Mission.debugFinish(success: boolean)
 	finish(success)
 end
 function Mission.debugAbort()
+	token += 1
+	returnToShip()
+end
+
+-- Studio test arena (World/TestArena.luau). Mission state "Active" is what makes the client show the combat HUD and call-ins.
+function Mission.beginArena(faction: string?): (boolean, string?)
+	if Mission.state ~= "Ship" then
+		return false, "A mission is already underway"
+	end
+	token += 1
+	Mission.planet = nil
+	Mission.faction = if faction == "BROOD" then "BROOD" else "COG"
+	Mission.objective = "TEST ARENA"
+	Mission.difficulty = 1
+	Mission.kills = {}
+	Mission.extract = nil
+	Mission.lastBeacon = nil
+	Mission.lives = 99
+	Mission.arena = true
+	setState("Active", 7200)
+	return true, nil
+end
+function Mission.endArena()
 	token += 1
 	returnToShip()
 end

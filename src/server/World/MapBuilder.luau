@@ -3013,6 +3013,15 @@ function MapBuilder.init(registry: any)
 	S = registry
 end
 
+-- Studio test arena (World/TestArena.luau): a biome's terrain colours + sky/lighting WITHOUT building the map.
+-- MapBuilder.clear() restores the ship lighting afterwards, exactly as for a real map.
+function MapBuilder.applyBiomeLook(biome: string?, faction: string?)
+	biomeName = if biome and BIOMES[biome] then biome else "desert"
+	B = BIOMES[biomeName]
+	setTerrainColors()
+	applyLighting(if faction == "BROOD" then "BROOD" else "COG", biomeName)
+end
+
 function MapBuilder.clear()
 	local m = Workspace:FindFirstChild("Map")
 	if m then

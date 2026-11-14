@@ -1576,7 +1576,8 @@ local function loop(myGen: number)
 	end
 end
 
-function Director.start(m: any, faction: string, diff: number)
+-- opts.noInitial: skip the opening guard groups (Studio test arena: pacing on, but nothing pre-placed)
+function Director.start(m: any, faction: string, diff: number, opts: any?)
 	Director.stop()
 	map = m
 	factionId = if EnemyData.Factions[faction] then faction else "COG"
@@ -1617,6 +1618,9 @@ function Director.start(m: any, faction: string, diff: number)
 
 	-- initial guard groups around the patrol points, away from the insertion zone
 	task.spawn(function()
+		if opts and opts.noInitial then
+			return
+		end
 		local ins = m and m.insertion and m.insertion.Position or Vector3.zero
 		local points: { Vector3 } = {}
 		for _, p in (m and m.patrolPoints) or {} do

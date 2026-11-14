@@ -52,6 +52,17 @@ CameraController.sens = 0.0042
 CameraController.touchSens = 0.0065
 CameraController.padSens = 3.0
 
+-- Studio-only live tuning: workspace attributes CamTune_<name> override the framing constants above while playing
+-- (same pattern as CombatPose's PoseTune_*). Variants.luau switches whole presets with a key. Live games ignore them.
+local IS_STUDIO = RunService:IsStudio()
+local function tune(name: string, default: any): any
+	if not IS_STUDIO then
+		return default
+	end
+	local v = workspace:GetAttribute("CamTune_" .. name)
+	return if v ~= nil and typeof(v) == typeof(default) then v else default
+end
+
 local touchLook: { [InputObject]: Vector3 } = {}
 
 function CameraController.setFreeMouse(v: boolean)
@@ -198,7 +209,7 @@ function CameraController.init()
 				focusXZ = focusXZ:Lerp(want, 1 - math.exp(-dt * FOLLOW_RATE))
 			end
 			local fxz = focusXZ :: Vector3
-			focus = Vector3.new(fxz.X, rp.Y + PIVOT_UP, fxz.Z)
+			focus = Vector3.new(fxz.X, rp.Y + tune("PivotUp", PIVOT_UP), fxz.Z)
 		else
 			focus = camera.Focus.Position
 			focusXZ = nil
@@ -231,14 +242,14 @@ function CameraController.init()
 		local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
 		dist += (distTarget - dist) * math.min(1, dt * 8)
 		-- hip framing: default -> sprint (wider, a bit back) -> prone/dive (low and close)
-		local hipDist = dist + SPRINT_DIST_ADD * sprint
-		local hipShoulder = SHOULDER:Lerp(SPRINT_SHOULDER, sprint)
+		local hipDist = dist + tune("DistAdd", 0) + SPRINT_DIST_ADD * sprint
+		local hipShoulder = (tune("Shoulder", SHOULDER) :: Vector3):Lerp(SPRINT_SHOULDER, sprint)
 		hipDist += (LOW_DIST - hipDist) * lowBlend
 		hipShoulder = hipShoulder:Lerp(LOW_SHOULDER, lowBlend)
 		-- aim-down-sights: pull in tight over the right shoulder (fixed ADS distance, independent of wheel zoom)
 		local ads = aimBlend * aimBlend * (3 - 2 * aimBlend) -- smoothstep: snappy in the middle, soft ends
-		local wantDist = hipDist + (ADS_DIST - hipDist) * ads
-		local shoulder = hipShoulder:Lerp(ADS_SHOULDER, ads)
+		local wantDist = hipDist + (tune("AdsDist", ADS_DIST) - hipDist) * ads
+		local shoulder = hipShoulder:Lerp(tune("AdsShoulder", ADS_SHOULDER), ads)
 		local desired = CFrame.new(focus) * rot * CFrame.new(shoulder + Vector3.new(0, 0, wantDist))
 		-- collision: pull in toward focus
 		rayParams.FilterDescendantsInstances = camExclude()
@@ -262,7 +273,7 @@ function CameraController.init()
 		cf = cf * Juice.step(dt)
 		camera.CFrame = cf
 		camera.Focus = CFrame.new(focus)
-		local fov = BASE_FOV - ads * (ADS_FOV_DROP + (zoomMult - 1) * 22) + SPRINT_FOV_ADD * sprint + Juice.getFov()
+		local fov = tune("Fov", BASE_FOV) - ads * (tune("AdsFovDrop", ADS_FOV_DROP) + (zoomMult - 1) * 22) + SPRINT_FOV_ADD * sprint + Juice.getFov()
 		camera.FieldOfView = math.clamp(fov, 20, 100)
 
 		-- lens jammed against the trooper (wall pull-in): fade the local character so it never fills the screen

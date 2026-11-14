@@ -164,6 +164,19 @@ if Audio and Audio.setMusic then
 	end)
 end
 
+-- Studio-only test keys (spawn enemies, god mode, ...) + key-help label in the test arena
+if game:GetService("RunService"):IsStudio() then
+	local DebugKeys = safeRequire(root:FindFirstChild("DebugKeys"))
+	if DebugKeys then
+		task.spawn(safeCall, "DebugKeys", DebugKeys.init)
+	end
+	-- A/B presets ([ ] switch, \ next group): camera framing, carbine sound, ...
+	local Variants = safeRequire(root:FindFirstChild("Variants"))
+	if Variants then
+		task.spawn(safeCall, "Variants", Variants.init)
+	end
+end
+
 -- tell the server we're listening so it resends per-player state (me/profile/war)
 Net.event("Action"):FireServer("clientReady")
 print(("[%s] client ready"):format(Config.GameName))

@@ -42,10 +42,12 @@ S.Objectives = try("ObjectiveService", function() return root.Objectives.Objecti
 S.Extraction = try("Extraction", function() return root.Objectives.Extraction end)
 S.War = try("WarService", function() return root.WarService end)
 S.Mission = try("Mission", function() return root.Mission end)
+S.TestArena = try("TestArena", function() return root.World.TestArena end) -- Studio test arena
+S.DevTools = try("DevTools", function() return root.DevTools end) -- Studio quick start + arena keys remote
 
 local ORDER = {
 	"Assets", "Actions", "Fx", "State", "Save", "Progress", "Shop", "Enemies", "Projectiles", "Director",
-	"CallIns", "Map", "Ship", "Objectives", "Extraction", "Players", "Weapons", "War", "Mission",
+	"CallIns", "Map", "Ship", "Objectives", "Extraction", "Players", "Weapons", "War", "Mission", "TestArena", "DevTools",
 }
 
 for _, name in ORDER do
@@ -98,7 +100,12 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 	local first = Players:GetPlayers()[1]
 	if cmd == "start" then
 		a = a or { faction = "COG", objective = "MISSILE", difficulty = 1 }
-		if not a.planet and S.War then -- pick a playable planet of the requested faction
+		-- no planet given: build the DESERT map for any faction (Studio only, see Mission.start `quickBiome`).
+		-- Pass `biome = "swamp"` etc., or a `planet`, to override.
+		if not a.planet and not a.quickBiome then
+			a.quickBiome = a.biome or "desert"
+		end
+		if not a.planet and not a.quickBiome and S.War then -- pick a playable planet of the requested faction
 			for id, st in S.War.state() do
 				if st.playable and (a.faction == nil or st.faction == a.faction) then
 					a.planet = id
@@ -134,7 +141,20 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 	elseif cmd == "give" then
 		S.Players.giveSupport(first, a)
 		return true
+	elseif cmd == "arena" then -- arena(["COG"|"BROOD"]) enters the Studio test arena; arena("exit") leaves it
+		if a == "exit" then
+			return S.TestArena.exit()
+		end
+		local ok, why = S.TestArena.enter(a)
+		return if ok then "arena open" else why
+	elseif cmd == "arenaspawn" then -- arenaspawn(kind, count, dist): e.g. ("TINKER_SWARM", 6, 30); kinds are Data/Enemies ids
+		return S.TestArena.spawn(first, a, b, c)
+	elseif cmd == "arenaop" then -- arenaop(op): tinker skitter tinkerswarm skitterswarm rivet spitter clear god director breach refill faction
+		return S.DevTools.run(first, a)
 	elseif cmd == "god" then
+		if S.DevTools and first then -- same effect as before, but remembered across respawns
+			return S.DevTools.setGod(first, a ~= false)
+		end
 		local h = first and S.Players.getHumanoid(first)
 		if h then
 			h.MaxHealth = a == false and Config.PlayerHealth or 1e6

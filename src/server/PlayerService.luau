@@ -123,12 +123,13 @@ function PlayerService.getDead(): { Player }
 end
 
 -- Loadout from profile (S.Save) or defaults.
-function PlayerService.applyLoadout(p: Player, keepCallins: boolean?)
+-- `override` (Studio test arena): use this loadout instead of the saved profile's.
+function PlayerService.applyLoadout(p: Player, keepCallins: boolean?, override: any?)
 	local r = recs[p]
 	if not r then
 		return
 	end
-	local lo = S.Save and S.Save.getLoadout(p)
+	local lo = override or (S.Save and S.Save.getLoadout(p))
 		or { primary = "PR7", secondary = "P3", grenade = "FRAG", callins = { "LANCE", "HALFTON", "STRAFE", "SUPPLY" } }
 	r.weapons = { newWeapon(lo.primary) or newWeapon("PR7"), newWeapon(lo.secondary) or newWeapon("P3"), nil }
 	r.slot = 1
@@ -285,6 +286,22 @@ function PlayerService.respawnAt(p: Player, pos: Vector3)
 		target = Vector3.new(target.X, S.Map.current.groundY(target.X, target.Z), target.Z)
 	end
 	PlayerService.dropTo(p, target)
+end
+
+-- Instant spawn (no drop capsule) at `cf` with an optional loadout override. Used by the Studio test arena.
+function PlayerService.spawnAt(p: Player, cf: CFrame, loadout: any?)
+	local r = recs[p]
+	if not r then
+		return
+	end
+	r.alive = true
+	r.dropping = false
+	loadTrooper(p)
+	local c = p.Character
+	if c then
+		c:PivotTo(cf)
+	end
+	PlayerService.applyLoadout(p, false, loadout)
 end
 
 function PlayerService.spawnOnShip(p: Player)
