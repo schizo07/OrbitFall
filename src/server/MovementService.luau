@@ -1,6 +1,7 @@
 -- Server half of tactical movement: authoritative stamina + stance (client/Movement.luau predicts both).
 -- Owned by PlayerService (required + driven from there; not in the Main ORDER list).
--- Actions (C->S): move(stance: string, sprinting: boolean), dive()
+-- Actions (C->S): move(stance: string, sprinting: boolean), dive(), aim(pitch), twist(radians; prone/dive upper-body yaw
+-- against the legs, replicated as character attribute `Twist`)
 -- Writes rec.stamina / rec.exhausted / rec.stance (sent in `me`) and the character attribute `Stance`
 -- (replicated so every client can pose other players: stand|crouch|prone|dive|mantle|down).
 local Players = game:GetService("Players")
@@ -49,6 +50,14 @@ local function setAttr(p: Player, stance: string)
 	end
 end
 
+-- The upper-body twist only exists while prone / diving: any other stance zeroes the replicated value.
+local function clearTwist(p: Player, stance: string)
+	local c = p.Character
+	if c and stance ~= "prone" and stance ~= "dive" and c:GetAttribute("Twist") ~= nil and c:GetAttribute("Twist") ~= 0 then
+		c:SetAttribute("Twist", 0)
+	end
+end
+
 -- Merged into `me` by PlayerService.buildMe.
 function MovementService.state(p: Player): (number, boolean, string)
 	local m = get(p)
@@ -68,6 +77,7 @@ function MovementService.onCharacter(p: Player, c: Model)
 	local m = get(p)
 	m.stamina, m.exhausted, m.sprinting, m.stance = 1, false, false, "stand"
 	c:SetAttribute("Stance", "stand")
+	c:SetAttribute("Twist", 0)
 	PS.publish(p)
 end
 
@@ -82,7 +92,31 @@ function MovementService.init(s, playerService)
 		m.stance = stance
 		m.sprinting = sprinting == true and stance == "stand" and not m.exhausted
 		setAttr(p, stance)
+		clearTwist(p, stance)
 		PS.publish(p)
+	end)
+	-- upper-body twist (radians) while prone / diving, for the other clients' pose (Movement.twistStep); ~10 Hz
+	local lastTwist: { [Player]: number } = {}
+	S.Actions.on("twist", function(p: Player, v: any)
+		if typeof(v) ~= "number" or v ~= v then
+			return
+		end
+		local m = get(p)
+		if m.stance ~= "prone" and m.stance ~= "dive" and v ~= 0 then
+			return
+		end
+		local t = os.clock()
+		if t - (lastTwist[p] or 0) < 0.08 and v ~= 0 then
+			return
+		end
+		lastTwist[p] = t
+		local c = p.Character
+		if c then
+			c:SetAttribute("Twist", math.floor(math.clamp(v, -3.1, 3.1) * 100 + 0.5) / 100)
+		end
+	end)
+	Players.PlayerRemoving:Connect(function(p)
+		lastTwist[p] = nil
 	end)
 	-- aim pitch (radians) for the other clients' CombatPose; the owner sends it ~8x/s when it changes
 	local lastAim: { [Player]: number } = {}

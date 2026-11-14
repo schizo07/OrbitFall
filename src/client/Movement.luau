@@ -6,6 +6,10 @@
 --  * Knockdown: heavy server knocks ("Knockdown" Fx) tumble you on the ground for KnockdownTime, then you get up.
 --  * Poses: animation-free Motor6D C0 offsets + Humanoid.HipHeight, applied by every client to every character
 --    (remote characters read the replicated `Stance` attribute the server sets).
+--  * Prone / dive facing: legs (root) keep their heading, the upper body twists toward the camera (Waist joint, clamped
+--    to ProneTwistLimit); beyond it the root turns; crawling turns the root toward the crawl direction.
+--    Studio A/B attrs: ProneTwist=false (old: whole body follows the camera), ProneTwistLimit (deg), ProneTurnRate (1/s)
+--    (client-side workspace attributes, read live).
 -- Store keys written: stance ("stand"|"crouch"|"prone"), stamina ({v: number, exhausted: boolean}), moveMode.
 -- Camera hooks (CameraController): Movement.cameraStep(dt, rawFocusY), Movement.allowFacing().
 local Players = game:GetService("Players")
@@ -38,6 +42,35 @@ local function setC0(j: any, cf: CFrame)
 end
 local rad = math.rad
 local UP = Vector3.new(0, 1, 0)
+local IS_STUDIO = RunService:IsStudio()
+
+-- Studio A/B (workspace attributes, read live; code defaults in release):
+--   ProneTwist=false      old behaviour: the whole body turns with the camera while prone / diving
+--   ProneTwistLimit (deg) how far the upper body may twist against the legs (default 75)
+--   ProneTurnRate (1/s)   how fast the legs shuffle round toward the crawl direction (default 5)
+local function proneTwistOn(): boolean
+	return not (IS_STUDIO and workspace:GetAttribute("ProneTwist") == false)
+end
+local function tuneNum(name: string, default: number): number
+	if IS_STUDIO then
+		local v = workspace:GetAttribute(name)
+		if typeof(v) == "number" then
+			return v
+		end
+	end
+	return default
+end
+local function twistLimit(): number
+	return rad(math.clamp(tuneNum("ProneTwistLimit", 75), 0, 170))
+end
+
+local function wrapAngle(a: number): number
+	return (a + math.pi) % (math.pi * 2) - math.pi
+end
+-- heading of a direction, same convention as CFrame.Angles(0, yaw, 0) looking down -Z
+local function yawOf(v: Vector3): number
+	return math.atan2(-v.X, -v.Z)
+end
 
 -- ── local state ────────────────────────────────────────────────────────────────────────────────────────────────
 local stance = "stand" -- stand | crouch | prone
@@ -62,6 +95,17 @@ local jumpEnabled = true
 local jumpLock = false -- Jump was used to stand up / mantle: no real jump until it is released
 local publishedStamina = -1
 local publishedExhausted = false
+
+-- prone / dive body facing: the legs (root) keep their heading, the upper body twists toward the camera
+local twistOn = false -- the body is currently in "legs fixed, torso follows the camera" mode (also while easing out)
+local twistRaw = 0 -- radians, world yaw of the upper body relative to the root (clamped to the twist limit)
+local twistGain = 0 -- 0..1 ramp so entering the mode does not pop
+local sentTwist, sentTwistAt = 0, -99
+local speedWanted: number? = nil -- WalkSpeed `step` computed last (re-applied after WeaponController's render-phase write)
+local proneRest: number? = nil -- HipHeight at which the lying torso just rests on the floor (last settled measurement)
+local poseSettled: (Model) -> boolean = function(_)
+	return true
+end -- replaced below, once the pose rigs exist
 
 -- camera feel
 local focusY: number? = nil
@@ -160,10 +204,67 @@ end
 -- crouch leg geometry (absolute angles from vertical; A = thigh forward, B = shin backward)
 local CROUCH_A, CROUCH_B = rad(58), rad(-42)
 
-local function hipTarget(c: Model, base: number): number
+-- Prone: the posed torso/head (CanCollide) lie on the floor, so the Humanoid's hover height must be the height at
+-- which they just touch it. A fixed tiny HipHeight (0.1) made the Humanoid want the root 0.74 studs lower than the
+-- torso could go: it never found the floor (Freefall), gravity pulled the character into its own torso collision
+-- and the solver pushed it back up every few frames (the "negative force" while prone).
+-- On a slope the torso / head reach ground that is higher (or lower) than the ground under the root, so the hover
+-- height also has to follow the terrain under each colliding part's lowest corner (ray-cast), capped so crawling into
+-- a wall or a crate cannot lift the body up it.
+local LIE_PARTS = { "UpperTorso", "LowerTorso", "Head" }
+local LIE_MAX_LIFT = 0.8 -- studs above the flat-ground rest height
+local SIGNS = { -1, 1 }
+local function measureRest(c: Model, root: BasePart): number?
+	refreshFilter()
+	local half = root.Size.Y * 0.5
+	local ry = root.Position.Y
+	local under = cast(root.Position, Vector3.new(0, -(half + 6), 0))
+	if not under then
+		return nil
+	end
+	local floorY = under.Position.Y
+	local flatNeed, need = -math.huge, -math.huge -- root height above its ground so every part just touches (flat / real)
+	for _, n in LIE_PARTS do
+		local part = c:FindFirstChild(n)
+		if part and part:IsA("BasePart") and part.CanCollide then
+			local cf, h = part.CFrame, part.Size * 0.5
+			-- every corner of the part's box: on a tilted plane the contact corner is not the lowest one
+			for _, sx in SIGNS do
+				for _, sy in SIGNS do
+					for _, sz in SIGNS do
+						local corner = cf * Vector3.new(sx * h.X, sy * h.Y, sz * h.Z)
+						local drop = ry - corner.Y -- how far the corner hangs below the root centre
+						flatNeed = math.max(flatNeed, drop)
+						local hit = cast(corner + Vector3.new(0, 2.5, 0), Vector3.new(0, -9, 0))
+						local gy = if hit then hit.Position.Y else floorY
+						need = math.max(need, drop + (gy - floorY))
+					end
+				end
+			end
+		end
+	end
+	if flatNeed == -math.huge then
+		return nil
+	end
+	need = math.min(need, flatNeed + LIE_MAX_LIFT)
+	return need - half
+end
+
+local function hipTarget(c: Model, base: number, root: BasePart): number
 	local s = serverStance()
-	if s == "dive" or s == "prone" then
-		return 0.1
+	if s == "dive" then
+		return 0.1 -- PlatformStand: the Humanoid does not hold any height
+	elseif s == "prone" then
+		-- measure only once the pose has finished pitching (before that the body is still upright); the Root / Waist
+		-- walk-cycle lean is cancelled while lying (twistStep), so the geometry is steady while crawling too
+		if poseSettled(c) then
+			local m = measureRest(c, root)
+			if m then
+				proneRest = m
+			end
+		end
+		-- 0.03 above contact: the Humanoid never presses the torso into the floor
+		return math.clamp((proneRest or base * 0.42) + 0.03, 0.1, base)
 	elseif s == "crouch" then
 		local thigh, shin = legLengths(c)
 		local drop = thigh * (1 - math.cos(CROUCH_A)) + shin * (1 - math.cos(CROUCH_B))
@@ -390,6 +491,67 @@ local function onJump(down: boolean)
 	end
 end
 
+-- ── prone / dive body facing ────────────────────────────────────────────────────────────────────────────────────
+-- While prone (and during the dive) the root (= legs, lower body) keeps its heading and the upper body yaws toward the
+-- camera through the Waist joint (see twistStep), clamped to the twist limit. Beyond the limit the root turns, just
+-- enough to keep the twist at the limit. While crawling the root turns toward the crawl direction instead (the camera
+-- may be up to the limit off it; crawling backwards keeps the body facing the camera). CameraController stops rotating
+-- the root meanwhile (Movement.allowFacing). Standing up eases the root round to the camera first, so the legs do not pop.
+local CRAWL_BACK = rad(140) -- crawl directions further than this from the camera heading do not turn the body
+local EASE_OUT_RATE = 14
+
+local function setRootYaw(root: BasePart, yaw: number)
+	root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, yaw, 0)
+end
+
+local function bodyFacing(dt: number, hum: Humanoid, root: BasePart)
+	local camLook = flat(workspace.CurrentCamera.CFrame.LookVector)
+	if camLook.Magnitude < 0.05 then
+		twistRaw = 0
+		return
+	end
+	local camYaw = yawOf(camLook)
+	local rootYaw = yawOf(flat(root.CFrame.LookVector))
+	local lim = twistLimit()
+	local free = not root.Anchored and (mode == "none" or mode == "recover")
+	local wantOn = proneTwistOn() and ((stance == "prone" and free) or mode == "dive")
+	if wantOn then
+		twistOn = true
+		if mode ~= "dive" then -- (the dive branch of step owns the root heading during a dive)
+			local wantTwist = math.clamp(wrapAngle(camYaw - rootYaw), -lim, lim)
+			local rate = 10 -- catching up when the camera went past the limit
+			local md = flat(hum.MoveDirection)
+			if mode == "none" and md.Magnitude > 0.1 then
+				local dev = wrapAngle(camYaw - yawOf(md)) -- twist needed if the body faces the crawl direction
+				wantTwist = if math.abs(dev) < CRAWL_BACK then math.clamp(dev, -lim, lim) else 0
+				rate = tuneNum("ProneTurnRate", 5)
+			end
+			rootYaw += wrapAngle(camYaw - wantTwist - rootYaw) * (1 - math.exp(-dt * rate))
+			setRootYaw(root, rootYaw)
+		end
+		twistRaw = math.clamp(wrapAngle(camYaw - rootYaw), -lim, lim)
+	elseif twistOn and free then
+		-- got up / left prone: swing the legs round to the camera heading, then hand the root back to CameraController
+		local diff = wrapAngle(camYaw - rootYaw)
+		if math.abs(diff) < 0.04 or not proneTwistOn() then
+			twistOn = false
+			twistRaw = 0
+		else
+			rootYaw += diff * (1 - math.exp(-dt * EASE_OUT_RATE))
+			setRootYaw(root, rootYaw)
+			twistRaw = math.clamp(wrapAngle(camYaw - rootYaw), -lim, lim)
+		end
+	else
+		twistOn = false
+		twistRaw = 0
+	end
+	if twistOn then
+		twistGain += (1 - twistGain) * (1 - math.exp(-dt * 14))
+	else
+		twistGain = 0
+	end
+end
+
 -- ── per-frame simulation ───────────────────────────────────────────────────────────────────────────────────────
 -- Runs on PreSimulation: after WeaponController's RenderStepped WalkSpeed write, right before physics, so ours wins.
 local function step(dt: number)
@@ -484,6 +646,17 @@ local function step(dt: number)
 		end
 	end
 
+	-- Studio test hook: workspace attribute DebugCamYawRate (rad/s, + = turn left) turns the camera through the normal
+	-- look path (simulated mouse movement does not reach the locked mouse). Not read in live games.
+	if IS_STUDIO then
+		local rate = workspace:GetAttribute("DebugCamYawRate")
+		if typeof(rate) == "number" and rate ~= 0 then
+			Input.addLook(-rate * dt / 0.0065, 0) -- CameraController: yaw -= lookX * touchSens (0.0065)
+		end
+	end
+
+	-- (body facing / twist: twistStep, which runs earlier in the frame than this handler)
+
 	-- stamina (prediction; server reconciles through `me`) ---------------------------------------------------
 	sprintApplied = mode == "none"
 		and stance == "stand"
@@ -525,9 +698,10 @@ local function step(dt: number)
 		speed = math.min(speed, M.LimpSpeed)
 	end
 	hum.WalkSpeed = speed
+	speedWanted = speed
 
 	-- hip height (smoothed; only overridden while not standing) ----------------------------------------------
-	local target = if root.Anchored then base else hipTarget(c, base)
+	local target = if root.Anchored then base else hipTarget(c, base, root)
 	if hipCur ~= nil or math.abs(target - base) > 1e-3 then
 		local cur = hipCur or hum.HipHeight
 		cur += (target - cur) * (1 - math.exp(-dt * 14))
@@ -562,6 +736,12 @@ local function step(dt: number)
 	if ss ~= sentStance or sprintApplied ~= sentSprint then
 		sentStance, sentSprint = ss, sprintApplied
 		send("move", ss, sprintApplied)
+	end
+	-- upper-body twist for the other clients (~10 Hz while it changes, 0 when it ends)
+	local tw = if twistOn then twistRaw * twistGain else 0
+	if t - sentTwistAt > 0.1 and (math.abs(tw - sentTwist) > 0.03 or (tw == 0 and sentTwist ~= 0)) then
+		sentTwist, sentTwistAt = tw, t
+		send("twist", tw)
 	end
 	if math.abs(stamina - publishedStamina) > 0.01 or exhausted ~= publishedExhausted then
 		publishedStamina, publishedExhausted = stamina, exhausted
@@ -719,6 +899,118 @@ local function poseStep(dt: number)
 	end
 end
 
+poseSettled = function(c: Model): boolean
+	local r = rigs[c]
+	return r ~= nil and r.active and math.abs(r.p - POSES.prone.p) < 0.03
+end
+
+-- ── upper-body twist (every character) ──────────────────────────────────────────────────────────────────────────
+-- Yaws the UpperTorso about the world vertical, at the Waist joint, relative to the (fixed-heading) lower body. Written
+-- as Waist.Transform on PreSimulation, after the Animator and BEFORE CombatPose, so the arm / gun solver sees the
+-- twisted chest. NOTE: Roblox runs the handlers of one signal in REVERSE connection order (last connected runs first;
+-- measured in Studio), so this handler is connected late (Movement.init, delayed) to run ahead of CombatPose and
+-- FootPlant, while `step` (connected first) runs last, right before physics.
+-- Local character: bodyFacing (called from here, same frame) computes the value. Others: the replicated `Twist`
+-- attribute (server, from the owner's "twist" action), smoothed.
+-- While lying prone the walk animation's torso lean / bob on Root and Waist is cancelled (those joints' Transform is
+-- replaced): the Animator leans the chest ~12 degrees into the floor while crawling, the collision then lifted the
+-- root ~0.6 studs on every stride.
+type Twist = { waist: any, root: any, shown: number, mine: CFrame?, base: CFrame? }
+local twists: { [Model]: Twist } = {}
+
+local function c0Of(j: any): CFrame
+	if j:IsA("AnimationConstraint") then
+		return if j.Attachment0 then j.Attachment0.CFrame else CFrame.identity
+	end
+	return j.C0
+end
+
+local function twistStep(dt: number)
+	local mine = player.Character
+	do -- local body facing first (same frame as the arms below), see bodyFacing
+		local _, lh, lr = chr()
+		if lh and lr and lh.Health > 0 then
+			bodyFacing(dt, lh, lr)
+		end
+	end
+	for _, p in Players:GetPlayers() do
+		local c = p.Character
+		if not c then
+			continue
+		end
+		local isLocal = c == mine
+		local hum = c:FindFirstChildOfClass("Humanoid")
+		local target = 0
+		local lying = false
+		if hum and hum.Health > 0 and proneTwistOn() then
+			if isLocal then
+				target = if twistOn then twistRaw * twistGain else 0
+				lying = stance == "prone" and (mode == "none" or mode == "recover")
+			else
+				local st = c:GetAttribute("Stance")
+				local a = c:GetAttribute("Twist")
+				if (st == "prone" or st == "dive") and typeof(a) == "number" then
+					target = a
+				end
+				lying = st == "prone"
+			end
+		end
+		local tw = twists[c]
+		if tw and not tw.waist.Parent then
+			twists[c] = nil
+			tw = nil
+		end
+		if not tw then
+			if math.abs(target) < 0.002 and not lying then
+				continue
+			end
+			local waist = findMotor(c, "UpperTorso", "Waist")
+			local rootJ = findMotor(c, "LowerTorso", "Root")
+			if not waist or not rootJ then
+				continue
+			end
+			tw = { waist = waist, root = rootJ, shown = 0 }
+			twists[c] = tw
+		end
+		local t = tw :: Twist
+		t.shown = if isLocal then target else t.shown + (target - t.shown) * (1 - math.exp(-dt * 12))
+		local w = t.waist
+		local cur = w.Transform
+		-- what the Animator (or CombatPose) last wrote; our own twisted value from last frame is not "theirs"
+		local base = if lying then CFrame.identity elseif t.mine ~= nil and cur == t.mine then (t.base :: CFrame) else cur
+		if lying then
+			t.root.Transform = CFrame.identity -- no walk-cycle lean on the pelvis while lying
+		end
+		if math.abs(t.shown) < 0.002 then
+			if lying then
+				w.Transform = CFrame.identity
+			elseif t.mine ~= nil and cur == t.mine then
+				w.Transform = base
+			end
+			t.mine, t.base = nil, nil
+			if math.abs(target) < 0.002 and not lying then
+				twists[c] = nil
+			end
+			continue
+		end
+		local hrp = c:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not hrp then
+			continue
+		end
+		local rj = t.root
+		local lower = hrp.CFrame * c0Of(rj) * rj.Transform * rj.C1:Inverse()
+		local jr = (lower * c0Of(w)).Rotation
+		local newT = (jr:Inverse() * CFrame.Angles(0, t.shown, 0) * jr) * base
+		w.Transform = newT
+		t.mine, t.base = w.Transform, base
+	end
+	for c, _ in twists do
+		if not c.Parent then
+			twists[c] = nil
+		end
+	end
+end
+
 -- ── camera hooks (CameraController, normal over-shoulder path only) ─────────────────────────────────────────────
 -- Returns (focusYOffset, bobCFrame (camera-local), fovAdd).
 function Movement.cameraStep(dt: number, rawFocusY: number): (number, CFrame, number)
@@ -757,9 +1049,21 @@ function Movement.cameraStep(dt: number, rawFocusY: number): (number, CFrame, nu
 	return fy - rawFocusY + camDrop + landDip, CFrame.new(bx, by, 0) * CFrame.Angles(0, 0, roll), M.SprintFov * sprintBlend
 end
 
--- false while the body is driven by a dive / mantle / tumble (camera must not snap the root to the aim yaw)
+-- false while the body is driven by a dive / mantle / tumble, or while prone (legs keep their heading, the upper body
+-- twists to the camera: Movement.bodyFacing owns the root yaw) -- the camera must not snap the root to the aim yaw
 function Movement.allowFacing(): boolean
-	return mode ~= "dive" and mode ~= "mantle" and mode ~= "down"
+	if mode == "dive" or mode == "mantle" or mode == "down" then
+		return false
+	end
+	return not twistOn
+end
+
+-- Upper-body twist (radians) currently shown on character `c`: world yaw of the chest relative to the root heading,
+-- positive = counter-clockwise seen from above (same sense as CFrame.Angles(0, a, 0)); 0 when not prone / diving.
+-- Aim direction of a twisted body = root yaw + this (CombatPose should use it instead of the plain root heading).
+function Movement.getTwist(c: Model): number
+	local t = twists[c]
+	return if t then t.shown else 0
 end
 
 function Movement.getStance(): string
@@ -792,6 +1096,9 @@ local function resetLocal()
 	minVy, landDip, landVel = 0, 0, 0
 	focusY = nil
 	sentStance = ""
+	twistOn, twistRaw, twistGain, sentTwist = false, 0, 0, 0
+	proneRest = nil
+	speedWanted = nil
 end
 
 function Movement.init()
@@ -832,7 +1139,26 @@ function Movement.init()
 	end
 	player.CharacterAdded:Connect(resetLocal)
 	RunService.PreSimulation:Connect(step)
+	-- PreSimulation handlers run last-connected-first: connect this one after every module has finished init
+	-- (CombatPose, FootPlant, ...) so it runs ahead of CombatPose and the arm solver sees this frame's twisted chest
+	task.delay(1, function()
+		RunService.PreSimulation:Connect(function(dt)
+			local ok, err = pcall(twistStep, dt)
+			if not ok then
+				warn("[Movement] twist: " .. tostring(err))
+			end
+		end)
+	end)
 	RunService.RenderStepped:Connect(poseStep)
+	-- WeaponController writes WalkSpeed = walk / aim / sprint speed in RenderStepped. The Humanoid applies its move
+	-- speed before PreSimulation, so on many frames our stance speed (crawl 4.5, crouch 9, limp) was too late and the
+	-- character moved at 16 (measured: prone crawl alternated 4.5 / 15.7). Re-assert ours last in the render phase.
+	RunService:BindToRenderStep("MovementSpeed", Enum.RenderPriority.Last.Value, function()
+		local _, hum = chr()
+		if hum and speedWanted and hum.Health > 0 then
+			hum.WalkSpeed = speedWanted
+		end
+	end)
 	local ui = script.Parent:FindFirstChild("UI")
 	local barMod = ui and ui:FindFirstChild("StaminaBar")
 	if barMod then

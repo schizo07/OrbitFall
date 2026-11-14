@@ -5,7 +5,10 @@
 -- forward from the hip, the ground under the heel and the toe is ray-cast, and if the foot is below it the leg is
 -- re-solved with an analytic two-bone IK (hip + knee) so the foot sits on the ground. The foot keeps its animated
 -- world orientation. Legs that are above the ground are left alone (a stride stays a stride).
--- Off while airborne, diving, mantling, knocked down, prone or dead.
+-- Off while airborne, diving, mantling, knocked down, prone or dead (checked: enabled() returns false for stance "prone"
+-- and for any Movement mode; while prone the Humanoid state was also Freefall before the prone hover-height fix).
+-- NOTE: PreSimulation handlers of one signal run in REVERSE connection order (measured in Studio), so this one, connected
+-- last in Main, actually runs FIRST in the frame, before CombatPose and Movement; it only needs the Animator's values.
 -- Studio: workspace attribute FootPlant=false turns it off live for A/B.
 
 local Players = game:GetService("Players")

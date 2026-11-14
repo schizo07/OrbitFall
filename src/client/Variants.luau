@@ -30,6 +30,17 @@ local GROUPS = {
 			{ name = "D wider shoulder", set = { CamTune_Shoulder = Vector3.new(2.5, 1.8, 0) } },
 		},
 	},
+	{
+		-- client/Movement.luau: while prone / diving the upper body turns with the camera, the legs stay put
+		name = "PRONE TWIST",
+		keys = { "ProneTwist", "ProneTwistLimit", "ProneTurnRate" },
+		presets = {
+			{ name = "A new (75 deg limit, legs turn 5/s)", set = {} },
+			{ name = "B tighter (50 deg)", set = { ProneTwistLimit = 50 } },
+			{ name = "C wider (100 deg), legs slow", set = { ProneTwistLimit = 100, ProneTurnRate = 3 } },
+			{ name = "D old (whole body turns)", set = { ProneTwist = false } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough

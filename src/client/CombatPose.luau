@@ -339,6 +339,11 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	local look = hrpCF.LookVector
 	local flat = Vector3.new(look.X, 0, look.Z)
 	flat = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+	-- prone / dive: the upper body twists toward the camera while the legs (root) stay put (Movement twist)
+	local twist = if Movement and Movement.getTwist then Movement.getTwist(r.c) else 0
+	if twist ~= 0 then
+		flat = CFrame.Angles(0, twist, 0):VectorToWorldSpace(flat)
+	end
 	local yawCF = CFrame.lookAt(Vector3.zero, flat, UP)
 	local gp = r.pitch * (1 - low) + LOW_READY_PITCH * low
 	local aimRot = yawCF * CFrame.Angles(0, LOW_READY_YAW * low, 0) * CFrame.Angles(gp, 0, LOW_READY_ROLL * low)
