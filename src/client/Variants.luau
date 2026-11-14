@@ -41,6 +41,99 @@ local GROUPS = {
 			{ name = "D old (whole body turns)", set = { ProneTwist = false } },
 		},
 	},
+	{
+		-- client/Fx/Blast.luau: the shared explosion effect (visual size only; gameplay radius is Data/Blasts.luau)
+		name = "EXPLOSIONS",
+		keys = { "Feel_BlastScale" },
+		presets = {
+			{ name = "A Big (new effect)", set = {} },
+			{ name = "B Huge (new effect x1.4)", set = { Feel_BlastScale = 1.4 } },
+			{ name = "C Current (old effect)", set = { Feel_BlastScale = 0 } },
+		},
+	},
+	{
+		-- client/Fx/Blast.luau: camera shake + FOV punch of the new explosion effect
+		name = "BLAST SHAKE",
+		keys = { "Feel_BlastShake" },
+		presets = {
+			{ name = "A normal (x1)", set = {} },
+			{ name = "B soft (x0.5)", set = { Feel_BlastShake = 0.5 } },
+			{ name = "C strong (x1.6)", set = { Feel_BlastShake = 1.6 } },
+			{ name = "D off", set = { Feel_BlastShake = 0 } },
+		},
+	},
+	{
+		-- server/PlayerService passive regen (mirrored to the server by client/Fx/VitalsFx, Action "studioFeel")
+		name = "REGEN",
+		keys = { "Feel_Regen" },
+		presets = {
+			{ name = "A slow (above 50 %, after 6 s)", set = {} },
+			{ name = "B off (stims only)", set = { Feel_Regen = "off" } },
+			{ name = "C old (up to 60 %, after 5 s)", set = { Feel_Regen = "current" } },
+		},
+	},
+	{
+		-- client/Fx/VitalsFx: red edge + desaturation + heartbeat strength, big-hit visor overlay
+		name = "DAMAGE FX",
+		keys = { "Feel_DmgFx", "Feel_DmgOverlay" },
+		presets = {
+			{ name = "A default (static >= 15 %, cracks >= 28 %)", set = {} },
+			{ name = "B subtle (x0.6)", set = { Feel_DmgFx = 0.6 } },
+			{ name = "C strong (x1.4)", set = { Feel_DmgFx = 1.4 } },
+			{ name = "D cracks only", set = { Feel_DmgOverlay = "crack" } },
+			{ name = "E no visor overlay", set = { Feel_DmgOverlay = "none" } },
+		},
+	},
+	{
+		-- client/CallInController + UI/UplinkCodes: how a call-in gets armed on PC / gamepad (touch always uses the dial)
+		name = "UPLINK ARM",
+		keys = { "Feel_UplinkArm", "Feel_UplinkListPos" },
+		presets = {
+			{ name = "A codes, list left of crosshair", set = {} },
+			{ name = "B codes, list far left", set = { Feel_UplinkListPos = "left" } },
+			{ name = "C old Slot + Sync dial", set = { Feel_UplinkArm = "slot" } },
+		},
+	},
+	{
+		-- UI/CallInCards: squad call-in cards mid-left
+		name = "CALL-IN CARDS",
+		keys = { "Feel_CallInCardLife", "Feel_CallInCardOwn" },
+		presets = {
+			{ name = "A 4 s, own call-ins shown", set = {} },
+			{ name = "B 6 s", set = { Feel_CallInCardLife = 6 } },
+			{ name = "C 4 s, squadmates only", set = { Feel_CallInCardOwn = false } },
+		},
+	},
+	{
+		-- client/Fx/EnemyFx: heavy-target damage stages (smoke / breach / fire), impact puffs, burning death plates
+		name = "DAMAGE STAGES",
+		keys = { "Feel_StageFx" },
+		presets = {
+			{ name = "A default (x1)", set = {} },
+			{ name = "B subtle (x0.5)", set = { Feel_StageFx = 0.5 } },
+			{ name = "C heavy (x1.6)", set = { Feel_StageFx = 1.6 } },
+			{ name = "D off (old look)", set = { Feel_StageFx = 0 } },
+		},
+	},
+	{
+		-- haul objective (client/CellCarry forwards it to the server, shared/Carry.luau): what a core-cell carrier may use
+		name = "CARRY RULES",
+		keys = { "CarryTune_Rule" },
+		presets = {
+			{ name = "A strict (no shooting while carrying)", set = {} },
+			{ name = "B sidearm (secondary can fire)", set = { CarryTune_Rule = "SIDEARM" } },
+		},
+	},
+	{
+		-- UI/SquadTags: floating teammate tags (S-tag + name) shown through walls
+		name = "SQUAD TAGS",
+		keys = { "TagTune_Mode" },
+		presets = {
+			{ name = "A fade when close / at screen centre", set = {} },
+			{ name = "B always solid", set = { TagTune_Mode = "solid" } },
+			{ name = "C off", set = { TagTune_Mode = "off" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough

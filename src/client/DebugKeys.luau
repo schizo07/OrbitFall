@@ -28,6 +28,9 @@ local KEYMAP: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.T] = "breach",
 	[Enum.KeyCode.Y] = "refill",
 	[Enum.KeyCode.B] = "faction", -- V is shoulder swap
+	[Enum.KeyCode.U] = "bastion", -- heavy-target test spawns
+	[Enum.KeyCode.I] = "bulwark",
+	[Enum.KeyCode.O] = "charger",
 }
 
 local function onOff(v: any): string
@@ -47,6 +50,7 @@ local function helpText(): string
 		"T Force breach",
 		"Y Refill + call-in reset",
 		"B Faction: " .. (if type(fac) == "string" then fac else "COG"),
+		"U Bastion  I Bulwark  O Charger",
 	}, "\n")
 end
 

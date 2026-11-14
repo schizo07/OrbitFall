@@ -4,6 +4,10 @@
 -- Data: Store "squad" entries { userId, name, hp, maxHp, alive } (PlayerService.squadState). Optional, shown as soon as the
 -- server publishes them: m.weapon (weapon id), m.callins (array of call-in ids), m.respawnAt (server time).
 -- Reinforce state reads me.alive / me.reinforceReadyAt and mission.lives (HUD forwards them via update()).
+-- Join state (Player attribute `Deploy`, server/Mission.luau): "loadout" -> IN LOADOUT, "dropping" -> DROPPING IN,
+-- then the normal card (health bar, or DOWN + the reinforce line when dead).
+-- Haul objective: a CELL chip (cyan) replaces the call-in icons while that member carries a core cell (attribute CarryCell).
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -22,6 +26,7 @@ local lastMe: any = nil
 local lastMission: any = nil
 
 local MAX_ICONS = 4
+local CELL = Color3.fromRGB(110, 225, 255) -- shared/Carry.luau COLOR
 
 local function cardWidth(): number
 	return if touch then 140 else 200
@@ -85,7 +90,32 @@ local function makeCard(m: any, order: number): any
 		Position = UDim2.new(0, 6, 1, -4),
 		Parent = f,
 	})
-	return { frame = f, tag = tag, name = name, icons = icons, status = status, bar = bar, iconKey = "", alive = nil, m = m }
+	-- carried core cell chip (haul objective)
+	local cell = Instance.new("Frame")
+	cell.Name = "CellChip"
+	cell.BackgroundTransparency = 1
+	cell.AnchorPoint = Vector2.new(1, 0)
+	cell.Position = UDim2.new(1, -6, 0, if touch then 2 else 4)
+	cell.Size = UDim2.fromOffset(44, 16)
+	cell.Visible = false
+	cell.Parent = f
+	local gem = Instance.new("Frame")
+	gem.AnchorPoint = Vector2.new(0.5, 0.5)
+	gem.Position = UDim2.fromOffset(7, 8)
+	gem.Size = UDim2.fromOffset(8, 8)
+	gem.Rotation = 45
+	gem.BackgroundColor3 = CELL
+	gem.BorderSizePixel = 0
+	gem.Parent = cell
+	Style.label({
+		Text = "CELL",
+		TextSize = 12,
+		Color = CELL,
+		Size = UDim2.new(1, -15, 1, 0),
+		Position = UDim2.fromOffset(15, 0),
+		Parent = cell,
+	})
+	return { frame = f, tag = tag, name = name, nameW = nameW, icons = icons, status = status, bar = bar, cell = cell, iconKey = "", alive = nil, m = m }
 end
 
 local function setIcons(c: any, ids: any)
@@ -143,18 +173,34 @@ end
 local function refreshCard(c: any, m: any, t: number)
 	c.m = m
 	local cs = Style.callsign(m.userId)
-	local alive = m.alive ~= false
+	local plr = Players:GetPlayerByUserId(m.userId)
+	local deploy = plr and plr:GetAttribute("Deploy")
+	local carrying = plr ~= nil and plr:GetAttribute("CarryCell") == true
+	local alive = m.alive ~= false and deploy ~= "loadout"
 	c.tag.Text = cs.tag
 	c.tag.TextColor3 = if alive then cs.color else Style.Grey
-	c.name.Text = weaponName(m)
-	c.name.TextColor3 = if alive then Style.White else Style.Grey
+	c.name.Text = if deploy == "loadout" then Style.up(m.name or "?") elseif alive then weaponName(m) else "DOWN"
+	c.name.TextColor3 = if alive then Style.White elseif deploy == "loadout" then Style.Grey else Style.Red
 	c.name.Visible = alive or not touch -- phones: the state text takes the weapon line
 	setIcons(c, m.callins)
-	c.icons.Visible = not touch and alive
+	c.cell.Visible = carrying and alive
+	c.icons.Visible = not touch and alive and not carrying
+	c.name.Size = UDim2.fromOffset(if c.cell.Visible and touch then c.nameW - 46 else c.nameW, 16)
 	local frac = if (m.maxHp or 0) > 0 then Theme.clamp((m.hp or 0) / m.maxHp, 0, 1) else 0
-	if alive then
+	if deploy == "loadout" then
+		c.bar.set(0, Style.Grey)
+		c.status.Visible = true
+		c.status.Text = "IN LOADOUT"
+		c.status.TextColor3 = Style.Grey
+		c.status.TextTransparency = 0
+	elseif alive then
 		c.bar.set(frac, if frac > 0.35 then Style.White else Style.Red)
-		c.status.Visible = false
+		c.status.Visible = deploy == "dropping"
+		if deploy == "dropping" then
+			c.status.Text = "DROPPING IN"
+			c.status.TextColor3 = Style.Amber
+			c.status.TextTransparency = 0.1 + 0.3 * math.abs(math.sin(t * 4))
+		end
 	else
 		local text, col = deadStatus(m, t)
 		c.bar.set(1, Style.Red)
@@ -165,10 +211,11 @@ local function refreshCard(c: any, m: any, t: number)
 		-- slow pulse while the reinforce is actually callable
 		c.status.TextTransparency = if text == "REINFORCE AVAILABLE" then 0.15 + 0.3 * math.abs(math.sin(t * 3)) else 0
 	end
-	if alive and c.alive == false then
+	if (alive or deploy == "loadout") and c.alive == false then
 		c.bar.fill.BackgroundTransparency = 0
 	end
 	c.alive = alive
+	c.special = deploy ~= nil or carrying
 end
 
 local function relayout()
@@ -241,7 +288,10 @@ function SquadCards.tick(me: any, mission: any, t: number)
 	end
 	lastMe, lastMission = me, mission
 	for _, c in cards do
-		if c.alive == false then
+		-- dead cards (countdown / pulse) + join / carry states, and any card whose join / carry attribute just changed
+		local plr = Players:GetPlayerByUserId(c.m.userId)
+		local now = plr ~= nil and (plr:GetAttribute("Deploy") ~= nil or plr:GetAttribute("CarryCell") == true)
+		if c.alive == false or c.special or now then
 			refreshCard(c, c.m, t)
 		end
 	end

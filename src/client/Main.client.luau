@@ -89,6 +89,16 @@ do -- two-handed weapon hold + aim pose for every armed character (client/Combat
 		safeCall("FootPlant", Feet.init, MovementMod)
 	end
 end
+do -- haul objective carry (input gates, drop key) + floating squad tags (client/CellCarry.luau, UI/SquadTags.luau)
+	local CellCarry = safeRequire(root:FindFirstChild("CellCarry"))
+	if CellCarry then
+		safeCall("CellCarry", CellCarry.init)
+	end
+	local Tags = UI and safeRequire(UI:FindFirstChild("SquadTags"))
+	if Tags then
+		safeCall("SquadTags", Tags.init)
+	end
+end
 if Weapon then
 	Weapon.setHUD(HUD)
 	safeCall("Weapon", Weapon.init)

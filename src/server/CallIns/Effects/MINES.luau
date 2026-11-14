@@ -1,4 +1,6 @@
 -- Minefield: 12 proximity mines. Arm after 1 s, trigger on enemies only (never players).
+local Blasts = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Blasts"))
+
 local POD_FALL = 1.2
 local ARM_TIME = 1.0
 local TICK = 0.125
@@ -42,7 +44,7 @@ end
 
 return function(ctx)
 	local S = ctx.S
-	local prm = ctx.params
+	local prm = Blasts.merge("MINES", ctx.params) -- blast radius / core / knock / effect size: Data/Blasts.luau
 	local center = ctx.groundAt(ctx.pos)
 	local radius = prm.spread / 2
 
@@ -116,9 +118,18 @@ return function(ctx)
 						table.remove(mines, i)
 						m.model:Destroy()
 						ctx.spawn(function()
-							S.Fx.play("Explosion", { p = m.pos, r = prm.radius, size = "M", style = "fire" })
-							S.Fx.play("Shake", { p = m.pos, mag = 0.8, r = 45 })
-							S.Enemies.explode(m.pos, prm.radius, prm.core, prm.damage, prm.ap, ctx.source)
+							S.Explosions.blast(m.pos, {
+								radius = prm.radius,
+								core = prm.core,
+								damage = prm.damage,
+								ap = prm.ap,
+								size = "M",
+								style = "fire",
+								vis = prm.vis,
+								knock = prm.knock,
+								shake = prm.shake,
+								legacy = { shake = 0.8, shakeR = 45 },
+							}, ctx.source)
 						end)
 					end
 				end

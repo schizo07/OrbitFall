@@ -23,7 +23,42 @@ Mission.lastBeacon = nil :: Vector3?
 Mission.arena = false -- Studio test arena (World/TestArena): an "Active" mission with no objectives, no Director, no tick loop
 
 local token = 0 -- invalidates stale timers when the mission changes
-local OBJECTIVE_NAMES = { MISSILE = "Missile Launch", UPLINK = "Uplink Relay" }
+local OBJECTIVE_NAMES = { MISSILE = "Missile Launch", UPLINK = "Uplink Relay", HAUL = "Recover Core Cells" }
+
+-- Squad-card join state, replicated as the Player attribute `Deploy`: "loadout" (joined mid-mission, still on the
+-- Halcyon) -> "dropping" (in the drop capsule) -> nil (on the ground: the card shows health / DOWN as before).
+local LOADOUT_HOLD = 3 -- s a mid-mission joiner stays IN LOADOUT (after the profile loads) before the capsule drops
+local DEPLOY_CLEAR = 4 -- s after the last "dropping" sighting before the attribute clears (LoadCharacter can yield)
+local deploySeen: { [Player]: number } = {}
+
+local function setDeploy(p: Player, v: string?)
+	if p.Parent and p:GetAttribute("Deploy") ~= v then
+		p:SetAttribute("Deploy", v)
+	end
+	if v == "dropping" then
+		deploySeen[p] = os.clock()
+	end
+end
+
+-- 0.5 s from tick(): mirror PlayerService's `dropping` flag into the attribute
+local function refreshDeploy()
+	for _, p in Players:GetPlayers() do
+		local r = S.Players.get(p)
+		local cur = p:GetAttribute("Deploy")
+		if r and r.dropping then
+			setDeploy(p, "dropping")
+		elseif cur == "dropping" and (os.clock() - (deploySeen[p] or 0) > DEPLOY_CLEAR or (S.Players.isAlive(p) and os.clock() - (deploySeen[p] or 0) > 1)) then
+			setDeploy(p, nil)
+		end
+	end
+end
+
+local function clearDeploy()
+	for _, p in Players:GetPlayers() do
+		setDeploy(p, nil)
+	end
+	table.clear(deploySeen)
+end
 
 local function now()
 	return workspace:GetServerTimeNow()
@@ -97,7 +132,32 @@ function Mission.onPlayerJoined(p: Player)
 	if Mission.arena and S.TestArena then
 		S.TestArena.spawnPlayer(p)
 	elseif inMission() and S.Map.current then
-		S.Players.respawnAt(p, S.Map.current.insertion.Position)
+		-- drop-in join: IN LOADOUT while the profile loads (+ LOADOUT_HOLD), a Halcyon announcement to everyone, then
+		-- the capsule drops at insertion (DROPPING IN)
+		setDeploy(p, "loadout")
+		local my = token
+		task.spawn(function()
+			local t0 = os.clock()
+			while p.Parent and S.Save and S.Save.isLoaded and not S.Save.isLoaded(p) and os.clock() - t0 < 10 do
+				task.wait(0.25)
+			end
+			task.wait(LOADOUT_HOLD)
+			if not p.Parent then
+				return
+			end
+			if token ~= my or not inMission() or not S.Map.current then
+				setDeploy(p, nil) -- the mission ended meanwhile: returnToShip already spawned everyone on the ship
+				return
+			end
+			local r = S.Players.get(p)
+			if r and (r.dropping or S.Players.isAlive(p)) then
+				return -- already brought in meanwhile (reinforce call-in / auto-reinforce); tick() tracks the attribute
+			end
+			S.State.notify(nil, "HALCYON: Trooper " .. p.DisplayName .. " deploying to the surface.", Config.Colors.Gold, "ship")
+			S.Fx.play("Sound", { k = "ShipRadio" })
+			setDeploy(p, "dropping")
+			S.Players.respawnAt(p, S.Map.current.insertion.Position)
+		end)
 	else
 		S.Players.spawnOnShip(p)
 	end
@@ -138,6 +198,7 @@ local function returnToShip()
 		end
 	end
 	cleanup()
+	clearDeploy()
 	Mission.extract = nil
 	Mission.lastBeacon = nil
 	setState("Ship")
@@ -205,6 +266,7 @@ local function tick(my: number)
 		if token ~= my then
 			return
 		end
+		refreshDeploy()
 		if now() > Mission.endsAt and Mission.state ~= "Drop" then
 			S.State.notify(nil, "Mission timer expired. The Halcyon is pulling out!", Config.Colors.Danger)
 			finish(false)
@@ -279,7 +341,7 @@ function Mission.start(p: Player?, args)
 		return false, "Pick a planet on the war map"
 	end
 	Mission.faction = (args.faction == "BROOD") and "BROOD" or "COG"
-	Mission.objective = (args.objective == "UPLINK") and "UPLINK" or "MISSILE"
+	Mission.objective = if args.objective == "UPLINK" or args.objective == "HAUL" then args.objective else "MISSILE"
 	Mission.difficulty = math.clamp(math.floor(tonumber(args.difficulty) or 1), 1, 5)
 	Mission.kills = {}
 	Mission.extract = nil
@@ -321,6 +383,7 @@ function Mission.start(p: Player?, args)
 			local x, z = ins.X + off.X, ins.Z + off.Z
 			local y = map.groundY and map.groundY(x, z) or ins.Y
 			S.Players.applyLoadout(pl)
+			setDeploy(pl, "dropping")
 			S.Players.dropTo(pl, Vector3.new(x, y, z), 2.2)
 		end
 		S.Fx.play("Sound", { k = "MissionStart" })
@@ -332,7 +395,7 @@ function Mission.start(p: Player?, args)
 		Mission.broadcast()
 		S.Objectives.onMainComplete = beginExtraction
 		-- pcall: a failure here must not skip tick(), or the mission could never end (timer / squad-wipe checks live there)
-		local okO, errO = pcall(S.Objectives.start, map, { main = Mission.objective, sides = { "NEST", "SAMPLES" }, faction = Mission.faction })
+		local okO, errO = pcall(S.Objectives.start, map, { main = Mission.objective, sides = { "NEST", "SAMPLES" }, faction = Mission.faction, difficulty = Mission.difficulty })
 		if not okO then
 			warn("[Mission] Objectives.start failed:", errO)
 		end
@@ -381,6 +444,9 @@ function Mission.init(s)
 	S = s
 	S.Progress.on("startMission", function(p, args)
 		return Mission.start(p, args)
+	end)
+	Players.PlayerRemoving:Connect(function(p)
+		deploySeen[p] = nil
 	end)
 end
 

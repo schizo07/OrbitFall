@@ -1,5 +1,8 @@
 -- Top-centre compass tape: 34 % of the screen wide, 14 px tall, red-tinted, with a heading chip hanging below it and
 -- objective / beacon / breach pips riding on the tape. The alert bar (UI/AlertBar.luau) starts right under the chip.
+-- Teammates ride on the tape as dots in their squad colour (a square while they carry a core cell, haul objective).
+-- The chip reads e.g. "SW [226]".
+local Players = game:GetService("Players")
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
 local Store = require(script.Parent.Parent.Store)
@@ -14,6 +17,8 @@ local SHORT = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
 
 local ui: { [string]: any } = {}
 local items: { { bearing: number, node: GuiObject } } = {}
+local mates: { [Player]: { node: Frame, key: string } } = {}
+local localPlayer = Players.LocalPlayer
 
 local function wrap180(a: number): number
 	return (a + 180) % 360 - 180
@@ -115,13 +120,13 @@ function Compass.build(parent: Instance, _touch: boolean): Frame
 	-- heading chip hanging under the tape
 	local chip = Style.panel({
 		Name = "Heading",
-		Size = UDim2.fromOffset(58, 16),
+		Size = UDim2.fromOffset(72, 16),
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 1, 2),
 		Parent = holder,
 	})
 	ui.heading = Style.label({
-		Text = "N 000",
+		Text = "N [000]",
 		TextSize = 12,
 		XAlign = Enum.TextXAlignment.Center,
 		Size = UDim2.fromScale(1, 1),
@@ -155,9 +160,54 @@ function Compass.step(cam: Camera, markers: { [string]: any })
 	end
 	local deg = (math.floor(ang + 0.5) + 360) % 360
 	local idx = math.floor((deg + 22.5) / 45) % 8 + 1
-	ui.heading.Text = string.format("%s %03d", SHORT[idx], deg)
+	ui.heading.Text = string.format("%s [%03d]", SHORT[idx], deg)
 
 	local camPos = cam.CFrame.Position
+	-- teammates (squad colour; a square while carrying a core cell)
+	if ui.layer then
+		local seen: { [Player]: boolean } = {}
+		for _, p in Players:GetPlayers() do
+			local c = p ~= localPlayer and p.Character
+			local root = c and c:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if not root then
+				continue
+			end
+			seen[p] = true
+			local cs = Style.callsign(p.UserId)
+			local carrying = p:GetAttribute("CarryCell") == true
+			local key = (if carrying then "square" else "dot") .. cs.color:ToHex()
+			local mt = mates[p]
+			if not mt or mt.key ~= key then
+				if mt then
+					mt.node:Destroy()
+				end
+				mt = {
+					node = Style.glyph(if carrying then "square" else "dot", {
+						Name = "Mate",
+						Size = if carrying then 9 else 8,
+						Color = cs.color,
+						Box = UDim2.fromOffset(12, TAPE_H),
+						AnchorPoint = Vector2.new(0.5, 0.5),
+						Position = UDim2.fromScale(0.5, 0.5),
+						ZIndex = 4,
+						Parent = ui.layer,
+					}),
+					key = key,
+				}
+				mates[p] = mt
+			end
+			local d = root.Position - camPos
+			local rel = wrap180(math.deg(math.atan2(d.X, -d.Z)) - ang)
+			mt.node.Visible = math.abs(rel) <= SPAN / 2 + 6
+			mt.node.Position = UDim2.fromScale(Theme.clamp(0.5 + rel / SPAN, 0, 1), 0.5)
+		end
+		for p, mt in mates do
+			if not seen[p] then
+				mt.node:Destroy()
+				mates[p] = nil
+			end
+		end
+	end
 	for _, m in markers do
 		local d = m.pos - camPos
 		local b = math.deg(math.atan2(d.X, -d.Z))

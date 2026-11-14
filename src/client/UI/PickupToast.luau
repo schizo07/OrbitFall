@@ -1,6 +1,7 @@
 -- Pickup toast, right edge at ~55 % of the screen height: flat black panel with an orange outline, 3 s.
 -- Fed from the server Notify texts that describe a pickup (route() decides; HUD forwards every Notify here first):
---   "Sample collected (2/5)"  -> green diamond     "Resupplied(!)"       -> amber ammo
+--   "Acquired <Item> +N"      -> "ACQUIRED <ITEM>" + green "+N" box (ammo / grenades: amber bar, stims: green plus)
+--   "Sample collected (2/5)"  -> green diamond     "Resupplied(!)"       -> amber ammo (skipped right after an Acquired)
 --   "Picked up <thing>"       -> orange diamond    "Equipped <weapon>"   -> orange diamond (support weapon pickup)
 -- Up to 3 toasts stack upwards from the anchor; the same text repeating bumps a counter instead of stacking.
 local Theme = require(script.Parent.Theme)
@@ -55,6 +56,10 @@ local function fade(t: any, gen: number)
 	Theme.tween(t.stroke, FADE, { Transparency = 1 })
 	Style.glyphTween(t.glyph, FADE, 1)
 	Theme.tween(t.label, FADE, { TextTransparency = 1, TextStrokeTransparency = 1 })
+	if t.plusBox then
+		Theme.tween(t.plusBox, FADE, { BackgroundTransparency = 1 })
+		Theme.tween(t.plusLabel, FADE, { TextTransparency = 1 })
+	end
 	task.delay(FADE + 0.05, function()
 		if t.gen == gen then
 			remove(t)
@@ -68,8 +73,17 @@ local function arm(t: any)
 	task.delay(LIFE, fade, t, gen)
 end
 
+local lastAcquired = -100 -- os.clock of the last "ACQUIRED" toast (swallows the crate's generic "Resupplied" line)
+
+local function setPlus(t: any, n: number)
+	if t.plusLabel then
+		t.plusLabel.Text = "+" .. tostring(n)
+	end
+end
+
 -- shape: a Style.glyph shape name (default "diamond"); color: glyph colour (the outline is always orange)
-function PickupToast.show(text: string, shape: string?, color: Color3?)
+-- plus: optional amount, drawn as a green "+N" box at the end; repeats of the same text add up
+function PickupToast.show(text: string, shape: string?, color: Color3?, plus: number?)
 	if not ui.holder then
 		return
 	end
@@ -77,11 +91,20 @@ function PickupToast.show(text: string, shape: string?, color: Color3?)
 	for _, t in live do
 		if t.base == up then
 			t.count += 1
-			t.label.Text = string.format("%s  x%d", up, t.count)
+			if plus and t.plus then
+				t.plus += plus
+				setPlus(t, t.plus)
+			else
+				t.label.Text = string.format("%s  x%d", up, t.count)
+			end
 			t.frame.BackgroundTransparency = Style.PANEL_ALPHA
 			t.stroke.Transparency = 0.1
 			Style.glyphAlpha(t.glyph, 0)
 			t.label.TextTransparency = 0
+			if t.plusBox then
+				t.plusBox.BackgroundTransparency = 0.1
+				t.plusLabel.TextTransparency = 0
+			end
 			arm(t)
 			return
 		end
@@ -121,7 +144,31 @@ function PickupToast.show(text: string, shape: string?, color: Color3?)
 		LayoutOrder = 2,
 		Parent = frame,
 	})
-	local t = { frame = frame, stroke = stroke, glyph = g, label = l, base = up, count = 1, gen = 0 }
+	local plusBox, plusLabel = nil, nil
+	if plus then
+		plusBox = Style.rect({
+			Name = "Plus",
+			Color = Style.Green,
+			Transparency = 0.1,
+			Size = UDim2.fromOffset(0, 18),
+			AutomaticSize = Enum.AutomaticSize.X,
+			LayoutOrder = 3,
+			Parent = frame,
+		})
+		Theme.pad(plusBox, 5, 0, 5, 0)
+		plusLabel = Style.label({
+			Text = "+" .. tostring(plus),
+			TextSize = 14,
+			Color = Style.Black,
+			Shadow = false,
+			XAlign = Enum.TextXAlignment.Center,
+			Size = UDim2.fromOffset(0, 18),
+			AutomaticSize = Enum.AutomaticSize.X,
+			Parent = plusBox,
+		})
+		cap.MaxSize = Vector2.new((if touch then 190 else 230) + 40, 26)
+	end
+	local t = { frame = frame, stroke = stroke, glyph = g, label = l, base = up, count = 1, gen = 0, plus = plus, plusBox = plusBox, plusLabel = plusLabel }
 	table.insert(live, t)
 	while #live > MAX do
 		remove(live[1])
@@ -150,8 +197,20 @@ function PickupToast.route(text: string): boolean
 		PickupToast.show("SAMPLE COLLECTED", "diamond", Style.Green)
 		return true
 	end
+	-- "Acquired <item> +N" (server/PlayerService.refill: ammo magazines, grenades, stims)
+	local item, amt = string.match(text, "^Acquired (.-) %+(%d+)$")
+	if item then
+		lastAcquired = os.clock()
+		local isStim = string.find(string.lower(item), "stim") ~= nil
+		PickupToast.show("ACQUIRED  " .. item, if isStim then "plus" else "bar", if isStim then Style.Green else Style.Amber, tonumber(amt))
+		return true
+	end
 	if string.find(lower, "^resupplied") then
-		PickupToast.show("RESUPPLIED  AMMO + GRENADES", "bar", Style.Amber)
+		-- the supply crate also sends a generic line; the per-item "Acquired" toasts already said it
+		if os.clock() - lastAcquired > 1.5 then
+			PickupToast.show("RESUPPLIED", "bar", Style.Amber)
+			lastAcquired = os.clock() -- refill's "Resupplied!" + the crate's "Resupplied" show once
+		end
 		return true
 	end
 	local picked = string.match(text, "^Picked up (.+)$")

@@ -1,9 +1,12 @@
 -- Orbital Barrage: shells rain down on a 20-stud disc over several seconds.
+-- Shell blast / core / knock / effect size: Data/Blasts.luau (BARRAGE row) over Data/CallIns.luau params.
+local Blasts = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Blasts"))
+
 local FALL = 1.3
 
 return function(ctx)
 	local S = ctx.S
-	local prm = ctx.params
+	local prm = Blasts.merge("BARRAGE", ctx.params)
 	local center = ctx.pos
 	local n = prm.shells
 	local rng = Random.new()
@@ -21,10 +24,18 @@ return function(ctx)
 		S.Fx.play("Shell", { p = p, t = FALL, s = 1 })
 		ctx.spawn(function()
 			task.wait(FALL)
-			S.Fx.play("Explosion", { p = p, r = prm.blast, size = "L", style = "fire" })
-			S.Fx.play("Shake", { p = p, mag = 1.1, r = 70 })
-			S.Fx.play("Crater", { p = p, r = 3 })
-			S.Enemies.explode(p, prm.blast, prm.core, prm.damage, prm.ap, ctx.source)
+			S.Explosions.blast(p, {
+				radius = prm.blast,
+				core = prm.core,
+				damage = prm.damage,
+				ap = prm.ap,
+				size = "L",
+				style = "fire",
+				vis = prm.vis,
+				knock = prm.knock,
+				shake = prm.shake,
+				legacy = { shake = 1.1, shakeR = 70, crater = 3 },
+			}, ctx.source)
 		end)
 	end
 end

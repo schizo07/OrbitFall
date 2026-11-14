@@ -71,6 +71,9 @@ local OPS: { [string]: (Player) -> any } = {
 	skitterswarm = pack("SKITTER_SWARM", 6),
 	rivet = pack("RIVET", 1), -- Cogwork medium
 	spitter = pack("SPITTER", 1), -- Brood medium
+	bastion = pack("BASTION", 1), -- COG static emplacement
+	bulwark = pack("BULWARK", 1), -- COG heavy
+	charger = pack("CHARGER", 1), -- Brood heavy
 	clear = function()
 		return S.TestArena.clear()
 	end,
@@ -130,7 +133,9 @@ local function quickStart(p: Player)
 	local faction = if workspace:GetAttribute("QuickStartFaction") == "BROOD" then "BROOD" else "COG"
 	mode = string.lower(mode)
 	if mode == "slice" then
-		local ok, why = S.Mission.start(p, { faction = faction, objective = "MISSILE", difficulty = 1, quickBiome = "desert" })
+		-- QuickStartObjective "UPLINK" | "HAUL" picks another main objective (default MISSILE)
+		local objective = workspace:GetAttribute("QuickStartObjective")
+		local ok, why = S.Mission.start(p, { faction = faction, objective = if type(objective) == "string" then objective else "MISSILE", difficulty = 1, quickBiome = "desert" })
 		print("[QuickStart] slice", faction, ok, why)
 	elseif mode == "arena" then
 		local ok, why = S.TestArena.enter(faction)

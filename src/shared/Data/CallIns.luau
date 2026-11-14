@@ -17,6 +17,10 @@ export type CallIn = {
 	rank: number?,
 	params: { [string]: any },
 	desc: string,
+	-- Uplink input code: 3-6 arrows, U D L R (client/UI/UplinkCodes). No code is a prefix of another one.
+	-- Families by the first two arrows: orbital LD, air UL, defense RL, weapon DR, supply DD, reinforce LR.
+	code: string?,
+	callout: string?, -- squad comms line; nil = CallIns.Callouts[category]
 }
 
 local C: { [string]: CallIn } = {
@@ -118,7 +122,80 @@ local C: { [string]: CallIn } = {
 	},
 }
 
+-- Uplink input codes (U D L R). Prefix-free: every code can be typed to the end without another one matching first.
+local CODES: { [string]: string } = {
+	REINFORCE = "LRU", -- fixed short code
+	-- orbital: L D ...
+	LANCE = "LDLUR",
+	EMP = "LDRD",
+	BARRAGE = "LDLLDU",
+	-- air: U L ...
+	STRAFE = "ULL",
+	HALFTON = "ULDD",
+	TOXIN = "ULUD",
+	SMOKE = "ULRU",
+	CLUSTER = "ULRDR",
+	-- defense: R L ...
+	SENTRY = "RLUU",
+	MINES = "RLDR",
+	SHIELD = "RLRDL",
+	-- weapon drops: D R ...
+	ROCKETDROP = "DRRU",
+	GATLINGDROP = "DRLLD",
+	RAILDROP = "DRURL",
+	-- supply: D D ...
+	SUPPLY = "DDRL",
+}
+for id, code in CODES do
+	local def = C[id]
+	if def then
+		def.code = code
+	end
+end
+
+-- Squad comms lines ("<name>: <line>" in the event feed when a trooper arms a call-in).
+local CALLOUT_OVERRIDES: { [string]: string } = {
+	EMP = "EMP going out, robots will stall.",
+	SENTRY = "Turret coming down.",
+	MINES = "Laying mines. Watch your feet.",
+	SHIELD = "Dome going up. Get inside.",
+	SMOKE = "Smoke wall inbound.",
+}
+for id, line in CALLOUT_OVERRIDES do
+	local def = C[id]
+	if def then
+		def.callout = line
+	end
+end
+
 local CallIns = { byId = C }
+CallIns.Callouts = {
+	orbital = "Requesting orbital strike.",
+	air = "Bomber on approach. Clear the line.",
+	defense = "Defences coming down.",
+	supply = "Supply drop inbound.",
+	weapon = "Heavy weapon dropping.",
+	mission = "Reinforcing.",
+} :: { [string]: string }
+
+function CallIns.callout(def: CallIn?): string
+	if not def then
+		return "Calling the Uplink."
+	end
+	return def.callout or CallIns.Callouts[def.category] or "Calling the Uplink."
+end
+
+-- Code as a list of single letters ("U", "D", "L", "R").
+function CallIns.codeOf(def: CallIn?): { string }
+	local out = {}
+	local code = def and def.code
+	if code then
+		for i = 1, #code do
+			table.insert(out, string.sub(code, i, i))
+		end
+	end
+	return out
+end
 CallIns.Starter = { "LANCE", "HALFTON", "STRAFE", "SUPPLY" }
 CallIns.SlotCount = 4
 

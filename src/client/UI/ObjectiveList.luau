@@ -179,15 +179,33 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 		local bar = Style.bar({ Size = UDim2.new(1, 0, 0, 3), Color = Style.Cyan, LayoutOrder = 2, Parent = p })
 		bar.set(frac)
 		if act or primary.done then
-			Style.label({
-				Text = if primary.done then "OBJECTIVE COMPLETE" else act.text,
+			local text = if primary.done then "OBJECTIVE COMPLETE" else act.text
+			-- a trailing "[k/n]" counter (haul: "Load cells into the cargo lifter [2/7]") gets its own right-aligned
+			-- label so truncation never eats it
+			local body, counter = nil, nil
+			if not primary.done and type(text) == "string" then
+				body, counter = string.match(text, "^(.-)%s*(%[%d+/%d+%])$")
+			end
+			local line = Style.label({
+				Text = body or text,
 				Color = if primary.done then Style.Green else Style.White,
 				XAlign = Enum.TextXAlignment.Left,
-				Size = UDim2.new(1, 0, 0, 16),
+				Size = UDim2.new(1, if counter then -54 else 0, 0, 16),
 				LayoutOrder = 3,
 				TextTruncate = Enum.TextTruncate.AtEnd,
 				Parent = p,
 			})
+			if counter then
+				Style.label({
+					Text = counter,
+					Color = Style.Cyan,
+					XAlign = Enum.TextXAlignment.Right,
+					AnchorPoint = Vector2.new(0, 0.5),
+					Position = UDim2.new(1, 0, 0.5, 0),
+					Size = UDim2.fromOffset(54, 16),
+					Parent = line,
+				})
+			end
 		end
 	end
 

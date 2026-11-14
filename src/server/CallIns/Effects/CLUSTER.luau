@@ -1,4 +1,7 @@
 -- Cluster Drop: a jet releases a canister that bursts into 30 bomblets over an 18x10 patch.
+-- Bomblet radius / core / knock / effect size: Data/Blasts.luau (CLUSTER row) over Data/CallIns.luau params.
+local Blasts = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Blasts"))
+
 local ALTITUDE = 80
 local APPROACH = 200
 local JET_SPEED = 180
@@ -7,7 +10,7 @@ local BURST_TIME = 1.1 -- seconds over which the bomblets rain down
 
 return function(ctx)
 	local S = ctx.S
-	local prm = ctx.params
+	local prm = Blasts.merge("CLUSTER", ctx.params)
 	local dir = ctx.dir
 	local right = Vector3.new(-dir.Z, 0, dir.X)
 	local center = ctx.pos
@@ -46,8 +49,17 @@ return function(ctx)
 		S.Fx.play("Shell", { p = p, t = FALL, s = 0.35 })
 		ctx.spawn(function()
 			task.wait(FALL)
-			S.Fx.play("Explosion", { p = p, r = prm.radius, size = "S", style = "fire" })
-			S.Enemies.explode(p, prm.radius, prm.core, prm.damage, prm.ap, ctx.source)
+			S.Explosions.blast(p, {
+				radius = prm.radius,
+				core = prm.core,
+				damage = prm.damage,
+				ap = prm.ap,
+				size = "S",
+				style = "fire",
+				vis = prm.vis,
+				knock = prm.knock,
+				shake = prm.shake,
+			}, ctx.source)
 		end)
 	end
 end

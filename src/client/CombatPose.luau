@@ -16,6 +16,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Net = require(Shared.Net)
+local Carry = require(Shared.Carry) -- haul objective carry pose
 local Input = require(script.Parent.Input)
 local Store = require(script.Parent.Store)
 
@@ -103,6 +104,7 @@ type Rig = {
 	low: number,
 	ads: number, -- local aim-down-sights blend (0..1)
 	active: boolean,
+	gunHidden: boolean?, -- haul carry pose hid the gun (showGun)
 }
 local rigs: { [Model]: Rig } = {}
 
@@ -231,6 +233,22 @@ local function findGun(c: Model): (Instance?, BasePart?)
 	return nil, nil
 end
 
+-- haul carry: hide the gun locally while both hands hold a core cell (re-applied every carry frame: swaps rebuild the gun)
+local function showGun(r: Rig, on: boolean)
+	if on and not r.gunHidden then
+		return
+	end
+	local gun = r.c:FindFirstChild("Gun")
+	if gun then
+		for _, d in gun:GetDescendants() do
+			if d:IsA("BasePart") then
+				d.LocalTransparencyModifier = if on then 0 else 1
+			end
+		end
+	end
+	r.gunHidden = not on
+end
+
 local function release(r: Rig)
 	if not r.active then
 		return
@@ -249,6 +267,43 @@ local function release(r: Rig)
 		r.grip.C0 = r.gripBase
 	end
 	r.grip, r.gripBase, r.gripHandle = nil, nil, nil
+	showGun(r, true)
+end
+
+-- ── haul objective carry pose (character attribute CarryCell, shared/Carry.luau) ─────────────────────────────
+-- Both hands on the core cell the server welds at Carry.HOLD in front of the belly; the gun is hidden (local
+-- transparency) meanwhile. SIDEARM rule with the pistol in hand: the normal pose, so the sidearm can aim.
+local CARRY_HAND = Vector3.new(Carry.SIZE.X / 2 + 0.14, 0.2, 0) -- wrist target in cell space (x mirrored for the left)
+local function wantsCarry(r: Rig, handle: BasePart): boolean
+	if r.c:GetAttribute(Carry.ATTR) ~= true then
+		return false
+	end
+	if Carry.rule() == "SIDEARM" then
+		local muzzle = handle:FindFirstChild("Muzzle")
+		local reach = if muzzle and muzzle:IsA("Attachment") then -muzzle.Position.Z else 2
+		if reach < 1.25 then
+			return false
+		end
+	end
+	return true
+end
+
+local function carryStep(r: Rig, dt: number)
+	r.pitch += (0 - r.pitch) * (1 - exp(-dt * 10))
+	r.low, r.ads = 0, 0
+	setC0(r.waist, r.waistBase * (if ArmorFx and ArmorFx.waistOffset then ArmorFx.waistOffset else CF0) * CFrame.Angles(-0.06, 0, 0))
+	if r.neck and r.neckBase then
+		setC0(r.neck, r.neckBase)
+	end
+	local hrpCF = r.hrp.CFrame
+	local lower = hrpCF * r.root.C0 * r.root.Transform * r.root.C1:Inverse()
+	local upper = lower * r.waist.C0 * r.waist.Transform * r.waist.C1:Inverse()
+	local cell = upper * Carry.HOLD
+	local right, back, down = upper.RightVector, -upper.LookVector, -upper.UpVector
+	local h = tune("CarryHand", CARRY_HAND)
+	solveArm(r.R, upper, (cell * CFrame.new(h.X, h.Y, h.Z)).Position, down + right * 0.8 + back * 0.3, cell.Rotation)
+	solveArm(r.L, upper, (cell * CFrame.new(-h.X, h.Y, h.Z)).Position, down - right * 0.8 + back * 0.3, cell.Rotation)
+	showGun(r, false)
 end
 
 local function blocked(r: Rig, isLocal: boolean): boolean
@@ -289,6 +344,12 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 		r.gripHandle = handle
 	end
 	r.active = true
+	-- haul objective: both hands on the carried core cell instead of the gun
+	if wantsCarry(r, handle) then
+		carryStep(r, dt)
+		return
+	end
+	showGun(r, true)
 
 	-- aim pitch
 	local pitch: number

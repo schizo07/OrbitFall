@@ -35,6 +35,9 @@ local KEYS: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.Space] = "Jump",
 	[Enum.KeyCode.ButtonA] = "Jump",
 }
+-- Stim (client/Fx/VitalsFx): F. Gamepad D-pad Left is read by VitalsFx itself and only while the Uplink dial (LB) is
+-- NOT held, because the D-pad types call-in codes while LB is held. Touch: MobileControls STIM button.
+KEYS[Enum.KeyCode.F] = "Stim"
 -- Default Roblox controls sink these (gameProcessed = true) but we still need to see them (mantle, stand up).
 local PASS_GP: { [string]: boolean } = { Jump = true }
 local MOUSE: { [Enum.UserInputType]: string } = {
@@ -64,7 +67,21 @@ end
 -- (simulated mouse holds are unreliable). Live games skip the attribute read.
 local IS_STUDIO = game:GetService("RunService"):IsStudio()
 
+-- Optional gates: while gate(action)() returns true, Input.isDown(action) reads false (held-state readers like the gun,
+-- the ADS camera and the aim pose stop). Edge handlers (Input.on) still fire. Used by client/CellCarry (haul carrier).
+local gates: { [string]: () -> boolean } = {}
+function Input.setGate(action: string, fn: (() -> boolean)?)
+	gates[action] = fn :: any
+end
+function Input.isGated(action: string): boolean
+	local g = gates[action]
+	return g ~= nil and g() == true
+end
+
 function Input.isDown(action: string): boolean
+	if gates[action] and Input.isGated(action) then
+		return false
+	end
 	if IS_STUDIO and workspace:GetAttribute("DebugHold_" .. action) == true then
 		return true
 	end

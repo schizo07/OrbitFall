@@ -19,15 +19,20 @@ function Damage.compute(dmg: number, ap: number, armor: number, mult: number?): 
 	end
 end
 
--- Explosion falloff: full damage inside core, linear down to 25 % at radius, 0 outside.
-function Damage.falloff(dist: number, core: number, radius: number): number
+-- Explosion falloff: full damage inside core, then a curve down to EDGE at radius, 0 outside.
+-- 2026-11-14 (footage pass): was linear 1 -> 0.25; now 1 -> 0.45 on a u^1.5 curve, so the damage stays high for most of
+-- the ring and only drops near the edge (u = 0.5 gives 0.81, was 0.625). `edge` overrides EDGE for one call.
+Damage.EDGE = 0.45
+Damage.CURVE = 1.5
+function Damage.falloff(dist: number, core: number, radius: number, edge: number?): number
 	if dist <= core then
 		return 1
 	end
 	if dist >= radius then
 		return 0
 	end
-	return 1 - 0.75 * (dist - core) / math.max(radius - core, 0.001)
+	local u = (dist - core) / math.max(radius - core, 0.001)
+	return 1 - (1 - (edge or Damage.EDGE)) * u ^ Damage.CURVE
 end
 
 return Damage

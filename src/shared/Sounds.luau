@@ -258,6 +258,17 @@ local S: { [string]: Entry } = {
 		{ id = "rbxassetid://139481207162657", desc = "soft alarm beep warning", vol = 0.25, delay = 0.02, pitch = 1.0 },
 	}, { limit = { count = 2, window = 0.5 } }),
 
+	-- vitals (client/Fx/VitalsFx): heartbeat below 25 % hp (thump only, no beep), stim injection
+	Heartbeat = K(U, 5, {
+		{ id = "rbxassetid://6202853067", desc = "heartbeat thump, single beat", vol = 0.8, pitch = 1.0, volVar = 0.03, start = 0.06 },
+	}, { limit = { count = 2, window = 0.3 } }),
+
+	StimInject = K(I, 4, {
+		{ id = "rbxassetid://17419512544", desc = "pressurised hydraulic hiss, short injector", vol = 0.55, pitch = { 1.25, 1.35 }, minDist = 6, maxDist = 60 },
+		{ id = "rbxassetid://9120093264", desc = "mechanical click, injector trigger", vol = 0.5, pitch = { 0.8, 0.85 }, minDist = 6, maxDist = 60 },
+		{ id = "rbxassetid://4612374393", desc = "short rising sparkle chime, heal", vol = 0.35, delay = 0.1, minDist = 6, maxDist = 60 },
+	}, { limit = { count = 2, window = 0.3 } }),
+
 	-- DEATHS (Enemies) -------------------------------------------------------------
 	DeathScrap = K(E, 3, {
 		{ id = "rbxassetid://9120253198", desc = "robot explosion pop, small burst, cartoony", vol = 0.8, pitch = { 0.9, 1.1 }, maxDist = 280, start = 0.64 }, -- start: onset 667 -> 32 ms

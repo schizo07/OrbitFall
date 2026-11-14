@@ -3,7 +3,9 @@
 --  * Stances: Crouch tap = crouch/stand, hold = prone; Prone key toggles prone; Jump stands you up.
 --  * Dive: Crouch/Prone while sprinting -> forward dive, land prone, short recovery. Costs stamina, 1 s cooldown.
 --  * Mantle: Jump into a 2.5-6 stud ledge -> smooth climb onto it.
---  * Knockdown: heavy server knocks ("Knockdown" Fx) tumble you on the ground for KnockdownTime, then you get up.
+--  * Knockdown: heavy server knocks ("Knockdown" Fx {v, t?}) tumble you on physics for t s (default KnockdownTime; explosions
+--    send 0.9-1.8 s by launch strength), friction settles the body on the ground, then a short stand-up eases the root
+--    upright. The camera keeps following the root, with a wider FOV while down.
 --  * Poses: animation-free Motor6D C0 offsets + Humanoid.HipHeight, applied by every client to every character
 --    (remote characters read the replicated `Stance` attribute the server sets).
 --  * Prone / dive facing: legs (root) keep their heading, the upper body twists toward the camera (Waist joint, clamped
@@ -24,6 +26,7 @@ local M = Config.Move
 local Movement = {}
 local player = Players.LocalPlayer
 local actionEv: RemoteEvent? = nil
+local CARRY_SPEED = require(Shared.Carry).SPEED_MULT -- haul objective carrier speed factor
 
 -- R15 joints are Motor6D on classic rigs and AnimationConstraint on the upgraded avatar joints (same C0/C1/Transform API)
 local function isJoint(x: Instance?): boolean
@@ -48,6 +51,8 @@ local IS_STUDIO = RunService:IsStudio()
 --   ProneTwist=false      old behaviour: the whole body turns with the camera while prone / diving
 --   ProneTwistLimit (deg) how far the upper body may twist against the legs (default 75)
 --   ProneTurnRate (1/s)   how fast the legs shuffle round toward the crawl direction (default 5)
+--   KnockGetupTime (s)    explosion knockdown: length of the stand-up (default 0.45)
+--   KnockCamFov (deg)     explosion knockdown: extra camera FOV while down (default 8)
 local function proneTwistOn(): boolean
 	return not (IS_STUDIO and workspace:GetAttribute("ProneTwist") == false)
 end
@@ -77,6 +82,11 @@ local stance = "stand" -- stand | crouch | prone
 local mode = "none" -- none | dive | mantle | down | recover
 local modeT = 0
 local recoverFor = 0
+-- knockdown (explosions): tumble on physics for downFor s, then a GETUP_TIME stand-up (root eased from where it lies to upright)
+local downFor = 0.8
+local getupFrom: CFrame? = nil
+local getupT0 = 0
+local downBlend = 0 -- camera: 0..1 while knocked down (wider FOV, lower focus)
 local stamina, exhausted = 1, false
 local lastDrain = -99
 local lastDive = -99
@@ -416,20 +426,32 @@ local function standUp()
 	end
 end
 
-function Movement.knockdown(v: Vector3)
+-- t = seconds on the ground before the stand-up (server/Explosions.luau scales it with the launch; default KnockdownTime)
+function Movement.knockdown(v: Vector3, t: number?)
 	local _, hum, root = chr()
 	if not hum or not root or hum.Health <= 0 or root.Anchored then
 		return
 	end
+	local dur = math.clamp(t or M.KnockdownTime, 0.4, 2.5)
+	if mode == "down" and getupFrom == nil then
+		-- already tumbling (cluster bomblets, two blasts at once): extra push, a little longer on the ground, capped
+		root.AssemblyLinearVelocity += v * 0.5
+		local e = os.clock() - modeT
+		downFor = math.min(math.max(downFor, e + dur * 0.6), 3)
+		return
+	end
 	setMode("down")
+	downFor = dur
+	getupFrom = nil
 	setStance("stand")
 	setJumpEnabled(hum, false)
 	hum.PlatformStand = true
-	root.AssemblyLinearVelocity += v
+	root.AssemblyLinearVelocity = flat(root.AssemblyLinearVelocity) * 0.3 + v
 	local f = flat(v)
 	local axis = if f.Magnitude > 0.1 then f.Unit:Cross(UP) else Vector3.new(1, 0, 0)
-	-- tumble away from the blast, cartoony spin
-	root.AssemblyAngularVelocity = -axis * (7 + math.random() * 4) + UP * (math.random() * 6 - 3)
+	-- tumble away from the blast, cartoony spin (harder launches spin a little faster)
+	local spin = 6 + math.min(v.Magnitude, 140) * 0.04 + math.random() * 3
+	root.AssemblyAngularVelocity = -axis * spin + UP * (math.random() * 6 - 3)
 end
 
 -- ── input ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -625,19 +647,39 @@ local function step(dt: number)
 	elseif mode == "down" then
 		hum.PlatformStand = true
 		local e = t - modeT
-		if e >= M.KnockdownTime then
+		if getupFrom then
+			-- stand-up: ease the root from where the body lies to upright, facing the camera heading
+			local u = math.clamp((t - getupT0) / tuneNum("KnockGetupTime", 0.45), 0, 1)
+			u = u * u * (3 - 2 * u)
 			refreshFilter()
 			local g = groundBelow(root, 3)
-			if g or e > 3 then
-				local gy = if g then g.Position.Y else root.Position.Y - root.Size.Y * 0.5
-				root.CFrame = camYawCF(Vector3.new(root.Position.X, gy + base + root.Size.Y * 0.5, root.Position.Z))
-				root.AssemblyAngularVelocity = Vector3.zero
-				root.AssemblyLinearVelocity = UP * math.min(0, root.AssemblyLinearVelocity.Y)
+			local gy = if g then g.Position.Y else root.Position.Y - root.Size.Y * 0.5
+			local from = getupFrom :: CFrame
+			local target = camYawCF(Vector3.new(from.Position.X, gy + base + root.Size.Y * 0.5, from.Position.Z))
+			root.CFrame = from:Lerp(target, u)
+			root.AssemblyAngularVelocity = Vector3.zero
+			root.AssemblyLinearVelocity = Vector3.zero
+			if u >= 1 then
+				getupFrom = nil
 				hum.PlatformStand = false
 				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 				setMode("recover")
-				recoverFor = 0.2
-				landVel -= 3
+				recoverFor = 0.15
+				landVel -= 2
+			end
+		else
+			refreshFilter()
+			local g = groundBelow(root, 1.6)
+			if g and e > 0.3 then
+				-- on the ground: friction so the body slides to a stop and lies there instead of spinning on
+				local k = math.exp(-dt * 4)
+				local lv = root.AssemblyLinearVelocity
+				root.AssemblyLinearVelocity = Vector3.new(lv.X * k, lv.Y, lv.Z * k)
+				root.AssemblyAngularVelocity *= math.exp(-dt * 6)
+			end
+			if e >= downFor and (groundBelow(root, 3) or e > downFor + 2.2) then
+				getupFrom = root.CFrame
+				getupT0 = t
 			end
 		end
 	elseif mode == "recover" then
@@ -657,6 +699,9 @@ local function step(dt: number)
 
 	-- (body facing / twist: twistStep, which runs earlier in the frame than this handler)
 
+	-- haul objective: a core-cell carrier walks at x0.8 and can't sprint (shared/Carry.luau; server mirrors the sprint)
+	local carrying = player:GetAttribute("CarryCell") == true
+
 	-- stamina (prediction; server reconciles through `me`) ---------------------------------------------------
 	sprintApplied = mode == "none"
 		and stance == "stand"
@@ -665,6 +710,7 @@ local function step(dt: number)
 		and not aiming
 		and not firing
 		and not exhausted
+		and not carrying
 	if sprintApplied then
 		stamina = math.max(0, stamina - dt / M.SprintTime)
 		lastDrain = t
@@ -696,6 +742,9 @@ local function step(dt: number)
 	end
 	if exhausted and stance == "stand" then
 		speed = math.min(speed, M.LimpSpeed)
+	end
+	if carrying then
+		speed *= CARRY_SPEED
 	end
 	hum.WalkSpeed = speed
 	speedWanted = speed
@@ -769,7 +818,7 @@ local JOINTS = {
 -- p = body pitch forward (rad), d = extra drop of the body (studs), b = knee bend 0..1
 local POSES = {
 	stand = { p = 0, d = 0, b = 0 },
-	down = { p = 0, d = 0, b = 0 }, -- physics tumble does the work
+	down = { p = 0, d = 0, b = 0.45 }, -- physics tumble does the work; knees half tucked while it flies
 	crouch = { p = rad(16), d = 0, b = 1 },
 	prone = { p = rad(84), d = -0.3, b = 0 },
 	dive = { p = rad(70), d = 0, b = 0 },
@@ -849,7 +898,7 @@ local function poseStep(dt: number)
 			rig = nil
 		end
 		if not rig then
-			if name == "stand" or name == "down" then
+			if name == "stand" then
 				continue
 			end
 			rig = buildRig(c)
@@ -1046,7 +1095,13 @@ function Movement.cameraStep(dt: number, rawFocusY: number): (number, CFrame, nu
 	local bx = math.sin(bobPhase) * a * 0.8
 	local by = -math.abs(math.sin(bobPhase)) * a * 1.1 - limpAmp * 0.06 * math.max(0, math.sin(bobPhase))
 	local roll = math.sin(bobPhase) * 0.01 * (sprintBlend + limpAmp * 0.6)
-	return fy - rawFocusY + camDrop + landDip, CFrame.new(bx, by, 0) * CFrame.Angles(0, 0, roll), M.SprintFov * sprintBlend
+	-- knocked down: the focus keeps following the tumbling root (above); widen the view and sit a little lower so the
+	-- body stays in frame while it flies and lies there, then ease back during the stand-up
+	local dT = if mode == "down" and getupFrom == nil then 1 else 0
+	downBlend += (dT - downBlend) * (1 - math.exp(-dt * (if dT > downBlend then 9 else 4)))
+	return fy - rawFocusY + camDrop + landDip - 0.5 * downBlend,
+		CFrame.new(bx, by, 0) * CFrame.Angles(0, 0, roll),
+		M.SprintFov * sprintBlend + tuneNum("KnockCamFov", 8) * downBlend
 end
 
 -- false while the body is driven by a dive / mantle / tumble, or while prone (legs keep their heading, the upper body
@@ -1097,6 +1152,7 @@ local function resetLocal()
 	focusY = nil
 	sentStance = ""
 	twistOn, twistRaw, twistGain, sentTwist = false, 0, 0, 0
+	getupFrom, downBlend, downFor = nil, 0, M.KnockdownTime
 	proneRest = nil
 	speedWanted = nil
 end
@@ -1131,7 +1187,7 @@ function Movement.init()
 	if okFx and type(Fx) == "table" and Fx.register then
 		Fx.register("Knockdown", function(d)
 			if type(d) == "table" and typeof(d.v) == "Vector3" then
-				Movement.knockdown(d.v)
+				Movement.knockdown(d.v, if type(d.t) == "number" then d.t else nil)
 			end
 		end)
 	else

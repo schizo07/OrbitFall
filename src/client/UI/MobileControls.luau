@@ -1,6 +1,6 @@
 -- Touch button cluster (right side). Only created when Input.isTouch().
 -- The Roblox dynamic thumbstick stays on the left; we hide the default jump button (it sits where FIRE goes).
--- Input actions driven: Fire Aim Reload Grenade Dial Jump Sprint Crouch Swap1 Swap2 Swap3, plus Input.addLook / Input.setDialPointer.
+-- Input actions driven: Fire Aim Reload Grenade Stim Dial Jump Sprint Crouch Swap1 Swap2 Swap3, plus Input.addLook / Input.setDialPointer.
 -- Store keys read: mission, me, menuOpen, stance.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -282,6 +282,22 @@ function MobileControls.init()
 	end, function()
 		Input.set("Grenade", false)
 	end)
+
+	-- STIM (client/Fx/VitalsFx handles the "Stim" action); caption shows the count, dimmed at 0
+	local stim = make("Stim", 156, 266, 56, "@plus", "STIM", Style.Green, 24)
+	bind(stim, function()
+		Input.set("Stim", true)
+	end, function()
+		Input.set("Stim", false)
+	end)
+	local function refreshStim()
+		local me = Store.get("me")
+		local n = me and type(me.stims) == "number" and me.stims or 0
+		stim.caption.Text = "STIM " .. tostring(n)
+		stim.caption.TextColor3 = if n > 0 then Style.Green else C.Muted
+		stim.stroke.Transparency = if n > 0 then 0.15 else 0.6
+	end
+	Store.on("me", refreshStim)
 
 	-- JUMP (hold)
 	local jump = make("Jump", 76, 176, 64, "@up", "JUMP", C.Text, 24)

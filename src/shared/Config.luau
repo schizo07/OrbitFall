@@ -29,6 +29,20 @@ Config.FailRewardScale = 0.25
 
 -- Player
 Config.PlayerHealth = 150
+-- Stims (server/PlayerService "stim" action; client/Fx/VitalsFx input + feedback)
+Config.Stims = {
+	Max = 3, -- carried per trooper; respawn and supply crates refill to Max
+	Heal = 0.85, -- share of max health restored per stim
+	Delay = 0.08, -- seconds before the heal starts
+	Duration = 1.0, -- seconds the heal is spread over
+	Critical = 0.3, -- health share below which the HUD bar turns red and the "use stim" prompt shows
+}
+-- Passive regen (server/PlayerService). Studio A/B: workspace attribute Feel_Regen = "off" | "slow" | "current".
+Config.Regen = {
+	Mode = "slow",
+	Slow = { above = 0.5, delay = 6, rate = 5, cap = 1.0 }, -- only above 50 % hp, 6 s after the last hit, up to full
+	Current = { above = 0, delay = 5, rate = 10, cap = 0.6 }, -- the old regen: below 60 % only, 5 s after the last hit
+}
 Config.TrooperBody = true -- everyone spawns as the standard R15 trooper body (server/PlayerService loadTrooper)
 Config.WalkSpeed = 16
 Config.SprintSpeed = 24

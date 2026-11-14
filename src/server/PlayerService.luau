@@ -1,4 +1,6 @@
 -- Player lifecycle: characters, health, loadout weapons/ammo, drop capsules, "me" state.
+-- Health: Config.PlayerHealth, passive regen per Config.Regen (Studio A/B Feel_Regen), stims (Config.Stims, Action "stim",
+-- Fx "Stim" to everyone / "StimDenied" to the user; refilled on respawn and by refill() = supply crates).
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
@@ -26,6 +28,12 @@ export type Rec = {
 	dropping: boolean,
 	kills: number,
 	deaths: number,
+	stims: number,
+	stimLeft: number, -- hp still to heal from the running stim
+	stimRate: number, -- hp / s
+	stimStart: number, -- server time the heal starts
+	stimEnd: number, -- server time the heal ends (no second stim before this)
+	stimAsk: number, -- os.clock of the last stim request (spam guard)
 }
 
 local recs: { [Player]: Rec } = {}
@@ -36,6 +44,33 @@ PlayerService.getStance = Movement.getStance
 
 local function now()
 	return workspace:GetServerTimeNow()
+end
+
+local IS_STUDIO = RunService:IsStudio()
+
+-- Passive regen preset: Config.Regen.Mode, or the Studio A/B attribute Feel_Regen (mirrored from the client by the
+-- "studioFeel" action, see PlayerService.init). "off" = no regen.
+local function regenPreset(): { above: number, delay: number, rate: number, cap: number }?
+	local mode = Config.Regen.Mode
+	if IS_STUDIO then
+		local a = workspace:GetAttribute("Feel_Regen")
+		if type(a) == "string" then
+			mode = a
+		end
+	end
+	if mode == "slow" then
+		return Config.Regen.Slow
+	elseif mode == "current" then
+		return Config.Regen.Current
+	end
+	return nil
+end
+
+local function clearStim(r: Rec)
+	r.stimLeft = 0
+	r.stimRate = 0
+	r.stimStart = 0
+	r.stimEnd = 0
 end
 
 -- Every trooper gets the same standard R15 body (Config.TrooperBody): consistent arm reach for the
@@ -136,6 +171,8 @@ function PlayerService.applyLoadout(p: Player, keepCallins: boolean?, override: 
 	r.grenadeId = lo.grenade or "FRAG"
 	r.grenades = Config.Grenades
 	r.reloadUntil = 0
+	r.stims = Config.Stims.Max
+	clearStim(r)
 	if S.CallIns and S.CallIns.reset then
 		if not keepCallins then
 			S.CallIns.reset(p, lo.callins)
@@ -152,18 +189,77 @@ function PlayerService.refill(p: Player, opts: { grenades: number? }?)
 	if not r then
 		return
 	end
+	local magsAdded = 0
 	for i, w in r.weapons do
 		if w then
 			local fresh = newWeapon(w.id)
 			if fresh then
+				local rounds = (fresh.mag + fresh.spare) - (w.mag + w.spare)
+				local def = Weapons.get(w.id)
+				local per = math.max(def and def.mag or 1, 1)
+				if rounds > 0 then
+					magsAdded += math.ceil(rounds / per)
+				end
 				r.weapons[i] = fresh
 			end
 		end
 	end
+	local nadesBefore = r.grenades
 	r.grenades = math.min(Config.Grenades, r.grenades + ((opts and opts.grenades) or Config.Grenades))
+	local stimsBefore = r.stims or 0
+	r.stims = Config.Stims.Max
 	S.Fx.to(p, "Sound", { k = "Pickup" })
-	S.State.notify(p, "Resupplied!", Config.Colors.Friendly)
+	-- one pickup toast per item (client/UI/PickupToast routes "Acquired <item> +N")
+	local any = false
+	if magsAdded > 0 then
+		S.State.notify(p, "Acquired Ammo +" .. magsAdded, Config.Colors.Friendly)
+		any = true
+	end
+	if r.grenades > nadesBefore then
+		S.State.notify(p, "Acquired Grenades +" .. (r.grenades - nadesBefore), Config.Colors.Friendly)
+		any = true
+	end
+	if r.stims > stimsBefore then
+		S.State.notify(p, "Acquired Stims +" .. (r.stims - stimsBefore), Config.Colors.Friendly)
+		any = true
+	end
+	if not any then
+		S.State.notify(p, "Resupplied!", Config.Colors.Friendly)
+	end
 	PlayerService.publish(p)
+end
+
+-- Stim: server-validated quick heal (Config.Stims). Returns false + reason ("dead" | "busy" | "empty" | "full").
+function PlayerService.useStim(p: Player): (boolean, string?)
+	local r = recs[p]
+	if not r or not PlayerService.isAlive(p) then
+		return false, "dead"
+	end
+	local h = PlayerService.getHumanoid(p)
+	if not h then
+		return false, "dead"
+	end
+	local t = now()
+	if t < (r.stimEnd or 0) then
+		return false, "busy"
+	end
+	if (r.stims or 0) <= 0 then
+		return false, "empty"
+	end
+	if h.Health >= h.MaxHealth - 0.5 then
+		return false, "full"
+	end
+	local cfg = Config.Stims
+	r.stims -= 1
+	local heal = h.MaxHealth * cfg.Heal
+	r.stimLeft = heal
+	r.stimRate = heal / math.max(cfg.Duration, 0.05)
+	r.stimStart = t + cfg.Delay
+	r.stimEnd = r.stimStart + cfg.Duration
+	local root = PlayerService.getRoot(p)
+	S.Fx.play("Stim", { u = p.UserId, p = root and root.Position, t = cfg.Delay + cfg.Duration })
+	dirty[p] = true
+	return true
 end
 
 function PlayerService.giveSupport(p: Player, weaponId: string)
@@ -349,6 +445,9 @@ local function buildMe(p: Player)
 		weapons = ws,
 		grenades = r.grenades,
 		grenadeId = r.grenadeId,
+		stims = r.stims, -- HUD "STIM x3/3"
+		stimsMax = Config.Stims.Max,
+		stimEnd = r.stimEnd, -- server time the running stim heal ends (0 = none)
 		reloadUntil = r.reloadUntil,
 		callins = ci,
 		reinforceReadyAt = ci and ci.reinforceReadyAt or 0,
@@ -390,6 +489,7 @@ local function setupCharacter(p: Player, c: Model)
 		end
 		r.alive = false
 		r.deaths += 1
+		clearStim(r)
 		local root = c:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
 			S.Fx.play("Explosion", { p = root.Position, r = 4, size = "S", style = "spark" })
@@ -416,6 +516,36 @@ function PlayerService.init(s)
 	S = s
 	Players.CharacterAutoLoads = false
 	Movement.init(s, PlayerService)
+	-- stim (client/Fx/VitalsFx: F, gamepad D-pad Left, touch STIM button). Denials go back so the client can say why.
+	S.Actions.on("stim", function(p)
+		local r = recs[p]
+		if not r then
+			return
+		end
+		local c = os.clock()
+		if c - (r.stimAsk or 0) < 0.2 then
+			return
+		end
+		r.stimAsk = c
+		local ok, why = PlayerService.useStim(p)
+		if not ok and why ~= "dead" then
+			S.Fx.to(p, "StimDenied", { why = why })
+		end
+	end)
+	-- Studio only: Variants (client) sets Feel_* workspace attributes locally; server-read ones (Feel_Regen) are
+	-- mirrored here so the server sees them too.
+	if IS_STUDIO then
+		S.Actions.on("studioFeel", function(_p, key, value)
+			if type(key) ~= "string" or #key > 48 or string.sub(key, 1, 5) ~= "Feel_" then
+				return
+			end
+			local tv = typeof(value)
+			if value ~= nil and tv ~= "string" and tv ~= "number" and tv ~= "boolean" then
+				return
+			end
+			workspace:SetAttribute(key, value)
+		end)
+	end
 	-- late-ready clients: resend everything they may have missed
 	S.Actions.on("clientReady", function(p)
 		dirty[p] = true
@@ -445,6 +575,12 @@ function PlayerService.start()
 			dropping = false,
 			kills = 0,
 			deaths = 0,
+			stims = Config.Stims.Max,
+			stimLeft = 0,
+			stimRate = 0,
+			stimStart = 0,
+			stimEnd = 0,
+			stimAsk = 0,
 		}
 		p.CharacterAdded:Connect(function(c)
 			setupCharacter(p, c)
@@ -473,18 +609,36 @@ function PlayerService.start()
 	RunService.Heartbeat:Connect(function(dt)
 		acc += dt
 		squadAcc += dt
+		-- stim heal runs every frame (smooth bar, starts at once); only players with a running stim do work
+		local tf = now()
+		for p, r in recs do
+			if (r.stimLeft or 0) > 0 and tf >= r.stimStart then
+				local h = PlayerService.getHumanoid(p)
+				if not h or not PlayerService.isAlive(p) then
+					clearStim(r)
+				else
+					local amt = math.min(r.stimLeft, r.stimRate * dt)
+					r.stimLeft -= amt
+					h.Health = math.min(h.MaxHealth, h.Health + amt)
+					if h.Health >= h.MaxHealth then
+						r.stimLeft = 0
+					end
+				end
+			end
+		end
 		if acc < 0.1 then
 			return
 		end
 		local step = acc
 		acc = 0
 		local t = now()
+		local regen = regenPreset()
 		for p, r in recs do
 			Movement.step(p, step)
-			if PlayerService.isAlive(p) and t - r.lastDamage > 5 then
+			if regen and PlayerService.isAlive(p) and t - r.lastDamage > regen.delay then
 				local h = PlayerService.getHumanoid(p)
-				if h and h.Health < h.MaxHealth * 0.6 then
-					h.Health = math.min(h.MaxHealth * 0.6, h.Health + 10 * step)
+				if h and h.Health >= h.MaxHealth * regen.above and h.Health < h.MaxHealth * regen.cap then
+					h.Health = math.min(h.MaxHealth * regen.cap, h.Health + regen.rate * step)
 				end
 			end
 			if dirty[p] then

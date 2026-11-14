@@ -6,6 +6,7 @@ local Net = require(Shared.Net)
 local Weapons = require(Shared.Data.Weapons)
 local EnemiesData = require(Shared.Data.Enemies)
 local Aim = require(Shared.Aim)
+local Blasts = require(Shared.Data.Blasts)
 
 local WeaponService = {}
 local S
@@ -325,9 +326,27 @@ local function materialFor(inst: Instance): string
 	return "ground"
 end
 
+-- Grenades, launcher rounds and explosive bullets. Radius / core / trooper knock / effect size: Data/Blasts.luau row for
+-- the weapon id over its Data/Weapons.luau `splash` (the S.Explosions path also tells enemy-reaction listeners).
 local function explosionAt(p: Player?, pos: Vector3, sp, weaponId: string, size: string?)
-	S.Enemies.explode(pos, sp.radius, sp.core, sp.damage, sp.ap, { player = p, kind = "explosion", id = weaponId })
-	S.Fx.play("Explosion", { p = pos, r = sp.radius, size = size or "M", style = "fire" })
+	local source = { player = p, kind = "explosion", id = weaponId }
+	local b = Blasts.merge(weaponId, sp)
+	if S.Explosions then
+		S.Explosions.blast(pos, {
+			radius = b.radius,
+			core = b.core,
+			damage = b.damage,
+			ap = b.ap,
+			size = size or "M",
+			style = "fire",
+			vis = b.vis,
+			knock = b.knock,
+			shake = b.shake,
+		}, source)
+	else
+		S.Enemies.explode(pos, b.radius, b.core, b.damage, b.ap, source)
+		S.Fx.play("Explosion", { p = pos, r = b.radius, size = size or "M", style = "fire" })
+	end
 end
 
 -- One ray (bullet / pellet). Returns end position.
@@ -412,6 +431,9 @@ local function onFire(p: Player, slot: any, aimPoint: any, _seq: any)
 		return
 	end
 	if slot ~= r.slot then
+		return
+	end
+	if S.Objectives and S.Objectives.blocksFire and S.Objectives.blocksFire(p, "fire", slot) then -- haul: core-cell carrier
 		return
 	end
 	local ws = r.weapons[r.slot]
@@ -542,6 +564,9 @@ local function onGrenade(p: Player, aimPoint: any)
 	end
 	local r = S.Players.get(p)
 	if not r or not S.Players.isAlive(p) or r.grenades <= 0 then
+		return
+	end
+	if S.Objectives and S.Objectives.blocksFire and S.Objectives.blocksFire(p, "grenade") then -- haul: core-cell carrier
 		return
 	end
 	local origin = muzzleOrigin(p)

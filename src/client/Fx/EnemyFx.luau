@@ -761,6 +761,617 @@ local function onEnemyAttack(d: any)
 	end
 end
 
+-- STAGED DAMAGE + HEAVY DEATH (footage spec §3.4.4, takeaway 6) ---------------------------------------------------------
+-- Kinds with Data/Enemies def.stages (Bulwark, Charger, Colossus, Titan, Bastion) carry model attribute DmgStage 0..3 (server
+-- EnemyService, thresholds EnemyData.Stages):
+--   1  smoke wisps from the top              (bugs: goo drips underneath)
+--   2  + glowing orange breach crack, spark bursts, darker smoke   (bugs: glowing green split, goo spurts)
+--   3  + flames with a flickering light, black smoke               (bugs: bubbling ooze, heavier drips)
+-- HitSeq + HitAt (server, bullet hits only) -> an impact puff at the hit point. Bastion AtkSeq with AtkKind "cannon" -> both
+-- eyes (EyeL / EyeR) swell, whiten and light up over the wind-up (always on: it is the dodge telegraph).
+-- Fx "Death" for these kinds -> armour plates (bugs: shell chunks) flung outward that keep burning / smoking (dripping) for a
+-- few seconds; the Bastion also gets a size L fireball.
+-- Studio A/B: workspace attribute Feel_StageFx (number, default 1, 0 = all of the above off except the eye telegraph);
+-- client/Variants.luau group "DAMAGE STAGES". Emitters / lights / crack parts live inside the enemy model (gone with it); the
+-- death plates are swept by expire(). One shared 4 Hz loop does spark bursts + fire flicker (no per-frame work per enemy).
+
+local EnemyData = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Enemies"))
+
+local IS_STUDIO = RunService:IsStudio()
+local SMOKE_TEX = "rbxasset://textures/particles/smoke_main.dds"
+local FIRE_TEX = "rbxasset://textures/particles/fire_main.dds"
+local SPARK_TEX = "rbxasset://textures/particles/sparkles_main.dds"
+local BREACH_ORANGE = C3(255, 130, 40)
+local SPLIT_GREEN = C3(120, 255, 80)
+local GOO_GREEN = C3(110, 220, 70)
+local EYE_HOT = C3(255, 200, 150)
+local MAX_PLATES = 36
+local rngS = Random.new()
+
+local function stageK(): number
+	if not IS_STUDIO then
+		return 1
+	end
+	local v = workspace:GetAttribute("Feel_StageFx")
+	return if type(v) == "number" then math.clamp(v, 0, 3) else 1
+end
+
+local function quality(): number
+	return if Fx and type(Fx.quality) == "number" then Fx.quality else 1
+end
+
+local function kp(t: number, v: number): NumberSequenceKeypoint
+	return NumberSequenceKeypoint.new(t, v)
+end
+
+local function emitter(parent: Instance, props: { [string]: any }): ParticleEmitter
+	local em = Instance.new("ParticleEmitter")
+	em.LightInfluence = 1
+	em.Rotation = NumberRange.new(0, 360)
+	em.RotSpeed = NumberRange.new(-40, 40)
+	for k, v in props do
+		(em :: any)[k] = v
+	end
+	em.Parent = parent
+	return em
+end
+
+type StageEntry = {
+	model: Model,
+	def: any,
+	k: number, -- size factor (def.size / 5)
+	brood: boolean,
+	seed: number,
+	stage: number,
+	fx: { Instance },
+	burstEm: ParticleEmitter?,
+	nextBurst: number,
+	flicker: { { light: PointLight, base: number } },
+	conns: { RBXScriptConnection },
+	lastPuff: number,
+	eyeBase: { [BasePart]: { size: Vector3, color: Color3 } },
+}
+local staged: { [Model]: StageEntry } = {}
+local platesLive = 0
+
+local function bodyOf(m: Model): BasePart?
+	local best: BasePart? = nil
+	local bestV = 0
+	for _, d in m:GetChildren() do
+		if d:IsA("BasePart") and d.Name ~= "Root" and d.Transparency < 0.9 then
+			local s = d.Size
+			local v = s.X * s.Y * s.Z * (if d.Material == Enum.Material.Neon then 0.2 else 1)
+			if v > bestV then
+				best, bestV = d, v
+			end
+		end
+	end
+	return best
+end
+
+local function clearStageFx(s: StageEntry)
+	for _, i in s.fx do
+		if i.Parent then
+			i:Destroy()
+		end
+	end
+	table.clear(s.fx)
+	table.clear(s.flicker)
+	s.burstEm = nil
+end
+
+local function addAtt(s: StageEntry, body: BasePart, cf: CFrame): Attachment
+	local a = Instance.new("Attachment")
+	a.Name = "StageFx"
+	a.CFrame = cf
+	a.Parent = body
+	table.insert(s.fx, a)
+	return a
+end
+
+local function addLight(s: StageEntry, parent: Instance, color: Color3, range: number, bright: number, flicker: boolean)
+	if quality() < 0.75 then
+		return -- phones: no extra dynamic lights
+	end
+	local l = Instance.new("PointLight")
+	l.Color = color
+	l.Range = range
+	l.Brightness = bright
+	l.Shadows = false
+	l.Parent = parent
+	table.insert(s.fx, l)
+	if flicker then
+		table.insert(s.flicker, { light = l, base = bright })
+	end
+end
+
+-- welded glowing crack on a side face of the body part, lower half ("breach in its base"); same spot every rebuild (seeded)
+local function crack(s: StageEntry, body: BasePart, color: Color3, I: number, r: Random): CFrame
+	local S = body.Size
+	local faces = { Vector3.xAxis, -Vector3.xAxis, Vector3.zAxis, -Vector3.zAxis }
+	local n = faces[r:NextInteger(1, 4)]
+	local w = if n.X ~= 0 then S.Z else S.X
+	local L = math.clamp(math.min(w, S.Y) * 0.5, 0.8, 7)
+	local u = r:NextNumber(-0.2, 0.2) * w
+	local v = r:NextNumber(-0.25, 0.1) * S.Y
+	local depth = if n.X ~= 0 then S.X / 2 else S.Z / 2
+	local pos = n * depth + Vector3.new(if n.X ~= 0 then 0 else u, v, if n.X ~= 0 then u else 0)
+	local faceCF = CFrame.lookAt(pos, pos + n) -- local -Z = outward normal; the crack lies in local XY
+	local base = body.CFrame * faceCF
+	local thick = math.clamp(L * 0.07, 0.14, 0.5) * math.clamp(I, 0.6, 1.4)
+	local function slab(size: Vector3, cf: CFrame, transp: number): Part
+		local p = Instance.new("Part")
+		p.Anchored = false
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		p.Massless = true
+		p.Material = Enum.Material.Neon
+		p.Color = color
+		p.Transparency = transp
+		p.Size = size
+		p.CFrame = cf
+		p.Name = "StageCrack"
+		local wc = Instance.new("WeldConstraint")
+		wc.Part0 = body
+		wc.Part1 = p
+		wc.Parent = p
+		p.Parent = body
+		table.insert(s.fx, p)
+		return p
+	end
+	-- zig-zag: a middle segment plus one off each end, bent the other way
+	local a0 = r:NextNumber(-0.6, 0.6)
+	local l1, l2, l3 = L * 0.45, L * 0.35, L * 0.3
+	local d1 = Vector3.new(math.cos(a0), math.sin(a0), 0)
+	local a2, a3 = a0 + r:NextNumber(0.6, 1.1), a0 - r:NextNumber(0.6, 1.1)
+	local d2 = Vector3.new(math.cos(a2), math.sin(a2), 0)
+	local d3 = Vector3.new(math.cos(a3), math.sin(a3), 0)
+	local out = CFrame.new(0, 0, -0.03)
+	slab(Vector3.new(l1, thick, 0.12), base * out * CFrame.Angles(0, 0, a0), 0)
+	slab(Vector3.new(l2, thick * 0.8, 0.12), base * out * CFrame.new(d1 * l1 / 2 + d2 * l2 / 2) * CFrame.Angles(0, 0, a2), 0)
+	slab(Vector3.new(l3, thick * 0.7, 0.12), base * out * CFrame.new(-d1 * l1 / 2 - d3 * l3 / 2) * CFrame.Angles(0, 0, a3), 0)
+	-- soft breach glow behind the crack
+	local glow = slab(Vector3.new(L * 0.55, L * 0.3, 0.08), base * CFrame.new(0, 0, -0.01) * CFrame.Angles(0, 0, a0), 0.45)
+	addLight(s, glow, color, 6 + 3 * s.k, 1.6 * I, false)
+	return faceCF
+end
+
+local function buildStage(s: StageEntry)
+	clearStageFx(s)
+	local stage = s.stage
+	local I = stageK()
+	if stage <= 0 or I <= 0 then
+		return
+	end
+	local body = bodyOf(s.model)
+	if not body then
+		return
+	end
+	local q = quality()
+	local k = s.k
+	local S = body.Size
+	local r = Random.new(s.seed)
+	local function topAt(): CFrame
+		return CFrame.new(r:NextNumber(-0.3, 0.3) * S.X, S.Y * 0.45, r:NextNumber(-0.3, 0.3) * S.Z)
+	end
+	if not s.brood then
+		-- smoke wisps: grey at 1, darker and thicker at 2, black at 3
+		local col = if stage >= 3 then { C3(52, 48, 46), C3(18, 18, 18) } elseif stage == 2 then { C3(84, 80, 76), C3(36, 34, 32) } else { C3(118, 114, 108), C3(60, 58, 56) }
+		emitter(addAtt(s, body, topAt()), {
+			Texture = SMOKE_TEX,
+			Color = ColorSequence.new(col[1], col[2]),
+			Size = NumberSequence.new({ kp(0, 0.8 * k), kp(1, (2.6 + stage * 0.5) * k) }),
+			Transparency = NumberSequence.new({ kp(0, 0.4), kp(1, 1) }),
+			Lifetime = NumberRange.new(1.4, 2.2 + stage * 0.3),
+			Rate = (3 + stage * 3) * I * q,
+			Speed = NumberRange.new(3, 5),
+			SpreadAngle = Vector2.new(14, 14),
+			Acceleration = Vector3.new(0.8, 1.6, 0),
+			EmissionDirection = Enum.NormalId.Top,
+		})
+		if stage >= 2 then
+			local faceCF = crack(s, body, BREACH_ORANGE, I, r)
+			s.burstEm = emitter(addAtt(s, body, faceCF * CFrame.new(0, 0, -0.3)), {
+				Texture = SPARK_TEX,
+				Color = ColorSequence.new(C3(255, 236, 160), C3(255, 120, 40)),
+				LightEmission = 1,
+				LightInfluence = 0,
+				Size = NumberSequence.new({ kp(0, 0.35 * math.sqrt(k)), kp(1, 0) }),
+				Lifetime = NumberRange.new(0.3, 0.6),
+				Rate = 0,
+				Speed = NumberRange.new(12, 22),
+				SpreadAngle = Vector2.new(50, 50),
+				Acceleration = Vector3.new(0, -45, 0),
+				Drag = 2,
+				EmissionDirection = Enum.NormalId.Front,
+			})
+		end
+		if stage >= 3 then
+			for i = 1, (if k >= 2 then 3 else 2) do
+				local att = addAtt(s, body, topAt())
+				emitter(att, {
+					Texture = FIRE_TEX,
+					Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, C3(255, 230, 140)), ColorSequenceKeypoint.new(0.5, C3(255, 130, 40)), ColorSequenceKeypoint.new(1, C3(200, 50, 20)) }),
+					LightEmission = 0.9,
+					LightInfluence = 0,
+					Size = NumberSequence.new({ kp(0, 1.4 * k), kp(1, 0.2 * k) }),
+					Transparency = NumberSequence.new({ kp(0, 0.15), kp(1, 1) }),
+					Lifetime = NumberRange.new(0.5, 0.9),
+					Rate = 16 * I * q,
+					Speed = NumberRange.new(2, 4),
+					SpreadAngle = Vector2.new(10, 10),
+					Acceleration = Vector3.new(0, 4, 0),
+					EmissionDirection = Enum.NormalId.Top,
+				})
+				if i == 1 then
+					addLight(s, att, C3(255, 140, 60), 10 + 4 * k, 2 * I, true)
+				end
+			end
+		end
+	else
+		-- bugs: goo drips from the underside
+		emitter(addAtt(s, body, CFrame.new(r:NextNumber(-0.3, 0.3) * S.X, -S.Y * 0.3, r:NextNumber(-0.3, 0.3) * S.Z)), {
+			Texture = SMOKE_TEX,
+			Color = ColorSequence.new(GOO_GREEN),
+			LightEmission = 0.2,
+			Size = NumberSequence.new({ kp(0, 0.45 * k), kp(1, 0.25 * k) }),
+			Transparency = NumberSequence.new({ kp(0, 0.05), kp(1, 0.4) }),
+			Lifetime = NumberRange.new(0.6, 1.0),
+			Rate = (2 + stage * 2.5) * I * q,
+			Speed = NumberRange.new(0.5, 2),
+			Acceleration = Vector3.new(0, -55, 0),
+			EmissionDirection = Enum.NormalId.Bottom,
+			RotSpeed = NumberRange.new(0, 0),
+		})
+		if stage >= 2 then
+			local faceCF = crack(s, body, SPLIT_GREEN, I, r)
+			s.burstEm = emitter(addAtt(s, body, faceCF * CFrame.new(0, 0, -0.3)), {
+				Texture = SMOKE_TEX,
+				Color = ColorSequence.new(C3(150, 255, 110), GOO_GREEN),
+				LightEmission = 0.3,
+				Size = NumberSequence.new({ kp(0, 0.6 * math.sqrt(k)), kp(1, 0.25) }),
+				Lifetime = NumberRange.new(0.4, 0.7),
+				Rate = 0,
+				Speed = NumberRange.new(6, 12),
+				SpreadAngle = Vector2.new(35, 35),
+				Acceleration = Vector3.new(0, -50, 0),
+				EmissionDirection = Enum.NormalId.Front,
+			})
+		end
+		if stage >= 3 then
+			for _ = 1, (if k >= 2 then 3 else 2) do
+				emitter(addAtt(s, body, topAt()), {
+					Texture = SMOKE_TEX,
+					Color = ColorSequence.new(C3(170, 255, 130), C3(80, 190, 60)),
+					LightEmission = 0.5,
+					Size = NumberSequence.new({ kp(0, 0.3 * k), kp(0.7, 0.9 * k), kp(1, 0.1 * k) }),
+					Transparency = NumberSequence.new({ kp(0, 0.15), kp(1, 0.7) }),
+					Lifetime = NumberRange.new(0.5, 0.9),
+					Rate = 14 * I * q,
+					Speed = NumberRange.new(1, 2.5),
+					SpreadAngle = Vector2.new(25, 25),
+					EmissionDirection = Enum.NormalId.Top,
+				})
+			end
+		end
+	end
+end
+
+local function onStage(s: StageEntry)
+	local v = s.model:GetAttribute("DmgStage")
+	local st = if type(v) == "number" then math.clamp(math.floor(v), 0, 3) else 0
+	if st ~= s.stage then
+		s.stage = st
+		local ok, err = pcall(buildStage, s)
+		if not ok then
+			warn("[EnemyFx] stage fx failed: " .. tostring(err))
+		end
+	end
+end
+
+local function onHitPuff(s: StageEntry)
+	local p = s.model:GetAttribute("HitAt")
+	if typeof(p) ~= "Vector3" or not Fx then
+		return
+	end
+	local now = os.clock()
+	if now - s.lastPuff < 0.05 then
+		return
+	end
+	s.lastPuff = now
+	local I = stageK()
+	if I <= 0 or (Fx.camDistance and Fx.camDistance(p) > 260) then
+		return
+	end
+	local sc = math.clamp(s.k, 0.7, 1.6) * math.sqrt(I)
+	if s.brood then
+		Fx.burst("goo", p, 4 * I, { scale = 0.5 * sc })
+		Fx.burst("puff", p, 2 * I, { scale = 0.55 * sc, color = C3(150, 200, 120) })
+	else
+		Fx.burst("puff", p, 3 * I, { scale = 0.65 * sc })
+		Fx.burst("sparks", p, 5 * I, { scale = 0.7 })
+	end
+end
+
+-- Bastion: both cannon eyes swell, whiten and light up over the wind-up, then cool back down
+local function onAttackFlare(s: StageEntry)
+	if s.def.id ~= "BASTION" or s.model:GetAttribute("AtkKind") ~= "cannon" then
+		return
+	end
+	local wind = math.clamp(tonumber(s.model:GetAttribute("AtkWindup")) or 0.8, 0.1, 3)
+	for _, name in { "EyeL", "EyeR" } do
+		local eye = s.model:FindFirstChild(name)
+		if eye and eye:IsA("BasePart") then
+			local base = s.eyeBase[eye]
+			if not base then
+				base = { size = eye.Size, color = eye.Color }
+				s.eyeBase[eye] = base
+			end
+			local light = eye:FindFirstChild("StageFlare") :: PointLight?
+			if not light then
+				local l = Instance.new("PointLight")
+				l.Name = "StageFlare"
+				l.Color = C3(255, 90, 60)
+				l.Range = 16
+				l.Brightness = 0
+				l.Shadows = false
+				l.Parent = eye
+				light = l
+			end
+			tween(eye, wind, { Size = base.size * 1.45, Color = EYE_HOT }, Quad, In)
+			tween(light :: PointLight, wind, { Brightness = 8 }, Quad, In)
+			task.delay(wind + 0.08, function()
+				tween(eye, 0.35, { Size = base.size, Color = base.color }, Quad, Out)
+				if light and light.Parent then
+					tween(light, 0.35, { Brightness = 0 }, Quad, Out)
+				end
+			end)
+		end
+	end
+end
+
+local function untrackStaged(m: Instance)
+	local s = staged[m :: Model]
+	if not s then
+		return
+	end
+	staged[m :: Model] = nil
+	for _, c in s.conns do
+		c:Disconnect()
+	end
+end
+
+local function trackStaged(m: Instance)
+	if not m:IsA("Model") or staged[m] then
+		return
+	end
+	local kind = m:GetAttribute("Kind")
+	local def = type(kind) == "string" and EnemyData.get(kind) or nil
+	if not def or not def.stages or m:GetAttribute("Fodder") then
+		return
+	end
+	local id = m:GetAttribute("EnemyId")
+	local s: StageEntry = {
+		model = m,
+		def = def,
+		k = math.clamp(def.size / 5, 0.6, 2.6),
+		brood = def.faction == "BROOD",
+		seed = if type(id) == "number" then id else rngS:NextInteger(1, 1e6),
+		stage = 0,
+		fx = {},
+		burstEm = nil,
+		nextBurst = 0,
+		flicker = {},
+		conns = {},
+		lastPuff = 0,
+		eyeBase = {},
+	}
+	staged[m] = s
+	table.insert(s.conns, m:GetAttributeChangedSignal("DmgStage"):Connect(function()
+		onStage(s)
+	end))
+	table.insert(s.conns, m:GetAttributeChangedSignal("HitSeq"):Connect(function()
+		onHitPuff(s)
+	end))
+	if def.id == "BASTION" then
+		table.insert(s.conns, m:GetAttributeChangedSignal("AtkSeq"):Connect(function()
+			onAttackFlare(s)
+		end))
+	end
+	onStage(s) -- joined mid-fight
+end
+
+-- spark / spurt bursts and fire flicker for every staged enemy, 4 Hz
+local function stageTick()
+	local now = os.clock()
+	local I = stageK()
+	local q = quality()
+	local cam = workspace.CurrentCamera
+	local camPos = if cam then cam.CFrame.Position else Vector3.zero
+	for m, s in staged do
+		if not m.Parent then
+			continue
+		end
+		local root = m.PrimaryPart
+		local near = root == nil or (root.Position - camPos).Magnitude < 220
+		local em = s.burstEm
+		if em and em.Parent and near and now >= s.nextBurst then
+			em:Emit(math.max(1, math.floor(rngS:NextNumber(6, 12) * I * q + 0.5)))
+			s.nextBurst = now + rngS:NextNumber(0.4, 1.3) / (if s.stage >= 3 then 1.6 else 1)
+		end
+		for _, f in s.flicker do
+			if f.light.Parent then
+				f.light.Brightness = f.base * rngS:NextNumber(0.55, 1.2)
+			end
+		end
+	end
+end
+
+-- Death: armour plates / shell chunks flung outward, still burning / dripping for a few seconds
+local function onHeavyDeath(d: any)
+	if d.fodder == true or typeof(d.p) ~= "Vector3" or not Fx then
+		return
+	end
+	local def = type(d.kind) == "string" and EnemyData.get(d.kind) or nil
+	if not def or not def.stages then
+		return
+	end
+	local I = stageK()
+	if I <= 0 or (Fx.camDistance and Fx.camDistance(d.p) > 350) then
+		return
+	end
+	local p: Vector3 = d.p
+	local brood = def.faction == "BROOD"
+	local k = math.clamp(def.size / 5, 0.7, 2.6)
+	local q = quality()
+	local bastion = def.id == "BASTION"
+	if bastion and Fx.explosion then
+		Fx.explosion(p + Vector3.new(0, 1.5, 0), { size = "L", style = "fire" })
+	end
+	local count = (if bastion then 8 elseif def.class == "behemoth" then 9 else 5) * math.min(I, 1.5) * q
+	local n = math.floor(count + 0.5)
+	local dir: Vector3? = if typeof(d.dir) == "Vector3" then d.dir else nil
+	local folder = if Fx.folder then Fx.folder else getFolder()
+	local palette = if brood
+		then { C3(70, 46, 40), C3(58, 36, 66), C3(98, 56, 132) }
+		else { C3(72, 78, 90), C3(44, 47, 57), C3(150, 84, 44) }
+	for i = 1, n do
+		if platesLive >= MAX_PLATES then
+			break
+		end
+		local ang = rngS:NextNumber(0, math.pi * 2)
+		local out = Vector3.new(math.cos(ang), 0, math.sin(ang))
+		local size = Vector3.new(rngS:NextNumber(1.0, 2.0) * k, rngS:NextNumber(0.2, 0.35) * k, rngS:NextNumber(0.8, 1.6) * k)
+		local life = rngS:NextNumber(4.5, 6.5)
+		local part = Instance.new("Part")
+		expire(part, life + 0.5)
+		part.Anchored = false
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.CastShadow = false
+		part.Material = if brood then Enum.Material.SmoothPlastic else Enum.Material.Metal
+		part.Color = palette[(i - 1) % #palette + 1]
+		part.Size = size
+		part.CFrame = CFrame.new(p + out * k * 1.2 + Vector3.new(0, rngS:NextNumber(0, 1.5) * k, 0))
+			* CFrame.Angles(rngS:NextNumber(0, 6.28), rngS:NextNumber(0, 6.28), rngS:NextNumber(0, 6.28))
+		part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.6, 0.2, 1, 1)
+		part.Parent = folder
+		local vel = out * rngS:NextNumber(18, 32) * k ^ 0.35 + Vector3.new(0, rngS:NextNumber(26, 42), 0)
+		if dir then
+			vel += Vector3.new(dir.X, 0, dir.Z) * 10
+		end
+		part.AssemblyLinearVelocity = vel
+		part.AssemblyAngularVelocity = Vector3.new(rngS:NextNumber(-1, 1), rngS:NextNumber(-1, 1), rngS:NextNumber(-1, 1)) * rngS:NextNumber(4, 10)
+		platesLive += 1
+		local att = Instance.new("Attachment")
+		att.Parent = part
+		local burnFor = life - 1.2
+		local ems: { ParticleEmitter } = {}
+		if brood then
+			table.insert(ems, emitter(att, {
+				Texture = SMOKE_TEX,
+				Color = ColorSequence.new(GOO_GREEN),
+				LightEmission = 0.2,
+				Size = NumberSequence.new({ kp(0, 0.4 * k), kp(1, 0.2 * k) }),
+				Transparency = NumberSequence.new({ kp(0, 0.05), kp(1, 0.4) }),
+				Lifetime = NumberRange.new(0.5, 0.9),
+				Rate = 8 * q,
+				Speed = NumberRange.new(0.5, 2),
+				Acceleration = Vector3.new(0, -50, 0),
+			}))
+		else
+			table.insert(ems, emitter(att, {
+				Texture = FIRE_TEX,
+				Color = ColorSequence.new(C3(255, 200, 110), C3(220, 70, 20)),
+				LightEmission = 0.9,
+				LightInfluence = 0,
+				Size = NumberSequence.new({ kp(0, 0.9 * k), kp(1, 0.1) }),
+				Transparency = NumberSequence.new({ kp(0, 0.2), kp(1, 1) }),
+				Lifetime = NumberRange.new(0.35, 0.6),
+				Rate = 12 * q,
+				Speed = NumberRange.new(1, 2),
+				Acceleration = Vector3.new(0, 6, 0),
+			}))
+			table.insert(ems, emitter(att, {
+				Texture = SMOKE_TEX,
+				Color = ColorSequence.new(C3(60, 56, 52), C3(20, 20, 20)),
+				Size = NumberSequence.new({ kp(0, 0.6 * k), kp(1, 2.4 * k) }),
+				Transparency = NumberSequence.new({ kp(0, 0.45), kp(1, 1) }),
+				Lifetime = NumberRange.new(1.2, 2),
+				Rate = 5 * q,
+				Speed = NumberRange.new(1.5, 3),
+				Acceleration = Vector3.new(0.5, 3, 0),
+			}))
+			if i <= 2 and q >= 0.75 then
+				local l = Instance.new("PointLight")
+				l.Color = C3(255, 140, 60)
+				l.Range = 8 + 2 * k
+				l.Brightness = 1.6
+				l.Shadows = false
+				l.Parent = part
+				task.delay(burnFor, function()
+					tween(l, 0.8, { Brightness = 0 }, Quad, Out)
+				end)
+			end
+		end
+		task.delay(0.15, function()
+			if part.Parent then
+				part.CanCollide = true
+			end
+		end)
+		task.delay(burnFor, function()
+			for _, em in ems do
+				if em.Parent then
+					em.Enabled = false
+				end
+			end
+			tween(part, 1.1, { Transparency = 1 }, Quad, In)
+		end)
+		task.delay(life, function()
+			platesLive -= 1
+			if part.Parent then
+				part:Destroy()
+			end
+		end)
+	end
+end
+
+local function startStaged()
+	task.spawn(function()
+		local folder = workspace:WaitForChild("Enemies", 120)
+		if not folder then
+			return
+		end
+		for _, m in folder:GetChildren() do
+			trackStaged(m)
+		end
+		folder.ChildAdded:Connect(function(m)
+			task.defer(trackStaged, m)
+		end)
+		folder.ChildRemoved:Connect(untrackStaged)
+	end)
+	if IS_STUDIO then
+		-- A/B: rebuild live stage fx when the preset changes
+		workspace:GetAttributeChangedSignal("Feel_StageFx"):Connect(function()
+			for _, s in staged do
+				pcall(buildStage, s)
+			end
+		end)
+	end
+	task.spawn(function()
+		while true do
+			task.wait(0.25)
+			local ok, err = pcall(stageTick)
+			if not ok then
+				warn("[EnemyFx] stage tick failed: " .. tostring(err))
+			end
+		end
+	end)
+end
+
 -- Init -------------------------------------------------------------------------------
 function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx = fx
@@ -772,6 +1383,8 @@ function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx.register("DropShip", onDropShip)
 	Fx.register("Breach", onBreach)
 	Fx.register("EnemyAttack", onEnemyAttack)
+	Fx.register("Death", onHeavyDeath) -- staged kinds: flung burning plates (the generic death burst stays in Fx/init.luau)
+	startStaged()
 end
 
 return EnemyFx

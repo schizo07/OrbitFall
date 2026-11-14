@@ -30,7 +30,7 @@ local OWNER_COLOR = {
 	COG = Color3.fromHex("ff4a3a"),
 	BROOD = Color3.fromHex("8cff3a"),
 }
-local OBJECTIVES = { { id = "MISSILE", name = "Missile Launch" }, { id = "UPLINK", name = "Uplink Relay" } }
+local OBJECTIVES = { { id = "MISSILE", name = "Missile Launch" }, { id = "UPLINK", name = "Uplink Relay" }, { id = "HAUL", name = "Core Cells" } }
 
 local gui: ScreenGui
 local canvas: Frame
@@ -949,7 +949,7 @@ local function buildPanel(parent: Instance, compact: boolean)
 	local objRow = new("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = 2, ZIndex = 22, Parent = opts }, { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }) })
 	panelRefs.objBtns = {}
 	for _, o in OBJECTIVES do
-		local b = button(o.name, C.Panel, { Size = UDim2.new(0.5, -3, 1, 0), TextSize = 13, ZIndex = 23, Parent = objRow })
+		local b = button(o.name, C.Panel, { Size = UDim2.new(1 / #OBJECTIVES, -4, 1, 0), TextSize = 12, TextWrapped = true, ZIndex = 23, Parent = objRow })
 		b:SetAttribute("Obj", o.id)
 		b.Activated:Connect(function()
 			objective = o.id

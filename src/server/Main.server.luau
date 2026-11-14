@@ -44,6 +44,7 @@ S.War = try("WarService", function() return root.WarService end)
 S.Mission = try("Mission", function() return root.Mission end)
 S.TestArena = try("TestArena", function() return root.World.TestArena end) -- Studio test arena
 S.DevTools = try("DevTools", function() return root.DevTools end) -- Studio quick start + arena keys remote
+S.Explosions = try("Explosions", function() return root.Explosions end) -- blast entry point + onBlast listeners (no init needed)
 
 local ORDER = {
 	"Assets", "Actions", "Fx", "State", "Save", "Progress", "Shop", "Enemies", "Projectiles", "Director",

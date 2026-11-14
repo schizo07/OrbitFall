@@ -39,6 +39,8 @@ type PState = {
 	reinforceAt: number,
 	lastReady: number,
 	lastThrow: number,
+	cardId: string?,
+	cardAt: number,
 }
 
 local states: { [Player]: PState } = {}
@@ -173,7 +175,24 @@ local function newState(loadout: { string }): PState
 		reinforceAt = 0,
 		lastReady = 0,
 		lastThrow = 0,
+		cardId = nil,
+		cardAt = -100,
 	}
+end
+
+-- Squad call-in card + callout on every client (client/UI/SquadComms -> UI/CallInCards).
+-- stage "arm": skipped when the same call-in was re-armed within CARD_REARM s (arm / cancel spam); "throw" always goes out.
+local CARD_REARM = 2
+local function broadcastCard(player: Player, st: PState, id: string, stage: string)
+	if not (S and S.Fx and S.Fx.play) then
+		return
+	end
+	local clock = os.clock()
+	if stage == "arm" and st.cardId == id and clock - st.cardAt < CARD_REARM then
+		return
+	end
+	st.cardId, st.cardAt = id, clock
+	S.Fx.play("CallInCard", { u = player.UserId, id = id, s = stage })
 end
 
 local function ensure(player: Player): PState
@@ -714,6 +733,7 @@ local function throwBeacon(player: Player, aim: any)
 		undo = consumeSlot(slot, t)
 	end
 	st.holding = nil
+	broadcastCard(player, st, holding.id, "throw")
 
 	-- Clamp the throw to MAX_THROW_RANGE around the player.
 	local rootPos = root.Position
@@ -877,6 +897,7 @@ local function onReady(player: Player, slotIndex: any, perfect: any)
 	else
 		return
 	end
+	broadcastCard(player, st, st.holding.id, "arm")
 	publish(player)
 end
 

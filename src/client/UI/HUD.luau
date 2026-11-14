@@ -7,6 +7,9 @@
 --   right      UI/ObjectiveList checklist (y 16 %), UI/PickupToast (y 55 %)            reads objectives; Notify pickup texts
 --   left       UI/SquadCards (y 58-78 %), one card per other squad member              reads squad, me.reinforceReadyAt, mission.lives
 --   bottom-left own card built here (weapon, mag segments, stim/grenade/mag counts, callsign + health)   reads me
+--                health bar: long, ghost chunk for recent damage, red + pulsing under Config.Stims.Critical, green tint
+--                while a stim heals; spare ammo amber when <= 1 magazine; "TAP [R] TO RELOAD" via UI/ContextPrompt
+--                (screen-edge damage effects: client/Fx/VitalsFx)
 --                + UI/SquadComms tiny radio line above it                               reads me, Fx Breach / HeavyContact / Beacon
 --   bottom-right UI/EventFeed (5 lines, 8 s): DIED, streaks, objectives, call-in arrivals, chatter   reads Notify, Fx Death, objectives
 --   bottom-centre UI/StaminaBar (inited by Movement)
@@ -34,6 +37,8 @@ local SquadCards = require(script.Parent.SquadCards)
 local EventFeed = require(script.Parent.EventFeed)
 local PickupToast = require(script.Parent.PickupToast)
 local SquadComms = require(script.Parent.SquadComms)
+local ContextPrompt = require(script.Parent.ContextPrompt)
+local SquadTags = require(script.Parent.SquadTags) -- world squad tags + comms / ship feed lines
 
 local C = Theme.C
 local player = Players.LocalPlayer
@@ -57,6 +62,11 @@ local ammoLastId: string? = nil
 local ammoLastMag = 0
 local ammoFill: { from: number, to: number, t0: number }? = nil -- quick count-up after a reload
 local lastHp: number? = nil
+-- health bar: ghost chunk (recent damage) holds, then drains to the real value
+local hpFrac = 1
+local ghostFrac = 1
+local ghostHold = 0 -- os.clock until the ghost starts draining
+local ghostShown = -1
 local markers: { [string]: any } = {}
 local beacons: { [string]: { pos: Vector3, color: Color3, label: string } } = {}
 local resultsShown: any = nil
@@ -486,11 +496,13 @@ local function buildOwnCard(parent: Instance)
 		Transparency = 0.4,
 		AnchorPoint = Vector2.new(0, 0.5),
 		Position = UDim2.new(0, 34, 0.5, 0),
-		Size = UDim2.fromOffset(HP_BAR_W, 10),
+		Size = UDim2.new(1, -34, 0, 12), -- long bar: the whole row after the callsign
 		Parent = hpRow,
 	})
 	ui.hpPanel = track
-	ui.hpFill = Style.rect({ Name = "Fill", Color = Style.White, Size = UDim2.fromScale(1, 1), Parent = track })
+	-- ghost chunk: the health just lost, light red, drains after a short hold (step)
+	ui.hpGhost = Style.rect({ Name = "Ghost", Color = Color3.fromRGB(255, 150, 140), Transparency = 0.15, Size = UDim2.fromScale(1, 1), ZIndex = 1, Parent = track })
+	ui.hpFill = Style.rect({ Name = "Fill", Color = Style.White, Size = UDim2.fromScale(1, 1), ZIndex = 2, Parent = track })
 	local st = Instance.new("UIStroke")
 	st.Color = Style.White
 	st.Transparency = 0.7
@@ -562,39 +574,7 @@ local function buildMain()
 	buildToasts(root)
 end
 
-local function buildVignette()
-	local gui = Theme.gui("OrbitVignette", { DisplayOrder = 5, Insets = "None" })
-	ui.vigGui = gui
-	ui.vig = {}
-	local defs = {
-		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.3), rot = 90 },
-		{ pos = UDim2.fromScale(0, 0.7), size = UDim2.fromScale(1, 0.3), rot = 270 },
-		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.22, 1), rot = 0 },
-		{ pos = UDim2.fromScale(0.78, 0), size = UDim2.fromScale(0.22, 1), rot = 180 },
-	}
-	for _, d in defs do
-		local f = Instance.new("Frame")
-		f.BackgroundColor3 = C.Danger
-		f.BackgroundTransparency = 1
-		f.BorderSizePixel = 0
-		f.Position = d.pos
-		f.Size = d.size
-		f.Active = false
-		f.Parent = gui
-		local g = Instance.new("UIGradient")
-		g.Rotation = d.rot
-		g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
-		g.Parent = f
-		table.insert(ui.vig, f)
-	end
-end
-
-local function setVignette(alpha: number)
-	local t = 1 - Theme.clamp(alpha, 0, 1)
-	for _, f in ui.vig do
-		f.BackgroundTransparency = t
-	end
-end
+-- The damage edge vignette, desaturation, heartbeat and big-hit overlay live in client/Fx/VitalsFx.luau (2026-11-14).
 
 -- Toasts / banners ---------------------------------------------------------------------------------------------------
 function HUD.toast(text: string, color: Color3?)
@@ -944,11 +924,36 @@ local function stepBarrel(dt: number, combat: boolean)
 	ui.barrelStroke.Transparency = 0.15 - 0.1 * barrelWarn
 end
 
+-- Context prompt (UI/ContextPrompt): "TAP [R] TO RELOAD" while the magazine is empty and no reload runs;
+-- "OUT OF AMMO - [1-3] SWITCH WEAPON" when the reserve is empty too.
+local ammoLastSpare = 0
+local ammoLastMax = 0
+local function updateReloadPrompt()
+	local me = Store.get("me")
+	local combat = COMBAT[state] == true and me ~= nil and me.alive ~= false
+	if combat and ammoLastId ~= nil and ammoLastMax > 0 and ammoLastMag <= 0 and reloadProgress == nil then
+		if ammoLastSpare > 0 then
+			ContextPrompt.hide("noammo")
+			ContextPrompt.show("reload", "Tap {key} to reload", "Reload", nil, 3)
+		else
+			ContextPrompt.hide("reload")
+			ContextPrompt.show("noammo", "Out of ammo - {key} switch weapon", "Swap", nil, 1)
+		end
+	else
+		ContextPrompt.hide("reload")
+		ContextPrompt.hide("noammo")
+	end
+end
+
 function HUD.setReload(progress: number?)
 	if progress ~= nil and reloadProgress == nil then
 		SquadComms.onReload()
 	end
+	local changed = (progress == nil) ~= (reloadProgress == nil)
 	reloadProgress = progress
+	if changed then
+		updateReloadPrompt()
+	end
 	if progress == nil then
 		ui.reloadBar.Visible = false
 		ui.reloadLabel.Visible = false
@@ -993,11 +998,13 @@ function HUD.ammoShot(slot: number, mag: number, maxMag: number)
 	magTarget = Theme.clamp(mag / math.max(maxMag, 1), 0, 1)
 	ammoLow = maxMag > 1 and mag <= math.max(1, maxMag * 0.25)
 	if mag <= 0 then
-		ui.ammoMag.TextColor3 = C.Danger
+		ui.ammoMag.TextColor3 = Style.Red
+		updateReloadPrompt()
 	end
 	shotKick = 1
 end
 
+-- kept for callers; the damage edge effects live in client/Fx/VitalsFx.luau (this only feeds the HP bar stroke flash)
 function HUD.flashDamage(strength: number?)
 	flash = math.max(flash, strength or 0.6)
 end
@@ -1187,19 +1194,25 @@ local function updateAmmo()
 			ui.ammoMag.TextColor3 = Style.White
 			ui.ammoState.Text = ""
 		end
-		-- spare magazines (whole mags left in reserve)
+		-- spare magazines (whole mags left in reserve). Low = one magazine or less left: amber; none: red.
 		local mags = if maxMag > 0 then math.ceil(spare / math.max(maxMag, 1)) else 0
+		local spareLow = maxMag > 0 and spare <= maxMag
 		ui.cntMags.Text = "MAG " .. tostring(mags)
-		ui.cntMags.TextColor3 = if spare <= 0 then Style.Red else Style.Amber
+		ui.cntMags.TextColor3 = if spare <= 0 then Style.Red elseif spareLow then Style.Amber else Style.White
+		ui.ammoSpare.TextColor3 = if spare <= 0 then Style.Red elseif spareLow then Style.Amber else Style.Grey
+		ammoLastSpare, ammoLastMax = spare, (def and def.mag or 0)
+	else
+		ammoLastId, ammoLastMax = nil, 0
 	end
+	updateReloadPrompt()
 	local g = me.grenades or 0
 	ui.cntNade.Text = "GREN " .. tostring(g)
 	ui.cntNade.TextColor3 = if g <= 0 then Style.Grey else Style.Amber
 	local stims = me.stims
 	ui.cntStim.Visible = type(stims) == "number"
 	if type(stims) == "number" then
-		ui.cntStim.Text = "STIM " .. tostring(stims)
-		ui.cntStim.TextColor3 = if stims <= 0 then Style.Grey else Style.Amber
+		ui.cntStim.Text = string.format("STIM x%d/%d", stims, me.stimsMax or Config.Stims.Max)
+		ui.cntStim.TextColor3 = if stims <= 0 then Style.Red else Style.Amber
 	end
 end
 
@@ -1219,10 +1232,19 @@ local function updateHealth()
 	local hp, maxHp = me.hp or 0, math.max(me.maxHp or Config.PlayerHealth, 1)
 	local frac = Theme.clamp(hp / maxHp, 0, 1)
 	tw(ui.hpFill, 0.12, { Size = UDim2.fromScale(frac, 1) })
-	ui.hpFill.BackgroundColor3 = if frac < 0.3 then Style.Red else Style.White
+	-- colour (red when critical, pulsing; green tint while a stim heals) is set per frame in step()
 	ui.hpText.Text = me.alive == false and "DOWN" or string.format("%d / %d", math.ceil(hp), maxHp)
 	if lastHp and hp < lastHp - 0.5 then
 		flash = math.max(flash, math.min(1, (lastHp - hp) / maxHp * 3 + 0.3))
+	end
+	-- ghost chunk: on damage it keeps the old value for a moment, then drains (step); on heal it snaps under the fill
+	if frac < hpFrac - 0.001 then
+		ghostFrac = math.max(ghostFrac, hpFrac)
+		ghostHold = os.clock() + 0.45
+	end
+	hpFrac = frac
+	if ghostFrac < frac then
+		ghostFrac = frac
 	end
 	lastHp = hp
 end
@@ -1279,6 +1301,8 @@ local function applyVisibility()
 	ui.ownCard.Visible = combat
 	EventFeed.setVisible(combat)
 	PickupToast.setVisible(combat)
+	ContextPrompt.setVisible(combat and alive and not Store.get("menuOpen"))
+	updateReloadPrompt()
 	SquadComms.setActive(combat)
 	if not combat then
 		EventFeed.clear()
@@ -1631,7 +1655,7 @@ local function updatePrompt()
 		ui.promptFrame.Visible = true
 		ui.promptTitle.TextColor3 = col
 		ui.promptTitle.Text = "THROW BEACON"
-		local hint = touch and "Tap FIRE to throw" or "Left-click or [Q] to throw"
+		local hint = touch and "Tap FIRE to throw" or (Store.get("throwHint") or "Left-click or [Q] to throw") -- throwHint: CallInController (arm method + PC/pad)
 		ui.promptSub.Text = (def and string.upper(def.name) or "") .. (h.perfect and "  -  PERFECT SYNC" or "") .. "   " .. hint
 	else
 		ui.promptFrame.Visible = false
@@ -1713,6 +1737,8 @@ local function step(dt: number)
 		elseif ammoFill then
 			ammoFill = nil
 			updateAmmo()
+		elseif ammoLow and ammoLastMag <= 0 then
+			ui.ammoMag.TextColor3 = Style.Red -- empty: solid red (the reload prompt carries the call to action)
 		elseif ammoLow then
 			local pulse = 0.5 + 0.5 * math.sin(os.clock() * 9)
 			ui.ammoMag.TextColor3 = C.Text:Lerp(C.Danger, 0.45 + 0.55 * pulse)
@@ -1754,32 +1780,45 @@ local function step(dt: number)
 			end
 		end
 	end
-	-- vignette (Main.client's Hurt handler already flashes Juice.vignette, so this one stays restrained)
-	flash = math.max(0, flash - dt * 1.6)
+	-- health bar (the screen-edge damage effects live in Fx/VitalsFx): red + heartbeat pulse when critical, green tint
+	-- while a stim heals, ghost chunk drain, a white stroke flash on each hit
+	flash = math.max(0, flash - dt * 2.5)
 	local me = Store.get("me")
-	local low = 0
-	local strokeLow = false
-	if combat and me and me.alive ~= false and me.maxHp and me.maxHp > 0 then
-		local frac = (me.hp or 0) / me.maxHp
-		if frac < 0.4 then
+	if combat and ui.hpFill then
+		local crit = Config.Stims.Critical
+		local alive = me and me.alive ~= false
+		local col = Style.White
+		local fillAlpha = 0
+		local strokeCol = Style.White
+		local strokeAlpha = 0.7 - 0.6 * math.min(flash, 1)
+		if alive and hpFrac < crit then
 			-- heartbeat: a strong "lub" then a softer "dub", faster the lower the health
-			local beat = (os.clock() * (1.0 + (0.4 - frac) * 2.5)) % 1
+			local beat = (os.clock() * (1.1 + (crit - hpFrac) / crit * 1.2)) % 1
 			local pulse = math.max(math.exp(-((beat - 0.08) / 0.07) ^ 2), 0.65 * math.exp(-((beat - 0.32) / 0.08) ^ 2))
-			low = (0.4 - frac) / 0.4 * (0.16 + 0.24 * pulse) -- peaks at 0.4 alpha on the very edges only
-			strokeLow = true
-			if ui.hpStroke then
-				ui.hpStroke.Color = C.Danger
-				ui.hpStroke.Transparency = 0.6 - 0.5 * pulse
-			end
+			col = Style.Red:Lerp(Color3.fromRGB(255, 120, 110), pulse * 0.6)
+			fillAlpha = 0.25 * (1 - pulse)
+			strokeCol = Style.Red
+			strokeAlpha = math.min(strokeAlpha, 0.6 - 0.5 * pulse)
 		end
-	elseif me and me.alive == false and combat then
-		low = 0.32
+		if alive and me and (me.stimEnd or 0) > now() then
+			local k = 0.55 + 0.25 * math.sin(os.clock() * 14)
+			col = col:Lerp(Style.Green, k)
+		end
+		ui.hpFill.BackgroundColor3 = col
+		ui.hpFill.BackgroundTransparency = fillAlpha
+		if ui.hpStroke then
+			ui.hpStroke.Color = strokeCol
+			ui.hpStroke.Transparency = strokeAlpha
+		end
+		-- ghost: hold, then ease down to the real value
+		if os.clock() >= ghostHold and ghostFrac > hpFrac then
+			ghostFrac = math.max(hpFrac, ghostFrac - dt * 0.9 - (ghostFrac - hpFrac) * (1 - math.exp(-6 * dt)))
+		end
+		if math.abs(ghostFrac - ghostShown) > 0.0005 and ui.hpGhost then
+			ghostShown = ghostFrac
+			ui.hpGhost.Size = UDim2.fromScale(Theme.clamp(ghostFrac, 0, 1), 1)
+		end
 	end
-	if not strokeLow and ui.hpStroke and ui.hpStroke.Color ~= Style.White then
-		ui.hpStroke.Color = Style.White
-		ui.hpStroke.Transparency = 0.7
-	end
-	setVignette(math.max(flash * 0.45, low))
 end
 
 -- Init ------------------------------------------------------------------------------------------------------------------------------------------
@@ -1817,7 +1856,6 @@ function HUD.init()
 	buildCrosshair()
 	buildStreak()
 	buildMain()
-	buildVignette()
 	buildOverlay()
 
 	state = missionState()
@@ -1868,6 +1906,8 @@ function HUD.init()
 		end
 		if kind == "banner" then
 			HUD.banner(text, nil, color)
+		elseif (kind == "comms" or kind == "ship") and COMBAT[state] and SquadTags.feed(text, color) then
+			-- haul callouts "<name>: <line>" + HALCYON drop-in announcements -> event feed (UI/SquadTags)
 		elseif COMBAT[state] and PickupToast.route(text) then
 			Theme.sfx("Notify") -- pickup: orange toast at the right edge
 		elseif COMBAT[state] and EventFeed.route(text, color, kind) then

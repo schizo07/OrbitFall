@@ -361,7 +361,7 @@ function WeaponController.init()
 	end)
 	Input.on("Grenade", function(d)
 		local m = me()
-		if d and not blocked() and m and m.grenades > 0 then
+		if d and not blocked() and m and m.grenades > 0 and not Input.isGated("Grenade") then -- gate: haul cell carrier
 			local p = WeaponController.aimPoint(60, 0)
 			actionEv:FireServer("grenade", p)
 		end

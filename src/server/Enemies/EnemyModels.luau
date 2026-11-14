@@ -61,11 +61,13 @@ EnemyModels.Offsets = {
 	COLOSSUS = { muzzle = Vector3.new(0, 33, 0), laser = Vector3.new(0, 2.5, -10) },
 	SPITTER = { muzzle = Vector3.new(0, 2.4, -3.6) },
 	TITAN = { muzzle = Vector3.new(0, 14.5, -19) },
+	BASTION = { muzzle = Vector3.new(0, 5.7, -7.4) },
 } :: { [string]: { [string]: Vector3 } }
 
 EnemyModels.height = {
 	TINKER = 6, RIVET = 7, BULWARK = 8, COLOSSUS = 32,
 	SKITTER = 2.2, SPITTER = 4.5, CHARGER = 6.5, TITAN = 25,
+	BASTION = 9,
 } :: { [string]: number }
 
 -- Builder ---------------------------------------------------------------------------
@@ -248,6 +250,38 @@ local function buildColossus(c: Ctx)
 	end
 end
 
+-- Bastion emplacement (static, part-built, 11 x 11 footprint, ~10 studs tall). Front = -Z: sloped glacis with two red cannon
+-- eyes (zone "eye", the client flares them during the 0.8 s wind-up: parts EyeL / EyeR). Rear: glowing heat vent behind
+-- grille bars (zone "vent"). Troopers cannot walk through it: one invisible vertical collision cylinder ("Hull", CanQuery off so
+-- bullets still hit the visible parts) centred on the root, so the slow turn never sweeps a corner into anyone.
+-- The whole block turns slowly to face its target (EnemyAI, def.turn), so the vent swings away from a flanker.
+local function buildBastion(c: Ctx)
+	c.rig.bob = 0
+	local hull = c.add("Hull", V(7.5, 10, 10), CFrame.new(0, 3.75, 0) * CFrame.Angles(0, 0, math.rad(90)), DARKMETAL)
+	hull.Shape = Enum.PartType.Cylinder
+	hull.Transparency = 1
+	hull.CanQuery = false
+	hull.CanCollide = true
+	hull.CastShadow = false
+	c.add("Plinth", V(11, 2, 11), at(0, 1, 0), DARKMETAL, SLATE)
+	c.add("Bunker", V(9, 5, 8.4), at(0, 4.5, 0.3), GUNMETAL)
+	c.add("Glacis", V(9, 4.6, 1.2), CFrame.new(0, 4.6, -4.2) * CFrame.Angles(math.rad(22), 0, 0), DARKMETAL)
+	c.add("Roof", V(7.4, 1.2, 7), at(0, 7.6, 0.6), DARKMETAL)
+	c.add("Stripe", V(9.2, 0.5, 2), at(0, 6.4, 1.6), RUST)
+	c.add("EyePlate", V(6.4, 2.6, 1), at(0, 5.7, -5.1), GUNMETAL)
+	c.add("EyeL", V(1.9, 1.9, 1.9), at(-1.7, 5.7, -5.6), EYE_RED, NEON, "eye", true)
+	c.add("EyeR", V(1.9, 1.9, 1.9), at(1.7, 5.7, -5.6), EYE_RED, NEON, "eye", true)
+	c.add("BarrelL", V(0.7, 0.7, 2.6), at(-1.7, 5.7, -6.9), RUST)
+	c.add("BarrelR", V(0.7, 0.7, 2.6), at(1.7, 5.7, -6.9), RUST)
+	c.add("Vent", V(4.4, 2.2, 0.5), at(0, 4.8, 4.6), CELL_ORANGE, NEON, "vent")
+	c.add("Grille1", V(4.8, 0.3, 0.3), at(0, 5.4, 4.95), DARKMETAL, nil, "vent")
+	c.add("Grille2", V(4.8, 0.3, 0.3), at(0, 4.3, 4.95), DARKMETAL, nil, "vent")
+	c.add("SideL", V(1, 4, 7.6), CFrame.new(-5, 3.6, 0.2) * CFrame.Angles(0, 0, math.rad(-14)), STEEL)
+	c.add("SideR", V(1, 4, 7.6), CFrame.new(5, 3.6, 0.2) * CFrame.Angles(0, 0, math.rad(14)), STEEL)
+	c.add("Antenna", V(0.25, 2.4, 0.25), at(2.6, 9.4, 2.2), STEEL)
+	c.add("Lamp", V(0.6, 0.6, 0.6), at(2.6, 10.8, 2.2), EYE_RED, NEON, "body", true)
+end
+
 -- SKITTER BROOD ----------------------------------------------------------------------
 local function buildSkitter(c: Ctx)
 	c.rig.bob = 0.12
@@ -340,6 +374,7 @@ local BUILDERS: { [string]: (Ctx) -> () } = {
 	SPITTER = buildSpitter,
 	CHARGER = buildCharger,
 	TITAN = buildTitan,
+	BASTION = buildBastion,
 }
 
 -- MESH PATH --------------------------------------------------------------------------

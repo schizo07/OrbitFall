@@ -91,6 +91,7 @@ function MovementService.init(s, playerService)
 		local m = get(p)
 		m.stance = stance
 		m.sprinting = sprinting == true and stance == "stand" and not m.exhausted
+			and p:GetAttribute("CarryCell") ~= true -- haul: a core-cell carrier can't sprint (shared/Carry.luau)
 		setAttr(p, stance)
 		clearTwist(p, stance)
 		PS.publish(p)
@@ -141,7 +142,7 @@ function MovementService.init(s, playerService)
 		local m = get(p)
 		local t = now()
 		-- lenient (latency): 85 % of the cooldown, half the cost must be there
-		if t - m.lastDive < M.DiveCooldown * 0.85 or m.stamina < M.DiveCost * 0.5 or not PS.isAlive(p) then
+		if t - m.lastDive < M.DiveCooldown * 0.85 or m.stamina < M.DiveCost * 0.5 or not PS.isAlive(p) or p:GetAttribute("CarryCell") == true then
 			return
 		end
 		m.lastDive = t

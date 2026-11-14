@@ -218,8 +218,31 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- Beacon
 -- ---------------------------------------------------------------------------------------------
-type BeaconRec = { model: Model, conn: RBXScriptConnection, loop: any, light: PointLight, parts: { Part } }
+type BeaconRec = {
+	model: Model,
+	conn: RBXScriptConnection,
+	loop: any,
+	light: PointLight,
+	parts: { Part },
+	endAt: number?, -- BeaconEnd seen: the beam stays at full heat until this clock time (payload in flight), then fades
+	far: Frame?,
+	callin: string?,
+}
 local beacons: { [any]: BeaconRec } = {}
+
+-- Seconds between BeaconEnd (payload launched) and the impact, per call-in: the beam holds at full heat meanwhile.
+-- Mirrors the FALL / approach constants in server/CallIns/Effects/*.luau.
+local BEACON_HOLD = {
+	HALFTON = 1.5, -- FALL_TIME
+	STRAFE = 1.4, -- jet reaches the line centre (APPROACH 220 / 160) ~ first bombs
+	CLUSTER = 1.7, -- APPROACH 200 / 180 + FALL 0.6
+	BARRAGE = 1.3, -- first shell FALL
+	EMP = 0.8,
+	TOXIN = 0.7,
+	SMOKE = 0.6,
+	LANCE = 0.2,
+}
+local BEACON_RAMP = 1.2 -- the beam heats up over the last this-many seconds before BeaconEnd
 
 local function endBeacon(id: any)
 	local b = beacons[id]
@@ -232,8 +255,21 @@ local function endBeacon(id: any)
 	for _, p in b.parts do
 		tween(p, 0.45, { Transparency = 1 })
 	end
+	if b.far then
+		tween(b.far, 0.45, { BackgroundTransparency = 1 })
+	end
 	tween(b.light, 0.45, { Brightness = 0 })
 	Debris:AddItem(b.model, 0.6)
+end
+
+-- BeaconEnd: keep the beam burning (at full heat) until the payload lands, then fade it out
+local function holdBeacon(id: any, callin: string?)
+	local b = beacons[id]
+	if not b then
+		return
+	end
+	local hold = (callin and BEACON_HOLD[callin]) or 0.8
+	b.endAt = os.clock() + hold
 end
 
 local function registerBeacon(Fx: any)
@@ -256,7 +292,7 @@ local function registerBeacon(Fx: any)
 			Transparency = 0.2,
 			CFrame = CFrame.new(pos + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.pi / 2),
 		}, model)
-		local HEIGHT = 700
+		local HEIGHT = 1200 -- was 700
 		local column = mkPart({
 			Size = Vector3.new(1.4, HEIGHT, 1.4),
 			Color = main,
@@ -275,15 +311,44 @@ local function registerBeacon(Fx: any)
 			Transparency = 0.88,
 			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
 		}, model)
-		-- wide, nearly invisible bloom sleeve: keeps the 700-stud beam readable from across the map
+		-- wide, nearly invisible bloom sleeve: keeps the beam readable from across the map
 		local bloomSleeve = mkPart({
 			Size = Vector3.new(10, HEIGHT, 10),
 			Color = main,
 			Transparency = 0.94,
 			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
 		}, model)
+		-- far layer: a camera-facing billboard stripe (GUI is not fogged, so the beam cuts through the haze / dust storm).
+		-- Faded out up close, where the 3D parts read better; fully on from ~160 studs.
+		local farAnchor = mkPart({
+			Size = Vector3.new(0.2, 0.2, 0.2),
+			Transparency = 1,
+			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
+		}, model)
+		local bb = Instance.new("BillboardGui")
+		bb.Size = UDim2.new(2.4, 0, HEIGHT, 0) -- scale = studs
+		bb.LightInfluence = 0
+		bb.Brightness = 2.5
+		bb.AlwaysOnTop = false
+		bb.ResetOnSpawn = false
+		bb.Adornee = farAnchor
+		bb.Parent = farAnchor
+		local far = Instance.new("Frame")
+		far.Size = UDim2.fromScale(1, 1)
+		far.BorderSizePixel = 0
+		far.BackgroundColor3 = main:Lerp(Color3.new(1, 1, 1), 0.25)
+		far.BackgroundTransparency = 1
+		far.Parent = bb
+		local grad = Instance.new("UIGradient")
+		grad.Rotation = 90 -- top of the stripe fades into the sky
+		grad.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.45, 0.35),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		grad.Parent = far
 		local lamp = light(base, main, 30, 3)
-		emitter(base, {
+		local sparks = emitter(base, {
 			Texture = TEX_SPARK,
 			Color = ColorSequence.new(main),
 			Size = seq(0.5, 0),
@@ -298,21 +363,49 @@ local function registerBeacon(Fx: any)
 		})
 
 		local t0 = os.clock()
+		local delay = if type(d.t) == "number" then d.t else 3
 		local nextRing = 0
-		local conn = RunService.RenderStepped:Connect(function()
-			local t = os.clock() - t0
-			local k = 0.5 + 0.5 * math.sin(t * 7)
-			column.Transparency = 0.45 + 0.2 * k
-			column.Size = Vector3.new(1.2 + 0.4 * k, HEIGHT, 1.2 + 0.4 * k)
-			halo.Size = Vector3.new(3 + 1.2 * k, HEIGHT, 3 + 1.2 * k)
-			bloomSleeve.Size = Vector3.new(9 + 3 * k, HEIGHT, 9 + 3 * k)
-			lamp.Brightness = 2 + 2 * k
+		local phase = 0
+		local id = d.id
+		local conn = RunService.RenderStepped:Connect(function(dt)
+			local now = os.clock()
+			local t = now - t0
+			local rec = beacons[id]
+			-- heat 0..1: ramps up over the last BEACON_RAMP s of the delay, stays at 1 while the payload is in flight
+			local heat = math.clamp((t - (delay - BEACON_RAMP)) / BEACON_RAMP, 0, 1)
+			if rec and rec.endAt then
+				heat = 1
+				if now >= rec.endAt then
+					endBeacon(id)
+					return
+				end
+			end
+			heat = heat * heat
+			phase += dt * (7 + 18 * heat) -- pulse speeds up as the strike gets close
+			local k = 0.5 + 0.5 * math.sin(phase)
+			local w = 1 + 1.3 * heat
+			column.Transparency = 0.45 + 0.2 * k - 0.25 * heat
+			column.Size = Vector3.new((1.2 + 0.4 * k) * w, HEIGHT, (1.2 + 0.4 * k) * w)
+			core.Size = Vector3.new(0.45 * (1 + 0.8 * heat), HEIGHT, 0.45 * (1 + 0.8 * heat))
+			halo.Size = Vector3.new((3 + 1.2 * k) * w, HEIGHT, (3 + 1.2 * k) * w)
+			halo.Transparency = 0.88 - 0.18 * heat
+			bloomSleeve.Size = Vector3.new((9 + 3 * k) * w, HEIGHT, (9 + 3 * k) * w)
+			bloomSleeve.Transparency = 0.94 - 0.08 * heat
+			lamp.Brightness = (2 + 2 * k) * (1 + 1.5 * heat)
+			lamp.Range = 30 + 25 * heat
+			sparks.Rate = (if perfect then 40 else 22) * (1 + 2 * heat)
+			-- far billboard: off within 60 studs, full from 160
+			local cam = workspace.CurrentCamera
+			local cd = if cam then (cam.CFrame.Position - pos).Magnitude else 0
+			local farA = math.clamp((cd - 60) / 100, 0, 1)
+			far.BackgroundTransparency = 1 - farA * (0.55 + 0.15 * k + 0.3 * heat)
+			bb.Size = UDim2.new(2.4 * w + cd * 0.004, 0, HEIGHT, 0) -- a little wider with distance so it stays a few pixels thick
 			if t >= nextRing then
-				nextRing = t + 0.9
-				ring(pos, main, 1, 7, 0.9)
+				nextRing = t + 0.9 * (1 - 0.55 * heat)
+				ring(pos, main, 1, 7 + 5 * heat, 0.9)
 			end
 			if t > 40 then
-				endBeacon(d.id)
+				endBeacon(id)
 			end
 		end)
 
@@ -321,11 +414,20 @@ local function registerBeacon(Fx: any)
 		if d.callin == "LANCE" then
 			snd("LanceCharge", pos)
 		end
-		beacons[d.id] = { model = model, conn = conn, loop = loop, light = lamp, parts = { base, column, core, halo, bloomSleeve } }
+		beacons[id] = {
+			model = model,
+			conn = conn,
+			loop = loop,
+			light = lamp,
+			parts = { base, column, core, halo, bloomSleeve },
+			far = far,
+			callin = d.callin,
+		}
 	end)
 
 	Fx.register("BeaconEnd", function(d)
-		endBeacon(d.id)
+		local b = beacons[d.id]
+		holdBeacon(d.id, b and (b :: any).callin)
 	end)
 end
 

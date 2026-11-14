@@ -536,7 +536,8 @@ end
 
 -- Full orbital strike. sc 1 = the Half-Ton; mini = barrage shell (column + dust only).
 -- opts.noDust: the caller's explosion already went through Fx.onExplosion, which throws the ground dust.
-function Spectacle.orbital(p: Vector3, sc: number, opts: { mini: boolean?, tint: Color3?, noDust: boolean? }?)
+-- opts.noCam: client/Fx/Blast.luau already shook the camera and flashed the screen for this blast.
+function Spectacle.orbital(p: Vector3, sc: number, opts: { mini: boolean?, tint: Color3?, noDust: boolean?, noCam: boolean? }?)
 	opts = opts or {}
 	local g = ground(p, 4, 24) or p
 	local d = dist(g)
@@ -552,8 +553,10 @@ function Spectacle.orbital(p: Vector3, sc: number, opts: { mini: boolean?, tint:
 	end
 	dustColumn.emit(g, qn(20))
 	-- camera: trauma ~1/dist out to 120 studs, white flash (distance + facing scaled), bloom pulse
-	Juice.trauma(5.5 * sc, 1.5, g, 120)
-	Juice.flashAt(C3(255, 252, 240), 0.9, 0.4, g, 700)
+	if not opts.noCam then
+		Juice.trauma(5.5 * sc, 1.5, g, 120)
+		Juice.flashAt(C3(255, 252, 240), 0.9, 0.4, g, 700)
+	end
 	pulseBloom(1.3 * distK(d, 900) * sc)
 	if d > 120 then -- far strike: a delayed low rumble so the whole map hears it
 		task.delay(math.min(d / 500, 1.4), function()
@@ -769,6 +772,23 @@ local function aftermath(g: Vector3, n: Vector3?, size: string, R: number, silen
 	end
 	if n then
 		startScorch(g, n, R * (if size == "XL" then 3 else 2.2))
+	end
+end
+
+-- Dust kick-up for client/Fx/Blast.luau (the shared explosion effect), sized by its K (1 = frag grenade).
+function Spectacle.blastDust(g: Vector3, K: number)
+	if not blastDustS or dist(g) > 450 then
+		return
+	end
+	if K >= 2.5 then
+		blastDustL.emit(g, qn(26))
+		blastDustS.emit(g, qn(12))
+		dustColumn.emit(g, qn(12))
+	elseif K >= 1.3 then
+		blastDustL.emit(g, qn(10 + 3 * K))
+		blastDustS.emit(g, qn(8))
+	else
+		blastDustS.emit(g, qn(5 + 7 * K))
 	end
 end
 
@@ -1230,12 +1250,15 @@ function Spectacle.init(fx: any, audio: any, juice: any)
 		end
 		table.insert(shells, { p = d.p, due = os.clock() + (d.t or 1.3), c = d.c, s = d.s or 1 })
 	end)
-	Fx.register("Explosion", function(d)
-		if typeof(d.p) ~= "Vector3" then
+	-- "Blast" = the same payload from server/Explosions.luau (grenades, call-ins); Fx/Blast.luau draws the blast itself
+	local function onNetBlast(d)
+		if typeof(d) ~= "table" or typeof(d.p) ~= "Vector3" then
 			return
 		end
 		if d.size == "XL" then
-			Spectacle.orbital(d.p, 1, { noDust = true })
+			local isNew = Fx.blastIsNew ~= nil and Fx.blastIsNew()
+			local sc = if isNew and Fx.blastScale then math.max(Fx.blastScale(), 0.5) else 1
+			Spectacle.orbital(d.p, sc, { noDust = true, noCam = isNew })
 		elseif d.size == "L" then
 			local now = os.clock()
 			for i = #shells, 1, -1 do
@@ -1249,7 +1272,9 @@ function Spectacle.init(fx: any, audio: any, juice: any)
 				end
 			end
 		end
-	end)
+	end
+	Fx.register("Explosion", onNetBlast)
+	Fx.register("Blast", onNetBlast)
 
 	-- orbital lance: ignition flash + dust, a small mushroom where it ends
 	local lancePos: { [any]: Vector3 } = {}

@@ -1,5 +1,6 @@
--- S.Objectives: runs the main objective (MissileLaunch / UplinkRelay) plus side objectives for one mission.
---   S.Objectives.start(map, {main = "MISSILE"|"UPLINK", sides = {"NEST","SAMPLES"}, faction = "COG"|"BROOD"})
+-- S.Objectives: runs the main objective (MissileLaunch / UplinkRelay / HaulCells) plus side objectives for one mission.
+--   S.Objectives.start(map, {main = "MISSILE"|"UPLINK"|"HAUL", sides = {"NEST","SAMPLES"}, faction = "COG"|"BROOD", difficulty = 1..5})
+--   S.Objectives.blocksFire(player, "fire"|"aim"|"grenade", slot?) -> bool   (haul: a cell carrier can't shoot; WeaponService asks)
 --   S.Objectives.stop()
 --   S.Objectives.onMainComplete = function() end      (set by the Mission)
 --   S.Objectives.onExplosion(pos, radius)             (call from every explosion: destroys nests within 8 studs)
@@ -13,9 +14,12 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Carry = require(Shared.Carry)
+local RunService = game:GetService("RunService")
 
 local MissileLaunch = require(script.Parent.MissileLaunch)
 local UplinkRelay = require(script.Parent.UplinkRelay)
+local HaulCells = require(script.Parent.HaulCells)
 local SideObjectives = require(script.Parent.SideObjectives)
 
 local ObjectiveService = {}
@@ -31,6 +35,7 @@ local runId = 0
 local running = false
 local dirty = false
 local mainEntry: any = nil
+local mainCtl: any = nil
 local mainFired = false
 local samplesCtl: any = nil
 local beacon: Part? = nil
@@ -129,6 +134,8 @@ local function buildCtx(map: any, faction: string): any
 	ctx.faction = faction
 	ctx.folder = folder
 	ctx.rng = Random.new()
+	ctx.difficulty = 1 -- set by start() (HaulCells: cell count)
+	ctx.freeNests = {} -- nest sites no NEST side objective uses (HaulCells: extra cell cache)
 
 	function ctx.alive(): boolean
 		return running and runId == myRun
@@ -393,9 +400,30 @@ function ObjectiveService.debugSolve(player: Player): boolean
 	return false
 end
 
+-- Haul objective: is this action blocked for a cell carrier? (shared/Carry.luau rules; WeaponService fire / grenade hooks)
+function ObjectiveService.blocksFire(player: Player, what: string, slot: number?): boolean
+	return Carry.blocks(player, what, slot)
+end
+
 function ObjectiveService.init(registry: any)
 	S = registry
+	Workspace:SetAttribute(Carry.RULE_ATTR, "STRICT")
 	if S.Actions and S.Actions.on then
+		-- haul: drop the carried core cell (client: Interact or Grenade while carrying)
+		S.Actions.on("cellDrop", function(player: Player)
+			for _, c in controllers do
+				if c.drop then
+					c.drop(player, "drop")
+				end
+			end
+		end)
+		-- Studio A/B "CARRY RULES" (client/Variants.luau): the client forwards its pick; live servers ignore it
+		S.Actions.on("carryRule", function(_player: Player, rule: any)
+			if not RunService:IsStudio() then
+				return
+			end
+			Workspace:SetAttribute(Carry.RULE_ATTR, if rule == "SIDEARM" then "SIDEARM" else "STRICT")
+		end)
 		S.Actions.on("minigame", function(player: Player, objectiveId: any, payload: any)
 			if typeof(objectiveId) ~= "string" then
 				return
@@ -416,7 +444,9 @@ local function liveStats()
 			sides += 1
 		end
 	end
-	if mainEntry then
+	if mainCtl and mainCtl.stepsDone then
+		steps = mainCtl.stepsDone() -- haul: delivered share scaled to a 5-step main
+	elseif mainEntry then
 		for _, st in mainEntry.steps do
 			if st.done then
 				steps += 1
@@ -449,6 +479,7 @@ function ObjectiveService.stop()
 	table.clear(entries)
 	samplesCtl = nil
 	mainEntry = nil
+	mainCtl = nil
 	beacon = nil
 	if folder then
 		folder:Destroy()
@@ -491,11 +522,32 @@ function ObjectiveService.start(map: any, cfg: any)
 	beacon = bp
 
 	local ctx = buildCtx(map, faction)
+	ctx.difficulty = tonumber(cfg.difficulty) or 1
+
+	-- nest sites are shuffled up front so the haul objective knows which ones the NEST sides leave free
+	local nestSites = { "nest1", "nest2", "nest3", "nest4" }
+	for i = #nestSites, 2, -1 do
+		local j = ctx.rng:NextInteger(1, i)
+		nestSites[i], nestSites[j] = nestSites[j], nestSites[i]
+	end
+	local nestCount = 0
+	for _, kind in cfg.sides or {} do
+		if kind == "NEST" then
+			nestCount += 1
+		end
+	end
+	for i = nestCount + 1, #nestSites do
+		table.insert(ctx.freeNests, nestSites[i])
+	end
 
 	local mainKind = cfg.main or "MISSILE"
 	local ctl
 	if mainKind == "UPLINK" then
 		ctl = UplinkRelay.start(ctx, function()
+			fireMain()
+		end)
+	elseif mainKind == "HAUL" then
+		ctl = HaulCells.start(ctx, function()
 			fireMain()
 		end)
 	else
@@ -504,15 +556,11 @@ function ObjectiveService.start(map: any, cfg: any)
 		end)
 	end
 	mainEntry = ctl.entry
+	mainCtl = ctl
 	controllers[#controllers + 1] = ctl
 
 	-- sides
 	local counts: { [string]: number } = {}
-	local nestSites = { "nest1", "nest2", "nest3", "nest4" }
-	for i = #nestSites, 2, -1 do
-		local j = ctx.rng:NextInteger(1, i)
-		nestSites[i], nestSites[j] = nestSites[j], nestSites[i]
-	end
 	local nestIdx = 0
 	for _, kind in cfg.sides or {} do
 		counts[kind] = (counts[kind] or 0) + 1

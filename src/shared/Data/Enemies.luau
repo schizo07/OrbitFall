@@ -47,6 +47,14 @@ export type Enemy = {
 	cost: number?,
 	modelKind: string?,
 	modelScale: number?,
+	-- STAGED DAMAGE (footage spec §3.4.4): the server writes model attribute DmgStage 0..3 as HP drops past Enemies.Stages;
+	-- client/Fx/EnemyFx.luau shows smoke / breach / fire (bugs: drips / glowing split / bubbling ooze) and a big death burst
+	stages: boolean?,
+	-- STATIC emplacement (Bastion): never moves, turns at `turn` rad/s, never calls reinforcements, ignores blast knockback,
+	-- not counted in the live cap (cost 0) nor as a "heavy" in countByClass (counted as "static")
+	static: boolean?,
+	turn: number?,
+	wreck: boolean?, -- leaves a wreck model for ~60 s (server/Enemies/Wrecks.luau)
 }
 
 local E: { [string]: Enemy } = {
@@ -74,6 +82,7 @@ local E: { [string]: Enemy } = {
 		attacks = { { kind = "burst", damage = 25, range = 80, cooldown = 2.2, speed = 120, count = 3 } },
 		keepDistance = 35, salvage = 6, xp = 6,
 		desc = "Front riot shield. Flank it or shoot the eye over the rim.",
+		wreck = true,
 	},
 	BULWARK = {
 		id = "BULWARK", name = "Bulwark", faction = "COG", class = "heavy",
@@ -87,6 +96,23 @@ local E: { [string]: Enemy } = {
 		attacks = { { kind = "cannon", damage = 60, range = 90, cooldown = 3.0, speed = 90, radius = 5, windup = 0.6 } },
 		keepDistance = 30, salvage = 20, xp = 20,
 		desc = "Armoured tank-bot. A rocket in the eye turns it into scrap.",
+		stages = true, wreck = true,
+	},
+	-- Fortified gun block (footage spec §3.3 turret siege): never moves, two red cannon eyes flare 0.8 s before each slow heavy
+	-- shot at a trooper in line of sight. Body armour 5: support weapons, explosives or call-ins. Rear heat vent is the soft spot.
+	-- Placed 1-3 per COG mission at outposts by the Director (Director.placeBastions).
+	BASTION = {
+		id = "BASTION", name = "Bastion Emplacement", faction = "COG", class = "heavy",
+		hp = 2600, speed = 0, size = 5.5,
+		zones = {
+			body = { armor = 5, mult = 1 },
+			eye = { armor = 4, mult = 1.5 },
+			vent = { armor = 2, mult = 2.5 },
+		},
+		attacks = { { kind = "cannon", damage = 65, range = 120, cooldown = 3.4, speed = 80, radius = 6, windup = 0.8 } },
+		keepDistance = 120, salvage = 30, xp = 30,
+		desc = "Fortified gun block. Bring anti-armour or a call-in, or flank it and hit the heat vent on its back.",
+		stages = true, wreck = true, static = true, turn = 0.75, cost = 0,
 	},
 	COLOSSUS = {
 		id = "COLOSSUS", name = "Strider Colossus", faction = "COG", class = "behemoth",
@@ -104,6 +130,7 @@ local E: { [string]: Enemy } = {
 		},
 		keepDistance = 40, salvage = 80, xp = 80,
 		desc = "Giant walker. Cockpit eye, leg joints and back heat sinks are soft.",
+		stages = true, wreck = true,
 	},
 
 	-- THE SKITTER BROOD -------------------------------------------------------------
@@ -144,6 +171,7 @@ local E: { [string]: Enemy } = {
 		},
 		salvage = 22, xp = 22,
 		desc = "Armoured front, soft rear. Dodge the charge, shoot its back.",
+		stages = true, wreck = true,
 	},
 	TITAN = {
 		id = "TITAN", name = "Hive Titan", faction = "BROOD", class = "behemoth",
@@ -160,6 +188,7 @@ local E: { [string]: Enemy } = {
 		},
 		salvage = 90, xp = 90,
 		desc = "Towering hive beast. The glowing throat sac is the way in.",
+		stages = true, wreck = true,
 	},
 
 	-- THE LUMEN CONCORD -------------------------------------------------------------
@@ -259,6 +288,23 @@ E.SHARDLING_SWARM = fodder("SHARDLING", "SHARDLING_SWARM", "Shard Swarmer", 1.1,
 	{ kind = "needle", damage = 5, range = 50, cooldown = 1.7, speed = 140, count = 1, interval = 0.1, spread = 4 }, 18)
 
 local Enemies = { byId = E }
+
+-- STAGED DAMAGE: HP fraction below which each stage shows (stage 1 smoke / drips, 2 glowing breach + sparks, 3 fire / bubbling
+-- ooze). Server: EnemyService writes model attribute DmgStage. Client: client/Fx/EnemyFx.luau.
+Enemies.Stages = { 0.7, 0.4, 0.2 }
+
+-- BLAST REACTIONS (EnemyService.explode -> EnemyAI.fling). power = falloff (0..1) x clamp((dmg / ref) ^ 0.5, min, max).
+-- Below minPower nothing happens. dist / height in studs at power 1, dur / recover in seconds.
+--   regular (incl. fodder): tumble (flung through the air, spins, lies a moment)
+--   medium:  stagger (shoved back on the ground, attack interrupted)
+--   heavy:   flinch (small shove, attack NOT interrupted)
+--   behemoth / static: nothing
+Enemies.Blast = {
+	ref = 300, minMul = 0.6, maxMul = 1.6, minPower = 0.12,
+	regular = { dist = 14, height = 5, dur = 0.75, recover = 0.45, spin = true, interrupt = true },
+	medium = { dist = 6, height = 0.8, dur = 0.4, recover = 0.35, spin = false, interrupt = true },
+	heavy = { dist = 1.4, height = 0, dur = 0.22, recover = 0, spin = false, interrupt = false },
+}
 
 Enemies.Factions = {
 	COG = {

@@ -4,6 +4,9 @@
 --   spotting     -> a radio line in the event feed:   BREACH - NW! (Fx "Breach"), HEAVY CONTACT - NE (Fx "HeavyContact")
 --   squadmates   -> "B2: NEED REINFORCE" in the feed when a squadmate goes from alive to down (Store "squad")
 --   call-ins     -> "<NAME> ON TARGET" in amber when a beacon lands (Fx "Beacon" / "BeaconEnd")
+--   squad call-ins -> Fx "CallInCard" {u, id, s = "arm"|"throw"} from the server: a card mid-left (UI/CallInCards) for
+--                   every trooper, and on "arm" the callout line "<name>: <line>" (CallIns.callout) in the trooper's colour.
+--                   Callouts skip the global bark gap; one per trooper + call-in every CALLOUT_GAP seconds.
 -- Rate limit: at most one bark per 2.5 s overall, plus a per-kind cooldown, so it can never spam.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,6 +15,7 @@ local CallIns = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("D
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
 local EventFeed = require(script.Parent.EventFeed)
+local CallInCards = require(script.Parent.CallInCards)
 local Store = require(script.Parent.Parent.Store)
 
 local SquadComms = {}
@@ -28,6 +32,8 @@ local COOLDOWN: { [string]: number } = {
 	mate = 6,
 }
 local SHORT = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
+local CALLOUT_GAP = 6
+local lastCallout: { [string]: number } = {}
 
 local player = Players.LocalPlayer
 local ui: { [string]: any } = {}
@@ -139,6 +145,8 @@ function SquadComms.setActive(on: boolean)
 		table.clear(prevMates)
 		matesSeen = false
 		table.clear(beaconNames)
+		table.clear(lastCallout)
+		CallInCards.clear()
 		if ui.panel then
 			lineGen += 1
 			ui.panel.Visible = false
@@ -236,6 +244,25 @@ function SquadComms.init(fx: any)
 			local def = CallIns.get(d.callin)
 			beaconNames[d.id] = string.upper(def and def.name or d.callin)
 		end
+	end)
+	fx.register("CallInCard", function(d: any)
+		if not active or type(d) ~= "table" or type(d.u) ~= "number" or type(d.id) ~= "string" then
+			return
+		end
+		local stage = if d.s == "throw" then "throw" else "arm"
+		CallInCards.show(d.u, d.id, stage)
+		if stage ~= "arm" then
+			return
+		end
+		local key = tostring(d.u) .. ":" .. d.id
+		local t = os.clock()
+		if t - (lastCallout[key] or -100) < CALLOUT_GAP then
+			return
+		end
+		lastCallout[key] = t
+		local who = Players:GetPlayerByUserId(d.u)
+		local name = if who then who.DisplayName else Style.callsign(d.u).tag
+		EventFeed.push(string.format("%s: %s", name, CallIns.callout(CallIns.get(d.id))), Style.callsign(d.u).color, "bark")
 	end)
 	fx.register("BeaconEnd", function(d: any)
 		if type(d) ~= "table" or d.id == nil then

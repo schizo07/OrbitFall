@@ -275,6 +275,61 @@ function EnemyAI.interrupt(e: any)
 	end
 end
 
+-- Blast reaction (EnemyService.explode). r = a row of Data/Enemies.Blast scaled by power (0..~1.6).
+-- interrupt = false (heavies): only shoves an enemy that is not busy, never cancels its attack.
+function EnemyAI.fling(e: any, from: Vector3, power: number, r: any)
+	if not e.alive or e.def.static or not e.pos then
+		return
+	end
+	local a = e.act
+	if a and a.kind == "fling" then
+		return -- already flying (Half-Ton = two blasts in one frame)
+	end
+	if not r.interrupt and a then
+		return
+	end
+	local d = flat(e.pos - from)
+	local dir = if d.Magnitude > 0.05 then d.Unit else heading(e.yaw + math.pi)
+	local dist = r.dist * power
+	if dist < 0.3 then
+		return
+	end
+	-- stop short of walls / props
+	local origin = e.pos + Vector3.new(0, 2, 0)
+	local hit = workspace:Raycast(origin, dir * (dist + e.def.size), envParams)
+	if hit then
+		dist = math.max((hit.Position - origin).Magnitude - e.def.size, 0)
+	end
+	if r.interrupt then
+		EnemyAI.interrupt(e)
+	end
+	e.faceDirOverride = nil
+	local now = workspace:GetServerTimeNow()
+	local spin = 0
+	local axis = Vector3.xAxis
+	if r.spin then
+		-- top of the model goes along the push: world axis = up x dir, expressed in the root's yaw frame
+		local worldAxis = Vector3.yAxis:Cross(dir)
+		axis = CFrame.Angles(0, e.yaw, 0):VectorToObjectSpace(worldAxis)
+		spin = math.pi * 2 * math.clamp(power, 0.5, 1.25) * rng:NextNumber(0.85, 1.1)
+	end
+	e.act = {
+		kind = "fling",
+		phase = "active",
+		noThink = true,
+		t0 = now,
+		dur = r.dur * math.clamp(power, 0.6, 1.3),
+		from = e.pos,
+		dir = dir,
+		dist = dist,
+		height = r.height * math.min(power, 1.3),
+		spin = spin,
+		axis = axis,
+		recover = r.recover,
+	}
+	e.air = 0
+end
+
 -- Attack execution -------------------------------------------------------------------
 local PREP: { [string]: (any, any, any, number) -> () } = {}
 local FIRE: { [string]: (any, any, any, number) -> () } = {}
@@ -728,6 +783,28 @@ ACTIVE.recover = function(e, a, atk, dt, now)
 	return false
 end
 
+-- fling: blast reaction (EnemyService.explode -> EnemyAI.fling). The root slides along a.dir with an ease-out, hops a.height
+-- and (regulars) tumbles a.spin radians about the horizontal axis across the push, then a short "recover" before it thinks again.
+ACTIVE.fling = function(e, a, atk, dt, now)
+	local u = math.clamp((now - a.t0) / a.dur, 0, 1)
+	local k = 1 - (1 - u) * (1 - u)
+	e.pos = clampMap(a.from + a.dir * (a.dist * k))
+	e.air = math.sin(u * math.pi) * a.height
+	if a.spin ~= 0 then
+		local h = e.def.size * 0.6
+		e.tumble = CFrame.new(0, h, 0) * CFrame.fromAxisAngle(a.axis, a.spin * k) * CFrame.new(0, -h, 0)
+	end
+	e.vel = Vector3.zero
+	if u >= 1 then
+		e.air = 0
+		e.tumble = nil
+		e.lastCF = nil -- force one PivotTo so the model is upright again
+		e.needSnap = true
+		e.act = if a.recover > 0 then { kind = "recover", phase = "active", noMove = true, endAt = now + a.recover, noThink = false } else nil
+	end
+	return true
+end
+
 -- summon: spawn Skitterlings around the caller
 FIRE.summon = function(e, a, atk, now)
 	local want = atk.count or 4
@@ -1172,8 +1249,8 @@ local function think(e: any, now: number)
 	local dir = if dist > 0.01 then to / dist else heading(e.yaw)
 	e.faceDir = dir
 
-	-- reinforcement call after seeing a player for a few seconds
-	if e.class ~= "regular" then
+	-- reinforcement call after seeing a player for a few seconds (static emplacements never call)
+	if e.class ~= "regular" and not def.static then
 		e.seenT += THINK
 		if e.seenT >= 3 and not e.called then
 			e.called = true
@@ -1340,9 +1417,15 @@ local function update(e: any, dt: number, now: number)
 	if stunned then
 		want = nil
 	end
-	if want and flat(want).Magnitude > 0.05 and not (a and a.phase == "active" and a.kind == "charge") then
+	-- a fling cancelled from outside (stun interrupt, Lumen blink) must not leave the model tilted / hovering
+	if e.tumble and not (a and a.kind == "fling") then
+		e.tumble = nil
+		e.air = 0
+		e.lastCF = nil
+	end
+	if want and flat(want).Magnitude > 0.05 and not (a and a.phase == "active" and (a.kind == "charge" or a.kind == "fling")) then
 		local diff = wrapPi(yawOf(want) - e.yaw)
-		local rate = TURN[e.class] * (if e.status.slow then 0.6 else 1)
+		local rate = (def.turn or TURN[e.class]) * (if e.status.slow then 0.6 else 1)
 		e.yaw += math.clamp(diff, -rate * dt, rate * dt)
 	end
 
@@ -1366,8 +1449,11 @@ local function update(e: any, dt: number, now: number)
 	local bobY = if moving then math.abs(math.sin(e.animT)) * e.rig.bob * math.min(move, 1) else 0
 	local pos = e.pos + Vector3.new(0, bobY + e.air, 0)
 	local cf = CFrame.new(pos) * CFrame.Angles(0, e.yaw, 0)
+	if e.tumble then
+		cf *= e.tumble -- blast tumble (ACTIVE.fling)
+	end
 	local last = e.lastCF
-	if not last or moving or e.windupV > 0.01 or e.air > 0 or (last.Position - pos).Magnitude > 0.01 or math.abs(wrapPi(e.lastYaw - e.yaw)) > 0.002 then
+	if not last or moving or e.windupV > 0.01 or e.air > 0 or e.tumble ~= nil or (last.Position - pos).Magnitude > 0.01 or math.abs(wrapPi(e.lastYaw - e.yaw)) > 0.002 then
 		e.model:PivotTo(cf)
 		e.lastCF = cf
 		e.lastYaw = e.yaw

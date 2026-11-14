@@ -25,6 +25,17 @@ local EnemyData = require(Shared.Data.Enemies)
 local EnemyModels = require(script.Parent.EnemyModels)
 local EnemyAI = require(script.Parent.EnemyAI)
 local Dismember = require(script.Parent.Dismember) -- limb loss (hooks in hit / explode / init)
+local Wrecks = require(script.Parent.Wrecks) -- wreck left by COG walkers / heavies (def.wreck)
+
+-- Heavy targets:
+--   DmgStage (model attr, 0..3)  staged damage for def.stages kinds (thresholds EnemyData.Stages); only ever goes up
+--   HitAt    (model attr, Vector3?) world point of the last damaging bullet hit in the flinch window (def.stages kinds only);
+--            set right before HitSeq, so the client puffs there on the HitSeq change
+--   Blast reactions: EnemyService.blastReact(e, from, power) -> EnemyAI.fling (tumble / stagger / flinch per class, Data
+--            EnemyData.Blast). Fed by S.Explosions.onBlast (player-made blasts) and, for explode() calls that do not come from
+--            S.Explosions (objective charges, drop pods), straight from explode().
+local STAGES = EnemyData.Stages
+local BLAST = EnemyData.Blast
 
 local EnemyService = {}
 
@@ -199,6 +210,9 @@ local function kill(e: any, source: any?)
 			blast = sKind == "explosion" or sKind == "callin" or e.lastBlast == true,
 		})
 	end
+	if e.def.wreck then
+		Wrecks.spawn(e)
+	end
 	e.model:Destroy()
 	local mission = S.Mission
 	if mission and mission.onKill then
@@ -267,6 +281,10 @@ local function flushFlinch(e: any)
 	end
 	m:SetAttribute("HitWeak", e.hitWeakAcc == true)
 	m:SetAttribute("HitStagger", stagger)
+	if e.def.stages then
+		m:SetAttribute("HitAt", e.lastHitPos) -- nil for blasts / burn: no puff
+		e.lastHitPos = nil
+	end
 	m:SetAttribute("HitSeq", e.hitSeq)
 	e.hitWeakAcc = nil
 	e.hitBlastAcc = nil
@@ -296,6 +314,23 @@ local function inflict(e: any, amount: number, source: any?, zoneName: string?, 
 		end
 		e.lastWeak = fx and fx.weak == true
 		e.lastBlast = fx and fx.blastFrom ~= nil
+		if fx and fx.hitPos then
+			e.lastHitPos = fx.hitPos
+		end
+		-- staged damage: smoke / breach / fire thresholds (client/Fx/EnemyFx.luau)
+		if e.def.stages and e.maxHp > 0 then
+			local frac = e.hp / e.maxHp
+			local st = 0
+			for i, th in STAGES do
+				if frac < th then
+					st = i
+				end
+			end
+			if st > (e.dmgStage or 0) then
+				e.dmgStage = st
+				e.model:SetAttribute("DmgStage", st)
+			end
+		end
 		e.hitAcc = (e.hitAcc or 0) + amount
 		if fx and fx.weak then
 			e.hitWeakAcc = true
@@ -441,15 +476,49 @@ function EnemyService.load(): number
 end
 
 function EnemyService.countByClass(): { [string]: number }
-	local c = { regular = 0, medium = 0, heavy = 0, behemoth = 0, fodder = 0 }
+	local c = { regular = 0, medium = 0, heavy = 0, behemoth = 0, fodder = 0, static = 0 }
 	for _, e in enemies do
-		local k = if e.fodder then "fodder" else e.class
+		local k = if e.fodder then "fodder" elseif e.def.static then "static" else e.class
 		c[k] += 1
 	end
 	return c
 end
 
 -- Explosions -------------------------------------------------------------------------
+-- Blast reaction by class (EnemyData.Blast): fodder / regular tumble, medium stagger, heavy flinch, behemoth / static nothing.
+-- power ~ 1 for a frag grenade at its centre (up to BLAST.maxMul).
+function EnemyService.blastReact(e: any, from: Vector3, power: number)
+	if not e or not e.alive or e.def.static or e.class == "behemoth" then
+		return
+	end
+	if power < BLAST.minPower then
+		return
+	end
+	local row = if e.fodder or e.class == "regular" then BLAST.regular else BLAST[e.class]
+	if row then
+		EnemyAI.fling(e, from, math.min(power, BLAST.maxMul), row)
+	end
+end
+
+-- S.Explosions.onBlast listener: info.power is the trooper knock speed at the centre (frag 75, Half-Ton 130);
+-- normalised so a frag centre = 1.
+local FRAG_POWER = 75
+local function onBlast(info: any)
+	if (info.damage or 0) <= 0 or typeof(info.pos) ~= "Vector3" then
+		return -- stun grenade / effect-only blasts
+	end
+	local X = S.Explosions
+	local reach = (info.radius or 6) * 1.5
+	for _, e in EnemyService.getInRadius(info.pos, reach) do
+		if e.alive then
+			local p = if X and X.powerAt then X.powerAt(info, centerOf(e)) else (info.power or FRAG_POWER)
+			if p > 0 then
+				EnemyService.blastReact(e, info.pos, p / FRAG_POWER)
+			end
+		end
+	end
+end
+
 function EnemyService.explode(pos: Vector3, radius: number, core: number, dmg: number, ap: number, source: any?, opts: any?)
 	opts = opts or {}
 	if S.Objectives and S.Objectives.onExplosion then
@@ -499,13 +568,18 @@ function EnemyService.explode(pos: Vector3, radius: number, core: number, dmg: n
 						end
 					end
 				end
+				-- blast reaction for explode() calls that do not come through S.Explosions.blast (that path marks itself
+				-- with noPlayerKnock and reaches blastReact through the onBlast listener instead)
+				if e.alive and dmg > 0 and f > 0 and not opts.noPlayerKnock then
+					EnemyService.blastReact(e, pos, f * math.clamp((dmg / BLAST.ref) ^ 0.5, BLAST.minMul, BLAST.maxMul))
+				end
 			end
 		end
 	end
 
 	-- players: knock only (damage only with friendly fire)
 	local players = S.Players
-	if players and players.getAlive then
+	if players and players.getAlive and not opts.noPlayerKnock then -- noPlayerKnock: server/Explosions.luau knocks troopers itself
 		for _, p in players.getAlive() do
 			local root = players.getRoot(p)
 			if root then
@@ -543,6 +617,7 @@ function EnemyService.clear()
 	liveLoad = 0
 	EnemyService.kills = 0
 	EnemyAI.clear()
+	Wrecks.clear()
 	if S.Projectiles and S.Projectiles.clear then
 		S.Projectiles.clear()
 	end
@@ -557,6 +632,12 @@ function EnemyService.init(s: { [string]: any })
 	getFolder()
 	EnemyAI.init(s)
 	Dismember.init(s) -- dismemberment
+	-- blast reactions for player-made explosions (server/Explosions.luau); S.Explosions is set before the init pass
+	if s.Explosions and s.Explosions.onBlast then
+		s.Explosions.onBlast(onBlast)
+	else
+		warn("[Enemies] S.Explosions.onBlast missing: grenade / call-in blasts will not fling enemies")
+	end
 end
 
 function EnemyService.start()

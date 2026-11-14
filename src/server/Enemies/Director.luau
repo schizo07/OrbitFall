@@ -1603,6 +1603,82 @@ local function loop(myGen: number)
 	end
 end
 
+-- BASTION emplacements (footage pass): 1-3 per COG mission (1 + floor((difficulty - 1) / 2)), each at an outpost site 16-22
+-- studs out from the site centre on the side facing the insertion zone, facing it. Never within BASTION_MIN_INSERT of the
+-- insertion point or BASTION_MIN_EXTRACT of the extraction pad (pads: insertion outer 85, extraction outer 60), never two within
+-- BASTION_SPACING of each other, only on flat-ish ground. Returns how many were placed. Studio: DebugHook / DevTools op "bastion".
+local BASTION_MIN_INSERT = 150
+local BASTION_MIN_EXTRACT = 80
+local BASTION_SPACING = 90
+function Director.placeBastions(m: any, count: number?): number
+	if not m or type(m.sites) ~= "table" or not S.Enemies then
+		return 0
+	end
+	local n = count or math.clamp(1 + math.floor((difficulty - 1) / 2), 1, 3)
+	local ins = if m.insertion then m.insertion.Position else Vector3.zero
+	local ext: Vector3? = if typeof(m.extraction) == "Vector3" then m.extraction else nil
+	local function flatDist(a: Vector3, b: Vector3): number
+		return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+	end
+	local cands: { Vector3 } = {}
+	for name, cf in m.sites do
+		if typeof(cf) == "CFrame" and not string.find(string.lower(name), "lever") then
+			local p = cf.Position
+			if flatDist(p, ins) >= BASTION_MIN_INSERT and (not ext or flatDist(p, ext) >= BASTION_MIN_EXTRACT) then
+				table.insert(cands, p)
+			end
+		end
+	end
+	for i = #cands, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		cands[i], cands[j] = cands[j], cands[i]
+	end
+	local placed: { Vector3 } = {}
+	for _, site in cands do
+		if #placed >= n then
+			break
+		end
+		local toIns = Vector3.new(ins.X - site.X, 0, ins.Z - site.Z)
+		local baseAng = if toIns.Magnitude > 1 then math.atan2(toIns.Z, toIns.X) else rng:NextNumber(0, math.pi * 2)
+		for _ = 1, 8 do
+			local ang = baseAng + math.rad(rng:NextNumber(-45, 45))
+			local r = rng:NextNumber(16, 22)
+			local g = groundPos(site.X + math.cos(ang) * r, site.Z + math.sin(ang) * r)
+			if not g then
+				continue
+			end
+			local ok = flatDist(g, ins) >= BASTION_MIN_INSERT and (not ext or flatDist(g, ext) >= BASTION_MIN_EXTRACT)
+			for _, q in placed do
+				if flatDist(g, q) < BASTION_SPACING then
+					ok = false
+				end
+			end
+			-- flat enough for an 11 x 11 block
+			if ok then
+				for _, o in { Vector3.new(5, 0, 0), Vector3.new(-5, 0, 0), Vector3.new(0, 0, 5), Vector3.new(0, 0, -5) } do
+					local h = groundPos(g.X + o.X, g.Z + o.Z)
+					if not h or math.abs(h.Y - g.Y) > 2.5 then
+						ok = false
+						break
+					end
+				end
+			end
+			if ok then
+				local face = Vector3.new(ins.X, g.Y, ins.Z)
+				local cf = if flatDist(face, g) > 1 then CFrame.lookAt(g, face) else CFrame.new(g)
+				local okS, err = pcall(S.Enemies.spawn, "BASTION", cf, { aggro = false, patrol = false, home = g })
+				if okS then
+					table.insert(placed, g)
+				else
+					warn("[Director] Bastion spawn failed:", err)
+				end
+				break
+			end
+		end
+	end
+	return #placed
+end
+
 -- opts.noInitial: skip the opening guard groups (Studio test arena: pacing on, but nothing pre-placed)
 function Director.start(m: any, faction: string, diff: number, opts: any?)
 	Director.stop()
@@ -1648,6 +1724,12 @@ function Director.start(m: any, faction: string, diff: number, opts: any?)
 	task.spawn(function()
 		if opts and opts.noInitial then
 			return
+		end
+		if factionId == "COG" then
+			local okB, errB = pcall(Director.placeBastions, m)
+			if not okB then
+				warn("[Director] placeBastions failed:", errB)
+			end
 		end
 		local ins = m and m.insertion and m.insertion.Position or Vector3.zero
 		local points: { Vector3 } = {}
