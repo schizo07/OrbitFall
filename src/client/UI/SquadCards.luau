@@ -108,12 +108,11 @@ local function setIcons(c: any, ids: any)
 		end
 		local def = CallIns.get(id)
 		if def then
-			Style.label({
-				Text = def.icon or "?",
-				TextSize = 15,
-				Color = Style.Amber,
-				XAlign = Enum.TextXAlignment.Center,
-				Size = UDim2.fromOffset(16, 16),
+			-- category shape in the beacon colour (the data icons are dingbats the HUD font lacks)
+			Style.glyph(Style.callinShape(def), {
+				Size = 10,
+				Color = Theme.beaconColor(def.beacon),
+				Box = UDim2.fromOffset(16, 16),
 				LayoutOrder = i,
 				Parent = c.icons,
 			})

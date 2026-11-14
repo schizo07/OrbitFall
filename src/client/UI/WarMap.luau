@@ -498,10 +498,10 @@ local function stepNodes(dt: number)
 			local v = n.disp
 			if not s.destroyed then
 				local falling = War.pressure(id, o, t) > 0 and (s.defense or s.lib) > 0
-				local arrow = if falling then " ▼" else ""
+				local arrow = if falling then " v" else ""
 				local text, col
 				if s.defense then
-					text, col = string.format("UNDER ATTACK · %.2f%%%s", v, arrow), C.Accent
+					text, col = string.format("UNDER ATTACK - %.2f%%%s", v, arrow), C.Accent
 				elseif s.owner ~= "FREE" then
 					text, col = string.format("%.2f%% liberated%s", v, arrow), OWNER_COLOR[s.owner] or C.Muted
 				else
@@ -509,7 +509,7 @@ local function stepNodes(dt: number)
 				end
 				local divers = diversAt(id)
 				if divers > 0 then
-					text ..= string.format("  ◉%d", divers)
+					text ..= string.format("  %d DIV", divers)
 				end
 				if n.sub.Text ~= text then
 					n.sub.Text = text
@@ -793,7 +793,7 @@ local function refreshSpark(id: string, s: any)
 	local spanSec = step * math.max(1, #vals - 1)
 	local d = vals[#vals] - vals[1]
 	local window = if spanSec >= 3300 then "LAST HOUR" else string.format("LAST %d MIN", math.max(1, math.floor(spanSec / 60 + 0.5)))
-	panelRefs.sparkCap.Text = string.format("%s   %s%.2f%%", window, if d >= 0 then "▲ +" else "▼ ", d)
+	panelRefs.sparkCap.Text = string.format("%s   %s%.2f%%", window, if d >= 0 then "UP +" else "DOWN ", d)
 	panelRefs.sparkCap.TextColor3 = if d > 0.004 then C.Friendly elseif d < -0.004 then C.Danger else C.Muted
 end
 
@@ -804,7 +804,7 @@ local function refreshPanel()
 	local id = selected
 	if not id then
 		panelRefs.title.Text = "SELECT A PLANET"
-		panelRefs.sub.Text = "Drag to pan · scroll / pinch to zoom"
+		panelRefs.sub.Text = "Drag to pan - scroll / pinch to zoom"
 		panelRefs.status.Text = ""
 		panelRefs.bar.Visible = false
 		panelRefs.value.Visible = false
@@ -822,23 +822,23 @@ local function refreshPanel()
 	local sec = Planets.Sectors[p.sector]
 	local t = workspace:GetServerTimeNow()
 	panelRefs.title.Text = string.upper(p.name)
-	panelRefs.sub.Text = (sec and sec.name or "") .. " · " .. p.desc
+	panelRefs.sub.Text = (sec and sec.name or "") .. " - " .. p.desc
 	local op, opStatus, opProg = activeOpFor(id)
 	local barColor, track = C.Friendly, C.Panel
 	local hasBar = false
 	if s.destroyed then
-		panelRefs.status.Text = "DESTROYED — this world is lost forever. No missions possible."
+		panelRefs.status.Text = "DESTROYED - this world is lost forever. No missions possible."
 		panelRefs.status.TextColor3 = C.Danger
 	elseif s.defense then
-		panelRefs.status.Text = string.format("UNDER ATTACK by %s · DEFENCE", ownerName(s.faction))
+		panelRefs.status.Text = string.format("UNDER ATTACK by %s - DEFENCE", ownerName(s.faction))
 		panelRefs.status.TextColor3 = C.Accent
 		barColor, track, hasBar = C.Accent, (OWNER_COLOR[s.faction] or C.Danger):Lerp(C.Navy, 0.6), true
 	elseif s.owner ~= "FREE" then
-		panelRefs.status.Text = string.format("Held by %s · LIBERATION", ownerName(s.owner))
+		panelRefs.status.Text = string.format("Held by %s - LIBERATION", ownerName(s.owner))
 		panelRefs.status.TextColor3 = OWNER_COLOR[s.owner] or C.Text
 		barColor, track, hasBar = C.Friendly, (OWNER_COLOR[s.owner] or C.Danger):Lerp(C.Navy, 0.6), true
 	else
-		panelRefs.status.Text = "Free world · safe for now"
+		panelRefs.status.Text = "Free world - safe for now"
 		panelRefs.status.TextColor3 = C.Friendly
 	end
 	panelRefs.bar.Visible = hasBar
@@ -849,7 +849,7 @@ local function refreshPanel()
 	-- enemy pressure (decay of the active operation)
 	local press = War.pressure(id, outcomesNow(), t)
 	panelRefs.pressure.Visible = hasBar and press > 0
-	panelRefs.pressure.Text = string.format("▼ ENEMY PRESSURE  −%.2f%% per hour", press)
+	panelRefs.pressure.Text = string.format("ENEMY PRESSURE  -%.2f%% per hour", press)
 	-- sparkline
 	panelRefs.spark.Visible = hasBar
 	if hasBar then
@@ -858,15 +858,15 @@ local function refreshPanel()
 	-- divers deployed there now (all servers)
 	local divers = diversAt(id)
 	panelRefs.divers.Visible = not s.destroyed
-	panelRefs.divers.Text = if divers > 0 then string.format("◉  %d diver%s deployed here right now", divers, if divers == 1 then "" else "s") else "○  No divers deployed here right now"
+	panelRefs.divers.Text = if divers > 0 then string.format("%d diver%s deployed here right now", divers, if divers == 1 then "" else "s") else "No divers deployed here right now"
 	panelRefs.divers.TextColor3 = if divers > 0 then C.Friendly else C.Muted
 	-- operation countdown (ticks every second)
 	if op then
 		panelRefs.countdown.Visible = true
 		if opStatus == "upcoming" then
-			panelRefs.countdown.Text = string.format("★ %s  ·  STARTS IN %s", string.upper(op.title), fmtPrecise(op.starts - t))
+			panelRefs.countdown.Text = string.format("* %s  -  STARTS IN %s", string.upper(op.title), fmtPrecise(op.starts - t))
 		else
-			panelRefs.countdown.Text = string.format("★ %s  ·  %d%%  ·  ENDS IN %s", string.upper(op.title), math.floor(opProg), fmtPrecise(op.ends - t))
+			panelRefs.countdown.Text = string.format("* %s  -  %d%%  -  ENDS IN %s", string.upper(op.title), math.floor(opProg), fmtPrecise(op.ends - t))
 		end
 		panelRefs.op.Text = op.brief
 	else
@@ -879,7 +879,7 @@ local function refreshPanel()
 		panelRefs.launch.Text = "LAUNCH MISSION"
 		panelRefs.launch.BackgroundColor3 = C.Accent
 	else
-		panelRefs.launch.Text = if s.destroyed then "NO MISSIONS — DESTROYED" else "NO ENEMIES HERE"
+		panelRefs.launch.Text = if s.destroyed then "NO MISSIONS - DESTROYED" else "NO ENEMIES HERE"
 		panelRefs.launch.BackgroundColor3 = C.Muted
 	end
 	for _, b in panelRefs.objBtns do
@@ -1058,19 +1058,19 @@ local function refreshTicker()
 		local text, color
 		if status == "active" then
 			local divers = diversAt(op.planet)
-			text = string.format("★ %s — %s  %.1f%%%s  · %s left", op.title, (Planets.get(op.planet) :: any).name, prog, if divers > 0 then string.format("  ◉%d", divers) else "", fmtTime(op.ends - t))
+			text = string.format("* %s - %s  %.1f%%%s  - %s left", op.title, (Planets.get(op.planet) :: any).name, prog, if divers > 0 then string.format("  %d DIV", divers) else "", fmtTime(op.ends - t))
 			color = C.Accent
 		elseif status == "expired" then
-			text = op.title .. " — deadline reached, resolving…"
+			text = op.title .. " - deadline reached, resolving..."
 			color = C.Muted
 		elseif status == "upcoming" and op.starts - t < 3 * 86400 then
-			text = string.format("• %s — starts in %s", op.title, fmtTime(op.starts - t))
+			text = string.format("- %s - starts in %s", op.title, fmtTime(op.starts - t))
 			color = C.Muted
 		elseif status == "success" then
-			text = op.title .. " — VICTORY"
+			text = op.title .. " - VICTORY"
 			color = C.Friendly
 		elseif status == "fail" or status == "expired" then
-			text = op.title .. " — FAILED"
+			text = op.title .. " - FAILED"
 			color = C.Danger
 		end
 		-- rows are updated in place (not rebuilt each second) so a tap/click is never swallowed mid-press
@@ -1236,7 +1236,7 @@ function WarMap.init()
 		Parent = gui,
 	}, { stroke(C.Accent, 1, 0.5) })
 	label({
-		Text = "GALACTIC WAR  ·  " .. string.upper(Config.ShipName) .. " TACTICAL MAP",
+		Text = "GALACTIC WAR  |  " .. string.upper(Config.ShipName) .. " TACTICAL MAP",
 		Font = Enum.Font.Michroma,
 		TextSize = if compact then 13 else 18,
 		TextColor3 = C.Accent,

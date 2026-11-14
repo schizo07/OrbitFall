@@ -53,7 +53,7 @@ local function fade(t: any, gen: number)
 	end
 	Theme.tween(t.frame, FADE, { BackgroundTransparency = 1 })
 	Theme.tween(t.stroke, FADE, { Transparency = 1 })
-	Theme.tween(t.glyph, FADE, { TextTransparency = 1, TextStrokeTransparency = 1 })
+	Style.glyphTween(t.glyph, FADE, 1)
 	Theme.tween(t.label, FADE, { TextTransparency = 1, TextStrokeTransparency = 1 })
 	task.delay(FADE + 0.05, function()
 		if t.gen == gen then
@@ -68,8 +68,8 @@ local function arm(t: any)
 	task.delay(LIFE, fade, t, gen)
 end
 
--- glyph: single supported character; color: glyph colour (the outline is always orange)
-function PickupToast.show(text: string, glyph: string?, color: Color3?)
+-- shape: a Style.glyph shape name (default "diamond"); color: glyph colour (the outline is always orange)
+function PickupToast.show(text: string, shape: string?, color: Color3?)
 	if not ui.holder then
 		return
 	end
@@ -80,7 +80,7 @@ function PickupToast.show(text: string, glyph: string?, color: Color3?)
 			t.label.Text = string.format("%s  x%d", up, t.count)
 			t.frame.BackgroundTransparency = Style.PANEL_ALPHA
 			t.stroke.Transparency = 0.1
-			t.glyph.TextTransparency = 0
+			Style.glyphAlpha(t.glyph, 0)
 			t.label.TextTransparency = 0
 			arm(t)
 			return
@@ -106,12 +106,10 @@ function PickupToast.show(text: string, glyph: string?, color: Color3?)
 	stroke.Parent = frame
 	Theme.pad(frame, 8, 0, 9, 0)
 	Theme.list(frame, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
-	local g = Style.label({
-		Text = glyph or "◆",
-		TextSize = 14,
+	local g = Style.glyph(shape or "diamond", {
+		Size = 11,
 		Color = color or Style.Orange,
-		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.fromOffset(14, 26),
+		Box = UDim2.fromOffset(14, 26),
 		LayoutOrder = 1,
 		Parent = frame,
 	})
@@ -131,11 +129,11 @@ function PickupToast.show(text: string, glyph: string?, color: Color3?)
 	-- slide/fade in
 	frame.BackgroundTransparency = 1
 	stroke.Transparency = 1
-	g.TextTransparency = 1
+	Style.glyphAlpha(g, 1)
 	l.TextTransparency = 1
 	Theme.tween(frame, 0.15, { BackgroundTransparency = Style.PANEL_ALPHA })
 	Theme.tween(stroke, 0.15, { Transparency = 0.1 })
-	Theme.tween(g, 0.15, { TextTransparency = 0 })
+	Style.glyphTween(g, 0.15, 0)
 	Theme.tween(l, 0.15, { TextTransparency = 0 })
 	arm(t)
 end
@@ -145,25 +143,25 @@ function PickupToast.route(text: string): boolean
 	local lower = string.lower(text)
 	local n, m = string.match(text, "^Sample collected %((%d+)/(%d+)%)")
 	if n then
-		PickupToast.show(string.format("SAMPLE COLLECTED  %s/%s", n, m), "◆", Style.Green)
+		PickupToast.show(string.format("SAMPLE COLLECTED  %s/%s", n, m), "diamond", Style.Green)
 		return true
 	end
 	if string.find(lower, "^sample collected") then
-		PickupToast.show("SAMPLE COLLECTED", "◆", Style.Green)
+		PickupToast.show("SAMPLE COLLECTED", "diamond", Style.Green)
 		return true
 	end
 	if string.find(lower, "^resupplied") then
-		PickupToast.show("RESUPPLIED  AMMO + GRENADES", "▮", Style.Amber)
+		PickupToast.show("RESUPPLIED  AMMO + GRENADES", "bar", Style.Amber)
 		return true
 	end
 	local picked = string.match(text, "^Picked up (.+)$")
 	if picked then
-		PickupToast.show("PICKED UP  " .. picked, "◆", Style.Orange)
+		PickupToast.show("PICKED UP  " .. picked, "diamond", Style.Orange)
 		return true
 	end
 	local eq = string.match(text, "^Equipped (.+)$")
 	if eq then
-		PickupToast.show("WEAPON  " .. eq, "◆", Style.Orange)
+		PickupToast.show("WEAPON  " .. eq, "diamond", Style.Orange)
 		return true
 	end
 	return false

@@ -183,7 +183,7 @@ function EventFeed.push(text: string, color: Color3?, _kind: string?)
 	local col = color or Style.Amber
 	local up = Style.up(text)
 	if #up > MAX_CHARS then
-		up = string.sub(up, 1, MAX_CHARS - 1) .. "…"
+		up = string.sub(up, 1, MAX_CHARS - 3) .. "..."
 	end
 	-- the same line again while the last one is still up: bump a counter instead of spamming
 	local last = lines[#lines]
@@ -252,9 +252,9 @@ function EventFeed.route(text: string, color: Color3?, _kind: string?): boolean
 		local tag = if m then Style.callsign(m.userId).tag else nil
 		local name = Style.up(who)
 		if #name > 14 then
-			name = string.sub(name, 1, 13) .. "…"
+			name = string.sub(name, 1, 12) .. "..."
 		end
-		EventFeed.push((if tag then tag .. " · " else "") .. name .. " DIED", Style.Red, "died")
+		EventFeed.push((if tag then tag .. " - " else "") .. name .. " DIED", Style.Red, "died")
 		return true
 	end
 	local n = string.match(text, "^(%d+) squadmates? reinforced")

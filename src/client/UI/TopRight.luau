@@ -13,37 +13,15 @@ local chips: { [string]: { frame: Frame, num: TextLabel, count: number } } = {}
 local counts: { [string]: number } = {}
 
 -- order = display order (right to left reading order is left to right here)
--- shape = "cross": drawn from two rotated bars (the "✕" dingbat is not in the HUD font and rendered as an empty box)
+-- shape = a Style.glyph shape (drawn from Frames: the HUD font has no dingbat glyphs, they render as empty boxes)
 local DEFS = {
-	{ key = "samples", label = "SAMPLES", color = Style.Green, glyph = "◆" },
-	{ key = "rare", label = "RARE", color = Style.Orange, glyph = "◆" },
-	{ key = "salvage", label = "SALVAGE", color = Style.Amber, glyph = "⚙" },
-	{ key = "super", label = "SUPER", color = Style.Amber, glyph = "★" },
-	{ key = "kills", label = "KILLS", color = Style.Grey, glyph = "", shape = "cross" },
-	{ key = "xp", label = "XP", color = Style.Grey, glyph = "▲" },
+	{ key = "samples", label = "SAMPLES", color = Style.Green, shape = "diamond" },
+	{ key = "rare", label = "RARE", color = Style.Orange, shape = "diamond" },
+	{ key = "salvage", label = "SALVAGE", color = Style.Amber, shape = "cog" },
+	{ key = "super", label = "SUPER", color = Style.Amber, shape = "star" },
+	{ key = "kills", label = "KILLS", color = Style.Grey, shape = "cross" },
+	{ key = "xp", label = "XP", color = Style.Grey, shape = "up" },
 }
-
--- Two crossed 2 px bars centred in a 16 x 16 box
-local function crossShape(parent: Instance, color: Color3)
-	local box = Instance.new("Frame")
-	box.Name = "CrossGlyph"
-	box.BackgroundTransparency = 1
-	box.BorderSizePixel = 0
-	box.AnchorPoint = Vector2.new(0.5, 0)
-	box.Position = UDim2.new(0.5, 0, 0, 3)
-	box.Size = UDim2.fromOffset(16, 16)
-	box.Parent = parent
-	for _, rot in { 45, -45 } do
-		Style.rect({
-			Color = color,
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromOffset(2, 14),
-			Rotation = rot,
-			Parent = box,
-		})
-	end
-end
 
 function TopRight.build(parent: Instance, touch: boolean)
 	local holder = Instance.new("Frame")
@@ -66,8 +44,9 @@ function TopRight.build(parent: Instance, touch: boolean)
 	})
 	Theme.pad(row, 8, 0, 8, 0)
 	Theme.list(row, Enum.FillDirection.Horizontal, 10, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+	ui.livesIcon = Style.glyph("down", { Size = 10, Color = Style.Amber, Box = UDim2.fromOffset(10, 24), LayoutOrder = 0, Parent = row })
 	ui.lives = Style.label({
-		Text = "▼ 0",
+		Text = "0",
 		TextSize = Style.ALERT,
 		Color = Style.Amber,
 		Size = UDim2.fromOffset(0, 24),
@@ -116,19 +95,13 @@ function TopRight.build(parent: Instance, touch: boolean)
 		st.Transparency = 0.1
 		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		st.Parent = f
-		if d.shape == "cross" then
-			crossShape(f, d.color)
-		else
-			Style.label({
-				Text = d.glyph,
-				TextSize = 14,
-				Color = d.color,
-				XAlign = Enum.TextXAlignment.Center,
-				Size = UDim2.new(1, 0, 0, 16),
-				Position = UDim2.fromOffset(0, 3),
-				Parent = f,
-			})
-		end
+		Style.glyph(d.shape, {
+			Size = if d.shape == "up" then 11 else 14,
+			Color = d.color,
+			Box = UDim2.new(1, 0, 0, 16),
+			Position = UDim2.fromOffset(0, 3),
+			Parent = f,
+		})
 		local num = Style.label({
 			Text = "0",
 			TextSize = 20,
@@ -169,9 +142,12 @@ function TopRight.setLives(n: number?)
 		return
 	end
 	ui.lives.Visible = n ~= nil
+	ui.livesIcon.Visible = n ~= nil
 	if n then
-		ui.lives.Text = "▼ " .. tostring(n)
-		ui.lives.TextColor3 = if n <= 1 then Style.Red else Style.Amber
+		local col = if n <= 1 then Style.Red else Style.Amber
+		ui.lives.Text = tostring(n)
+		ui.lives.TextColor3 = col
+		Style.tint(ui.livesIcon, col)
 	end
 end
 

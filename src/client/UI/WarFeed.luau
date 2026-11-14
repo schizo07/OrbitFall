@@ -17,7 +17,7 @@ local EVENT_COLOR = {
 	gold = C.Gold,
 	muted = C.Muted,
 }
-local EVENT_ICON = { lib = "+", drop = "»", flip = "!", op = "★", status = "•" }
+local EVENT_ICON = { lib = "+", drop = ">>", flip = "!", op = "*", status = "-" }
 local HEADER_H, STATS_H = 24, 46
 
 local root: Frame
@@ -129,7 +129,7 @@ function WarFeed.build(parent: Instance, opts: { onPlanet: ((string) -> ())?, au
 		Parent = toggleBtn,
 	}, { corner() })
 	label({
-		Text = "LIVE  ·  WAR FEED",
+		Text = "LIVE  |  WAR FEED",
 		Font = Enum.Font.Michroma,
 		TextSize = 12,
 		TextColor3 = C.Friendly,
@@ -141,7 +141,7 @@ function WarFeed.build(parent: Instance, opts: { onPlanet: ((string) -> ())?, au
 	})
 	label({
 		Name = "Chevron",
-		Text = "▾",
+		Text = "v",
 		TextSize = 16,
 		TextColor3 = C.Muted,
 		TextXAlignment = Enum.TextXAlignment.Right,
@@ -255,7 +255,7 @@ function WarFeed.layout(compact: boolean, pos: UDim2, anchor: Vector2, width: nu
 	list.Visible = showList
 	local chev = toggleBtn:FindFirstChild("Chevron") :: TextLabel?
 	if chev then
-		chev.Text = if showList then "▾" else "▸"
+		chev.Text = if showList then "v" else ">"
 	end
 end
 
@@ -302,7 +302,7 @@ function WarFeed.refresh()
 					Parent = btn,
 				})
 				local text = label({
-					Text = (EVENT_ICON[ev.k] or "•") .. "  " .. tostring(ev.text),
+					Text = (EVENT_ICON[ev.k] or "-") .. "  " .. tostring(ev.text),
 					Font = if ev.k == "flip" or ev.k == "op" then Enum.Font.GothamBold else Enum.Font.GothamMedium,
 					TextSize = 12,
 					TextColor3 = if ev.k == "lib" or ev.k == "drop" then C.Text else col,

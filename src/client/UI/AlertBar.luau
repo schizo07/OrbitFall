@@ -69,13 +69,11 @@ function AlertBar.init()
 	})
 	Style.brackets(bar, Style.White, 5)
 	ui.bar = bar
-	ui.arrow = Style.label({
-		Text = "▲",
-		TextSize = 16,
-		XAlign = Enum.TextXAlignment.Center,
+	ui.arrow = Style.glyph("up", {
+		Size = 12,
+		Box = UDim2.fromOffset(24, 24),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.new(0, 18, 0.5, 0),
-		Size = UDim2.fromOffset(24, 24),
 		Visible = false,
 		Parent = bar,
 	})
@@ -117,12 +115,10 @@ function AlertBar.init()
 	callout.Visible = false
 	callout.Parent = stack
 	Theme.list(callout, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
-	ui.calloutArrow = Style.label({
-		Text = "▲",
-		TextSize = 14,
+	ui.calloutArrow = Style.glyph("up", {
+		Size = 11,
 		Color = Style.Amber,
-		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.fromOffset(16, 20),
+		Box = UDim2.fromOffset(16, 20),
 		LayoutOrder = 1,
 		Parent = callout,
 	})
@@ -209,7 +205,7 @@ local function refresh()
 	local dark = best.color == Style.Amber
 	ui.text.TextColor3 = if dark then Style.Black else Style.White
 	ui.text.TextStrokeTransparency = if dark then 1 else 0.65
-	ui.arrow.TextColor3 = ui.text.TextColor3
+	Style.tint(ui.arrow, ui.text.TextColor3)
 	ui.time.TextColor3 = ui.text.TextColor3
 	ui.arrow.Visible = best.arrow
 	ui.text.Text = string.upper(best.text)
@@ -297,18 +293,18 @@ function AlertBar.callout(text: string, color: Color3?, seconds: number?, showAr
 	ui.callout.Visible = true
 	ui.calloutText.Text = string.upper(text)
 	ui.calloutText.TextColor3 = col
-	ui.calloutArrow.TextColor3 = col
+	Style.tint(ui.calloutArrow, col)
 	ui.calloutArrow.Visible = showArrow == true
 	ui.calloutText.TextTransparency = 1
-	ui.calloutArrow.TextTransparency = 1
+	Style.glyphAlpha(ui.calloutArrow, 1)
 	tw(ui.calloutText, 0.15, { TextTransparency = 0 })
-	tw(ui.calloutArrow, 0.15, { TextTransparency = 0 })
+	Style.glyphTween(ui.calloutArrow, 0.15, 0)
 	task.delay(seconds or 3, function()
 		if my ~= calloutToken then
 			return
 		end
 		tw(ui.calloutText, 0.35, { TextTransparency = 1 })
-		tw(ui.calloutArrow, 0.35, { TextTransparency = 1 })
+		Style.glyphTween(ui.calloutArrow, 0.35, 1)
 		task.delay(0.4, function()
 			if my == calloutToken then
 				ui.callout.Visible = false

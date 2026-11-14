@@ -116,15 +116,15 @@ local function refreshAlert()
 	if s.extract then
 		AlertBar.clear("build")
 		AlertBar.clear("breach")
-		AlertBar.set("hold", string.format("HOLD THE PAD — WAVE %d — %s", s.wave or 0, dirShort), { color = HudStyle.Red, priority = PRIO.hold, arrow = true })
+		AlertBar.set("hold", string.format("HOLD THE PAD - WAVE %d - %s", s.wave or 0, dirShort), { color = HudStyle.Red, priority = PRIO.hold, arrow = true })
 	elseif s.state == "breach" then
 		AlertBar.clear("build")
 		AlertBar.clear("hold")
-		AlertBar.set("breach", string.format("BREACH DETECTED — %s", dirShort), { color = HudStyle.Red, priority = PRIO.breach, arrow = true })
+		AlertBar.set("breach", string.format("BREACH DETECTED - %s", dirShort), { color = HudStyle.Red, priority = PRIO.breach, arrow = true })
 	else -- build
 		AlertBar.clear("breach")
 		AlertBar.clear("hold")
-		AlertBar.set("build", string.format("%s — %s", W.title, dirShort), { color = HudStyle.Amber, priority = PRIO.build })
+		AlertBar.set("build", string.format("%s - %s", W.title, dirShort), { color = HudStyle.Amber, priority = PRIO.build })
 	end
 end
 
@@ -178,7 +178,7 @@ local function onTransition(old: string, new: string, s: any, _extractNew: boole
 		refreshAlert()
 		if old == "breach" or old == "build" then
 			-- brief all-clear entry (expires by itself)
-			AlertBar.set("relax", "BREACH REPELLED — MOP UP THE STRAGGLERS", { color = HudStyle.Green, priority = PRIO.relax, seconds = 5 })
+			AlertBar.set("relax", "BREACH REPELLED - MOP UP THE STRAGGLERS", { color = HudStyle.Green, priority = PRIO.relax, seconds = 5 })
 			if Audio then
 				Audio.play2D("ObjectiveDone", { volume = 0.5 })
 			end
@@ -239,7 +239,7 @@ local function onHeavy(d: any)
 	heavy.active = true
 	local behemoth = d.class == "behemoth"
 	local title = if behemoth then "BEHEMOTH CONTACT" else "HEAVY CONTACT"
-	local text = string.format("%s — %s · %s · %d M", title, string.upper(tostring(d.name or "UNKNOWN")), IT.compassShort(bearing), math.floor(dist + 0.5))
+	local text = string.format("%s - %s | %s | %d M", title, string.upper(tostring(d.name or "UNKNOWN")), IT.compassShort(bearing), math.floor(dist + 0.5))
 	AlertBar.callout(text, if behemoth then HudStyle.Red else HudStyle.Amber, 3.0, true)
 	if Audio then
 		Audio.play2D("HeavyContact")
@@ -266,7 +266,7 @@ local function stepExtract(t: number)
 	if ex.window and t < ex.window then
 		label, left, total, col = "BOARD NOW", ex.window - t, Config.ExtractWindow, HudStyle.Green
 	elseif t < ex.eta then
-		label, left, total = shuttle .. " ETA — HOLD THE PAD", ex.eta - t, math.max(Config.ExtractEta, ex.eta - t)
+		label, left, total = shuttle .. " ETA - HOLD THE PAD", ex.eta - t, math.max(Config.ExtractEta, ex.eta - t)
 		col = HudStyle.Red
 	elseif not ex.window then
 		label, left, total, col = shuttle .. " DESCENDING", 0, 1, HudStyle.Red

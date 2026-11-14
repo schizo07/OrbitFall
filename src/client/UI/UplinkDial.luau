@@ -13,6 +13,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local CallIns = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
 local Store = require(script.Parent.Parent.Store)
 local Theme = require(script.Parent.Theme)
+local Style = require(script.Parent.HudStyle)
 
 local C = Theme.C
 
@@ -69,6 +70,69 @@ local function sizeConstraint(label: TextLabel, maxSize: number)
 	c.MaxTextSize = maxSize
 	c.MinTextSize = 6
 	c.Parent = label
+end
+
+-- Category marker in a chip corner, drawn from Frames (the data icons are dingbats the fonts lack, they showed as empty boxes).
+-- offense = diamond, supply = square, defense = ring, reinforce = plus. Sizes are chip-relative so it scales with the dial.
+local function markerPart(parent: Instance, size: UDim2, rot: number?, hollow: boolean?): Frame
+	local f = Instance.new("Frame")
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = UDim2.fromScale(0.5, 0.5)
+	f.Size = size
+	f.Rotation = rot or 0
+	f.BorderSizePixel = 0
+	f.ZIndex = 11
+	f.BackgroundColor3 = Color3.new(1, 1, 1)
+	if hollow then
+		f.BackgroundTransparency = 1
+		local cr = Instance.new("UICorner")
+		cr.CornerRadius = UDim.new(0.5, 0)
+		cr.Parent = f
+		local st = Instance.new("UIStroke")
+		st.Thickness = 2
+		st.Parent = f
+	end
+	f.Parent = parent
+	return f
+end
+
+local function buildMarker(inner: Instance): any
+	local host = Instance.new("Frame")
+	host.Name = "Marker"
+	host.BackgroundTransparency = 1
+	host.BorderSizePixel = 0
+	host.Size = UDim2.fromScale(0.17, 0.17)
+	host.Position = UDim2.fromScale(0.05, 0.05)
+	host.ZIndex = 11
+	host.Parent = inner
+	return {
+		host = host,
+		groups = {
+			diamond = { markerPart(host, UDim2.fromScale(0.62, 0.62), 45) },
+			square = { markerPart(host, UDim2.fromScale(0.7, 0.7)) },
+			ring = { markerPart(host, UDim2.fromScale(0.8, 0.8), 0, true) },
+			plus = { markerPart(host, UDim2.fromScale(0.3, 0.9)), markerPart(host, UDim2.fromScale(0.9, 0.3)) },
+		},
+	}
+end
+
+local function paintMarker(m: any, shape: string?, color: Color3, transparency: number)
+	for kind, parts in m.groups do
+		local on = kind == shape
+		for _, f in parts do
+			f.Visible = on
+			if on then
+				local st = f:FindFirstChildOfClass("UIStroke")
+				if st then
+					st.Color = color
+					st.Transparency = transparency
+				else
+					f.BackgroundColor3 = color
+					f.BackgroundTransparency = transparency
+				end
+			end
+		end
+	end
 end
 
 local function build()
@@ -211,6 +275,7 @@ local function build()
 			Parent = inner,
 		})
 		sizeConstraint(glyph, 34)
+		local marker = buildMarker(inner)
 		local name = Theme.label({
 			Text = "",
 			Font = "Black",
@@ -264,7 +329,7 @@ local function build()
 		})
 		sizeConstraint(cdText, 26)
 		chips[i] = {
-			frame = chip, scale = cscale, glyph = glyph, name = name, badge = badge, sub = sub, cd = cd, cdText = cdText,
+			frame = chip, scale = cscale, glyph = glyph, marker = marker, name = name, badge = badge, sub = sub, cd = cd, cdText = cdText,
 			stroke = chip:FindFirstChildOfClass("UIStroke"), available = false, defName = "", desc = "", status = "",
 		}
 	end
@@ -374,7 +439,7 @@ local function refreshChips(t: number)
 		ch.desc = def and def.desc or ""
 		ch.def = def
 		ch.remaining = remaining
-		ch.glyph.Text = def and def.icon or "-"
+		ch.glyph.Text = if def then Style.callinCode(def) else "--" -- short ASCII code (def.icon dingbats render as boxes)
 		ch.name.Text = def and Theme.callinShort(def) or "EMPTY"
 		ch.badge.Text = badge
 		ch.sub.Text = sub
@@ -391,6 +456,9 @@ local function refreshChips(t: number)
 		ch.cdText.TextColor3 = status == "NO USES" and C.Danger or C.Text
 		local beacon = def and Theme.beaconColor(def.beacon) or C.Muted
 		ch.beacon = i == SEGMENTS and C.Friendly or beacon
+		-- icon: category marker + code, both in the beacon colour (red offense / blue supply / green defense)
+		ch.glyph.TextColor3 = if def then ch.beacon else C.Muted
+		paintMarker(ch.marker, if def then Style.callinShape(def) else nil, ch.beacon, if available then 0 else 0.6)
 	end
 end
 

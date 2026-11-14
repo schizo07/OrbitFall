@@ -25,8 +25,8 @@ local function makeRow(def: any, order: number, reinforce: boolean, slotIndex: n
 	local row, tick = Style.listRow(ui.list, h, order, Style.Amber)
 	tick.Position = UDim2.fromOffset(0, 0)
 	local icon = Style.label({
-		Text = def and def.icon or "?",
-		TextSize = if touch then 15 else 18,
+		Text = Style.callinCode(def), -- ASCII code; the data icons are dingbats the HUD font lacks
+		TextSize = if touch then 11 else 12,
 		Color = Style.Amber,
 		XAlign = Enum.TextXAlignment.Center,
 		Size = UDim2.new(0, 24, 1, 0),
@@ -100,7 +100,7 @@ local function rebuild(me: any)
 	end
 	local rdef = CallIns.get("REINFORCE")
 	local rr = makeRow(rdef, 20, true, nil)
-	rr.icon.Text = rdef and rdef.icon or "✚"
+	rr.icon.Text = Style.callinCode(rdef)
 	rr.tick.TextColor3 = Style.Green
 	table.insert(rows, rr)
 end
@@ -187,7 +187,7 @@ function CallInList.update(me: any, t: number)
 		end
 		if reason == "NO USES" then
 			r.wipe.Size = UDim2.fromScale(1, 1)
-			r.secs.Text = "—"
+			r.secs.Text = "-"
 			r.secs.TextColor3 = Style.Red
 		elseif frac > 0 then
 			r.wipe.Size = UDim2.fromScale(frac, 1)

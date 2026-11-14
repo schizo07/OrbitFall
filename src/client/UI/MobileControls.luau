@@ -10,6 +10,7 @@ local Weapons = require(Shared:WaitForChild("Data"):WaitForChild("Weapons"))
 local Store = require(script.Parent.Parent.Store)
 local Input = require(script.Parent.Parent.Input)
 local Theme = require(script.Parent.Theme)
+local Style = require(script.Parent.HudStyle)
 
 local C = Theme.C
 
@@ -78,6 +79,28 @@ local function bind(b: any, onDown: ((InputObject) -> ())?, onUp: (() -> ())?, o
 	end)
 end
 
+-- Button faces: a glyph starting with "@" is a drawn Style.glyph shape ("@up"), anything else is plain ASCII text
+-- (the font has no arrow / emoji glyphs, they render as empty boxes).
+local function setShape(b: any, shape: string?, rotation: number?)
+	if b.shape then
+		b.shape:Destroy()
+		b.shape = nil
+	end
+	b.glyph.Text = ""
+	if not shape then
+		return
+	end
+	local hasCap = b.caption.Visible
+	b.shape = Style.glyph(shape, {
+		Size = b.shapeSize,
+		Color = C.Text,
+		Box = UDim2.fromScale(1, if hasCap then 0.62 else 1),
+		Position = UDim2.fromScale(0, if hasCap then 0.1 else 0),
+		Rotation = rotation or 0,
+		Parent = b.btn,
+	})
+end
+
 local function make(name: string, cx: number, cy: number, d: number, glyph: string, caption: string, color: Color3, glyphSize: number?): any
 	local btn = Instance.new("TextButton")
 	btn.Name = name
@@ -94,8 +117,9 @@ local function make(name: string, cx: number, cy: number, d: number, glyph: stri
 	local st = Theme.stroke(btn, color, 3, 0.15)
 	local scale = Instance.new("UIScale")
 	scale.Parent = btn
+	local isShape = string.sub(glyph, 1, 1) == "@"
 	local g = Theme.label({
-		Text = glyph,
+		Text = if isShape then "" else glyph,
 		Font = "Black",
 		TextSize = glyphSize or math.floor(d * 0.36),
 		Size = UDim2.fromScale(1, caption ~= "" and 0.62 or 1),
@@ -112,8 +136,14 @@ local function make(name: string, cx: number, cy: number, d: number, glyph: stri
 		Visible = caption ~= "",
 		Parent = btn,
 	})
-	local b = { btn = btn, scale = scale, stroke = st, glyph = g, caption = cap, color = color, toggled = false, name = name }
+	local b = {
+		btn = btn, scale = scale, stroke = st, glyph = g, caption = cap, color = color, toggled = false, name = name,
+		shape = nil, shapeSize = math.floor((glyphSize or d * 0.36) * 0.8),
+	}
 	buttons[name] = b
+	if isShape then
+		setShape(b, string.sub(glyph, 2))
+	end
 	return b
 end
 
@@ -204,7 +234,7 @@ function MobileControls.init()
 	end
 
 	-- UPLINK (press opens dial; drag picks a slot; release selects)
-	local uplink = make("Uplink", 250, 84, 72, "📡", "UPLINK", C.Friendly, 26)
+	local uplink = make("Uplink", 250, 84, 72, "@diamond", "UPLINK", C.Friendly, 26)
 	do
 		local origin = Vector2.zero
 		bind(uplink, function(input)
@@ -225,7 +255,7 @@ function MobileControls.init()
 	end
 
 	-- AIM (toggle)
-	local aim = make("Aim", 172, 48, 64, "◎", "AIM", C.Accent, 26)
+	local aim = make("Aim", 172, 48, 64, "@reticle", "AIM", C.Accent, 26)
 	bind(aim, function()
 		local on = not aim.toggled
 		setToggled(aim, on)
@@ -238,7 +268,7 @@ function MobileControls.init()
 	end)
 
 	-- RELOAD
-	local reload = make("Reload", 170, 120, 64, "↻", "RELOAD", C.Accent, 28)
+	local reload = make("Reload", 170, 120, 64, "R", "RELOAD", C.Accent, 28)
 	bind(reload, function()
 		Input.set("Reload", true)
 	end, function()
@@ -246,7 +276,7 @@ function MobileControls.init()
 	end)
 
 	-- GRENADE
-	local grenade = make("Grenade", 156, 192, 64, "💣", "GRENADE", C.Accent, 26)
+	local grenade = make("Grenade", 156, 192, 64, "@dot", "GRENADE", C.Accent, 26)
 	bind(grenade, function()
 		Input.set("Grenade", true)
 	end, function()
@@ -254,7 +284,7 @@ function MobileControls.init()
 	end)
 
 	-- JUMP (hold)
-	local jump = make("Jump", 76, 176, 64, "▲", "JUMP", C.Text, 24)
+	local jump = make("Jump", 76, 176, 64, "@up", "JUMP", C.Text, 24)
 	bind(jump, function()
 		Input.set("Jump", true)
 	end, function()
@@ -262,7 +292,7 @@ function MobileControls.init()
 	end)
 
 	-- SPRINT (toggle)
-	local sprint = make("Sprint", 248, 160, 64, "»", "SPRINT", C.Friendly, 28)
+	local sprint = make("Sprint", 248, 160, 64, ">>", "SPRINT", C.Friendly, 28)
 	bind(sprint, function()
 		local on = not sprint.toggled
 		setToggled(sprint, on)
@@ -275,7 +305,7 @@ function MobileControls.init()
 	end)
 
 	-- CROUCH (tap = crouch/stand, hold = prone, while sprinting = dive) -> client/Movement.luau
-	local crouch = make("Crouch", 236, 236, 64, "▼", "CROUCH", C.Friendly, 22)
+	local crouch = make("Crouch", 236, 236, 64, "@down", "CROUCH", C.Friendly, 22)
 	bind(crouch, function()
 		Input.set("Crouch", true)
 	end, function()
@@ -283,13 +313,16 @@ function MobileControls.init()
 	end)
 	local function refreshCrouch()
 		local st = Store.get("stance")
-		local glyph, caption = "▼", "CROUCH"
+		local shape, rot, caption = "down", 0, "CROUCH"
 		if st == "prone" then
-			glyph, caption = "▬", "PRONE"
+			shape, rot, caption = "dash", 0, "PRONE"
 		elseif sprint.toggled and st ~= "crouch" then
-			glyph, caption = "↘", "DIVE"
+			shape, rot, caption = "down", -45, "DIVE" -- points down-right
 		end
-		crouch.glyph.Text = glyph
+		if crouch.shapeKey ~= caption then
+			crouch.shapeKey = caption
+			setShape(crouch, shape, rot)
+		end
 		crouch.caption.Text = caption
 		local on = st == "crouch" or st == "prone"
 		if crouch.toggled ~= on then

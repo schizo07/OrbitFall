@@ -415,9 +415,9 @@ local function buildOwnCard(parent: Instance)
 		})
 		return l
 	end
-	ui.cntStim = countCell("Stims", "✚", 1)
-	ui.cntNade = countCell("Grenades", "●", 2)
-	ui.cntMags = countCell("Mags", "▮", 3)
+	ui.cntStim = countCell("Stims", "STIM", 1)
+	ui.cntNade = countCell("Grenades", "GREN", 2)
+	ui.cntMags = countCell("Mags", "MAG", 3)
 	ui.cntStim.Visible = false -- only shown when the server publishes me.stims
 
 	-- callsign + health
@@ -946,13 +946,13 @@ function HUD.refreshMarkers()
 					pos = o.marker,
 					color = o.main and Style.Cyan or Style.Green,
 					label = o.title or "",
-					glyph = o.main and "◆" or "◇",
+					glyph = o.main and "diamond" or "diamondHollow", -- Style.glyph shape
 				})
 			end
 		end
 	end
 	for id, b in beacons do
-		table.insert(list, { key = "bc" .. id, pos = b.pos, color = b.color, label = b.label, glyph = "▲" })
+		table.insert(list, { key = "bc" .. id, pos = b.pos, color = b.color, label = b.label, glyph = "up" })
 	end
 	local s = Theme.scaleFor("hud")
 	for _, d in list do
@@ -973,13 +973,11 @@ function HUD.refreshMarkers()
 			Size = UDim2.new(1, 0, 0, 14),
 			Parent = world,
 		})
-		Style.label({
+		Style.glyph(d.glyph, {
 			Name = "Glyph",
-			Text = d.glyph,
-			TextSize = 24,
+			Size = 18,
 			Color = d.color,
-			XAlign = Enum.TextXAlignment.Center,
-			Size = UDim2.new(1, 0, 0, 28),
+			Box = UDim2.new(1, 0, 0, 28),
 			Position = UDim2.fromOffset(0, 14),
 			Parent = world,
 		})
@@ -1090,16 +1088,16 @@ local function updateAmmo()
 		end
 		-- spare magazines (whole mags left in reserve)
 		local mags = if maxMag > 0 then math.ceil(spare / math.max(maxMag, 1)) else 0
-		ui.cntMags.Text = "▮ " .. tostring(mags)
+		ui.cntMags.Text = "MAG " .. tostring(mags)
 		ui.cntMags.TextColor3 = if spare <= 0 then Style.Red else Style.Amber
 	end
 	local g = me.grenades or 0
-	ui.cntNade.Text = "● " .. tostring(g)
+	ui.cntNade.Text = "GREN " .. tostring(g)
 	ui.cntNade.TextColor3 = if g <= 0 then Style.Grey else Style.Amber
 	local stims = me.stims
 	ui.cntStim.Visible = type(stims) == "number"
 	if type(stims) == "number" then
-		ui.cntStim.Text = "✚ " .. tostring(stims)
+		ui.cntStim.Text = "STIM " .. tostring(stims)
 		ui.cntStim.TextColor3 = if stims <= 0 then Style.Grey else Style.Amber
 	end
 end
@@ -1138,8 +1136,8 @@ local function updateShip()
 	local need = math.max(p.xpNext or Config.xpForRank(p.rank or 1), 1)
 	ui.shipXpBar:set((p.xp or 0) / need, true)
 	ui.shipXpText.Text = string.format("%s / %s XP", Theme.formatNumber(p.xp or 0), Theme.formatNumber(need))
-	ui.shipSalvage.Text = string.format('<font color="%s">⚙</font> %s', Theme.hex(C.Accent), Theme.formatNumber(p.salvage or 0))
-	ui.shipTokens.Text = string.format('<font color="%s">◈</font> %s', Theme.hex(C.Friendly), Theme.formatNumber(p.tokens or 0))
+	ui.shipSalvage.Text = string.format('<font color="%s">SALV</font> %s', Theme.hex(C.Accent), Theme.formatNumber(p.salvage or 0))
+	ui.shipTokens.Text = string.format('<font color="%s">TKN</font> %s', Theme.hex(C.Friendly), Theme.formatNumber(p.tokens or 0))
 	ui.shipSalvage.RichText = true
 	ui.shipTokens.RichText = true
 end
@@ -1405,21 +1403,22 @@ local function showResults()
 		gl.SortOrder = Enum.SortOrder.LayoutOrder
 		gl.Parent = grid
 		local stats = {
-			{ "SALVAGE", r.salvage or 0, C.Accent, "⚙" },
-			{ "XP", r.xp or 0, C.Friendly, "★" },
-			{ "BOND TOKENS", r.tokens or 0, C.Gold, "◈" },
-			{ "KILLS", r.kills or 0, C.Text, "✕" },
+			{ "SALVAGE", r.salvage or 0, C.Accent, "cog" },
+			{ "XP", r.xp or 0, C.Friendly, "star" },
+			{ "BOND TOKENS", r.tokens or 0, C.Gold, "token" },
+			{ "KILLS", r.kills or 0, C.Text, "cross" },
 		}
 		for i, s in stats do
 			local tile = Theme.panel({ Color = C.Panel, Corner = 8, Stroke = s[3], StrokeTransparency = 0.5, LayoutOrder = i, Parent = grid })
+			Style.glyph(s[4], { Size = 12, Color = s[3], Box = UDim2.fromOffset(14, 18), Position = UDim2.fromOffset(10, 6), Parent = tile })
 			Theme.label({
-				Text = s[4] .. "  " .. s[1],
+				Text = s[1],
 				Font = "Header",
 				TextSize = 11,
 				Color = s[3],
 				XAlign = Enum.TextXAlignment.Left,
-				Size = UDim2.new(1, -16, 0, 18),
-				Position = UDim2.fromOffset(10, 6),
+				Size = UDim2.new(1, -34, 0, 18),
+				Position = UDim2.fromOffset(28, 6),
 				Parent = tile,
 			})
 			local val = Theme.label({

@@ -176,7 +176,245 @@ function Style.bar(p: { [string]: any }): any
 	return bar
 end
 
--- Row with the small "▸" tick at its left. Returns (row, tick).
+-- Drawn glyphs -----------------------------------------------------------------------------------------------------------
+-- Roblox fonts only cover ASCII reliably (symbols such as arrows, diamonds, gears, stars and emoji render as empty boxes),
+-- so every icon-like mark is built from plain Frames. Style.glyph(shape, props) returns a transparent host Frame; recolour it
+-- with Style.tint(host, colour), fade it with Style.glyphAlpha(host, t) / Style.glyphTween(host, time, t).
+-- shapes: diamond, diamondHollow, square, dot, ring, reticle, up, down, right, left, cross, plus, bar, dash, star, cog, token, lock, check
+local SQ2 = math.sqrt(2)
+
+local function gpart(host: Instance, hollow: boolean?): Frame
+	local f = Instance.new("Frame")
+	f.Name = "Part"
+	f.BorderSizePixel = 0
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = UDim2.fromScale(0.5, 0.5)
+	f.BackgroundColor3 = Style.White
+	if hollow then
+		f.BackgroundTransparency = 1
+		f:SetAttribute("Hollow", true)
+		local st = Instance.new("UIStroke")
+		st.Name = "Part"
+		st.Thickness = 1.5
+		st.Color = Style.White
+		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		st.Parent = f
+	end
+	f.Parent = host
+	return f
+end
+
+local function gsize(f: Frame, w: number, h: number)
+	f.Size = UDim2.fromOffset(math.max(1, math.round(w)), math.max(1, math.round(h)))
+end
+
+-- Triangle: a 45 degree square clipped by a half-size frame. dir = up | down | right | left
+local function gtriangle(host: Frame, dir: string, size: number)
+	local clip = Instance.new("Frame")
+	clip.Name = "Clip"
+	clip.BackgroundTransparency = 1
+	clip.BorderSizePixel = 0
+	clip.ClipsDescendants = true
+	clip.AnchorPoint = Vector2.new(0.5, 0.5)
+	clip.Position = UDim2.fromScale(0.5, 0.5)
+	local horizontal = dir == "right" or dir == "left"
+	if horizontal then
+		clip.Size = UDim2.fromOffset(math.round(size / 2), size)
+	else
+		clip.Size = UDim2.fromOffset(size, math.round(size / 2))
+	end
+	clip.Parent = host
+	local sq = gpart(clip)
+	sq.Rotation = 45
+	gsize(sq, size / SQ2, size / SQ2)
+	if dir == "up" then
+		sq.Position = UDim2.fromScale(0.5, 1)
+	elseif dir == "down" then
+		sq.Position = UDim2.fromScale(0.5, 0)
+	elseif dir == "right" then
+		sq.Position = UDim2.fromScale(0, 0.5)
+	else
+		sq.Position = UDim2.fromScale(1, 0.5)
+	end
+end
+
+local GLYPH_SKIP = { Size = true, Color = true, Shape = true, Box = true }
+-- props: Size = glyph size in px (default 12), Color, Box = UDim2 host size (default Size x Size), + any Frame property
+function Style.glyph(shape: string, props: { [string]: any }?): Frame
+	local p = props or {}
+	local size: number = p.Size or 12
+	local host = Instance.new("Frame")
+	host.Name = "Glyph"
+	host.BackgroundTransparency = 1
+	host.BorderSizePixel = 0
+	host.Size = p.Box or UDim2.fromOffset(size, size)
+	local parent = nil
+	for k, v in p do
+		if GLYPH_SKIP[k] then
+			continue
+		end
+		if k == "Parent" then
+			parent = v
+		else
+			(host :: any)[k] = v
+		end
+	end
+	if shape == "diamond" then
+		local d = gpart(host)
+		d.Rotation = 45
+		gsize(d, size / SQ2, size / SQ2)
+	elseif shape == "diamondHollow" then
+		local d = gpart(host, true)
+		d.Rotation = 45
+		gsize(d, size / SQ2 - 2, size / SQ2 - 2)
+	elseif shape == "square" then
+		gsize(gpart(host), size * 0.8, size * 0.8)
+	elseif shape == "dot" or shape == "ring" then
+		local d = gpart(host, shape == "ring")
+		local s = if shape == "ring" then size * 0.8 - 2 else size * 0.8
+		gsize(d, s, s)
+		local cr = Instance.new("UICorner")
+		cr.CornerRadius = UDim.new(0.5, 0)
+		cr.Parent = d
+	elseif shape == "up" or shape == "down" or shape == "right" or shape == "left" then
+		gtriangle(host, shape, size)
+	elseif shape == "cross" then
+		for _, rot in { 45, -45 } do
+			local b = gpart(host)
+			b.Rotation = rot
+			gsize(b, 2, size * 0.95)
+		end
+	elseif shape == "plus" then
+		local a = gpart(host)
+		gsize(a, 3, size * 0.9)
+		local b = gpart(host)
+		gsize(b, size * 0.9, 3)
+	elseif shape == "bar" then
+		gsize(gpart(host), math.max(3, size * 0.4), size)
+	elseif shape == "dash" then
+		gsize(gpart(host), size, math.max(3, size * 0.3))
+	elseif shape == "reticle" then
+		local r = gpart(host, true)
+		gsize(r, size * 0.9 - 2, size * 0.9 - 2)
+		local cr = Instance.new("UICorner")
+		cr.CornerRadius = UDim.new(0.5, 0)
+		cr.Parent = r
+		local d = gpart(host)
+		gsize(d, size * 0.3, size * 0.3)
+		local cd = Instance.new("UICorner")
+		cd.CornerRadius = UDim.new(0.5, 0)
+		cd.Parent = d
+	elseif shape == "star" then
+		local a = gpart(host)
+		gsize(a, size * 0.62, size * 0.62)
+		local b = gpart(host)
+		b.Rotation = 45
+		gsize(b, size * 0.62, size * 0.62)
+	elseif shape == "cog" then
+		local r = gpart(host, true)
+		gsize(r, size * 0.62, size * 0.62)
+		local cr = Instance.new("UICorner")
+		cr.CornerRadius = UDim.new(0.5, 0)
+		cr.Parent = r
+		for _, rot in { 0, 45, 90, 135 } do
+			local b = gpart(host)
+			b.Rotation = rot
+			gsize(b, 2, size * 0.98)
+		end
+	elseif shape == "token" then
+		local o = gpart(host, true)
+		o.Rotation = 45
+		gsize(o, size / SQ2 - 2, size / SQ2 - 2)
+		local i = gpart(host)
+		i.Rotation = 45
+		gsize(i, size * 0.26, size * 0.26)
+	elseif shape == "lock" then
+		local body = gpart(host)
+		body.Position = UDim2.fromScale(0.5, 0.68)
+		gsize(body, size * 0.72, size * 0.5)
+		local sh = gpart(host, true)
+		sh.Position = UDim2.fromScale(0.5, 0.3)
+		gsize(sh, size * 0.4, size * 0.5)
+	elseif shape == "check" then
+		local a = gpart(host)
+		a.Rotation = 45
+		a.Position = UDim2.fromScale(0.3, 0.62)
+		gsize(a, 2, size * 0.4)
+		local b = gpart(host)
+		b.Rotation = -45
+		b.Position = UDim2.fromScale(0.62, 0.5)
+		gsize(b, 2, size * 0.8)
+	end
+	Style.tint(host, p.Color or Style.White)
+	host.Parent = parent
+	return host
+end
+
+function Style.tint(host: Instance, color: Color3)
+	for _, d in host:GetDescendants() do
+		if d.Name == "Part" then
+			if d:IsA("UIStroke") then
+				d.Color = color
+			elseif d:IsA("Frame") then
+				d.BackgroundColor3 = color
+			end
+		end
+	end
+end
+
+-- 0 = opaque, 1 = invisible (filled parts and outlines)
+function Style.glyphAlpha(host: Instance, alpha: number)
+	for _, d in host:GetDescendants() do
+		if d.Name == "Part" then
+			if d:IsA("UIStroke") then
+				d.Transparency = alpha
+			elseif d:IsA("Frame") and not d:GetAttribute("Hollow") then
+				d.BackgroundTransparency = alpha
+			end
+		end
+	end
+end
+
+function Style.glyphTween(host: Instance, time: number, alpha: number)
+	for _, d in host:GetDescendants() do
+		if d.Name == "Part" then
+			if d:IsA("UIStroke") then
+				Theme.tween(d, time, { Transparency = alpha })
+			elseif d:IsA("Frame") and not d:GetAttribute("Hollow") then
+				Theme.tween(d, time, { BackgroundTransparency = alpha })
+			end
+		end
+	end
+end
+
+-- Short ASCII codes for the call-in icons (the CallIns data icons are dingbats the fonts lack). Shape follows the beacon colour.
+local CALLIN_CODE = {
+	LANCE = "LNC", HALFTON = "BMB", STRAFE = "STR", TOXIN = "TOX", EMP = "EMP", MINES = "MIN", SUPPLY = "SUP", BARRAGE = "BRG",
+	SENTRY = "SEN", ROCKETDROP = "RKT", GATLINGDROP = "GAT", SHIELD = "SHD", SMOKE = "SMK", CLUSTER = "CLU", RAILDROP = "RAL",
+	REINFORCE = "REIN",
+}
+function Style.callinCode(def: any): string
+	if not def then
+		return "--"
+	end
+	return CALLIN_CODE[def.id] or string.upper(string.sub(tostring(def.id), 1, 3))
+end
+
+-- offense = diamond, supply = square (crate), defense = ring
+function Style.callinShape(def: any): string
+	if def and def.id == "REINFORCE" then
+		return "plus"
+	end
+	local b = def and def.beacon
+	if b == "supply" then
+		return "square"
+	elseif b == "defense" then
+		return "ring"
+	end
+	return "diamond"
+end
+
+-- Row with the small ">" tick at its left. Returns (row, tick).
 function Style.listRow(parent: Instance, height: number, order: number?, color: Color3?): (Frame, TextLabel)
 	local row = Instance.new("Frame")
 	row.BackgroundTransparency = 1

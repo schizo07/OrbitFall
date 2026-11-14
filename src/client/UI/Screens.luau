@@ -21,6 +21,7 @@ local CallIns = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
 local Bonds = require(Shared:WaitForChild("Data"):WaitForChild("Bonds"))
 local Store = require(script.Parent.Parent.Store)
 local Theme = require(script.Parent.Theme)
+local Style = require(script.Parent.HudStyle)
 
 local C = Theme.C
 local player = Players.LocalPlayer
@@ -308,7 +309,15 @@ local function card(parent: Instance, p: { [string]: any }): TextButton
 			st.Thickness = 3
 		end
 	end
-	if p.Glyph then
+	if p.GlyphShape then
+		Style.glyph(p.GlyphShape, {
+			Size = p.GlyphSize or 24,
+			Color = p.GlyphColor or C.Text,
+			Box = UDim2.new(0, 40, 1, 0),
+			Position = UDim2.fromOffset(4, 0),
+			Parent = btn,
+		})
+	elseif p.Glyph then
 		Theme.label({
 			Text = p.Glyph,
 			Font = "Black",
@@ -318,7 +327,7 @@ local function card(parent: Instance, p: { [string]: any }): TextButton
 			Parent = btn,
 		})
 	end
-	local left = p.Glyph and 46 or 10
+	local left = (p.Glyph or p.GlyphShape) and 46 or 10
 	Theme.label({
 		Text = p.Title or "",
 		Font = "Black",
@@ -392,8 +401,8 @@ local function updateHeader()
 		return
 	end
 	local p = profile()
-	hdrSalvage.Text = string.format('<font color="%s">⚙</font> %s', Theme.hex(C.Accent), Theme.formatNumber(p.salvage or 0))
-	hdrTokens.Text = string.format('<font color="%s">◈</font> %s', Theme.hex(C.Friendly), Theme.formatNumber(p.tokens or 0))
+	hdrSalvage.Text = string.format('<font color="%s" size="11">SALV</font> %s', Theme.hex(C.Accent), Theme.formatNumber(p.salvage or 0))
+	hdrTokens.Text = string.format('<font color="%s" size="11">TKN</font> %s', Theme.hex(C.Friendly), Theme.formatNumber(p.tokens or 0))
 	hdrRank.Text = string.format('<font color="%s">RANK</font> %d', Theme.hex(C.Muted), p.rank or 1)
 end
 
@@ -475,7 +484,7 @@ local function renderDetail(parent: Instance)
 		local cdef = CallIns.get(d.id)
 		if cdef then
 			local col = Theme.beaconColor(cdef.beacon)
-			Theme.label({ Text = cdef.icon .. "  " .. string.upper(cdef.name), Font = "Header", TextSize = 15, Color = col, Wrap = true, XAlign = Enum.TextXAlignment.Left, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1, Parent = s })
+			Theme.label({ Text = Style.callinCode(cdef) .. "  " .. string.upper(cdef.name), Font = "Header", TextSize = 15, Color = col, Wrap = true, XAlign = Enum.TextXAlignment.Left, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1, Parent = s })
 			Theme.label({ Text = string.upper(cdef.beacon) .. " BEACON", Font = "Medium", TextSize = 11, Color = C.Muted, XAlign = Enum.TextXAlignment.Left, Size = UDim2.new(1, 0, 0, 14), LayoutOrder = 2, Parent = s })
 			Theme.label({ Text = cdef.desc, Font = "Medium", TextSize = 14, Wrap = true, XAlign = Enum.TextXAlignment.Left, YAlign = Enum.TextYAlignment.Top, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 3, Parent = s })
 			callinStats(s, cdef, 10)
@@ -483,7 +492,7 @@ local function renderDetail(parent: Instance)
 	end
 	local synced = (os.clock() - savedAt) < 2.5
 	Theme.label({
-		Text = loadoutDirty and "Saving..." or (synced and "✓ Loadout saved" or "Changes save automatically"),
+		Text = loadoutDirty and "Saving..." or (synced and "Loadout saved" or "Changes save automatically"),
 		Font = "Medium",
 		TextSize = 12,
 		Color = synced and C.Friendly or C.Muted,
@@ -564,7 +573,7 @@ local function renderLoadout(parent: Instance)
 				st.Transparency = 0
 			end
 		end
-		Theme.label({ Text = def and def.icon or "-", Font = "Black", TextSize = 26, Size = UDim2.new(1, 0, 0, 36), Position = UDim2.fromOffset(0, 6), Parent = b })
+		Theme.label({ Text = def and Style.callinCode(def) or "-", Font = "Black", TextSize = 22, Size = UDim2.new(1, 0, 0, 36), Position = UDim2.fromOffset(0, 6), Parent = b })
 		Theme.label({ Text = def and Theme.callinShort(def) or "EMPTY", Font = "Black", TextSize = 11, Size = UDim2.new(1, -6, 0, 14), Position = UDim2.new(0, 3, 1, -20), Parent = b })
 		Theme.label({ Text = tostring(i), Font = "Header", TextSize = 10, Color = C.Accent, XAlign = Enum.TextXAlignment.Left, Size = UDim2.fromOffset(16, 14), Position = UDim2.fromOffset(6, 4), Parent = b })
 	end
@@ -580,7 +589,8 @@ local function renderLoadout(parent: Instance)
 			n += 1
 			local slotNum = table.find(loadout.callins, def.id)
 			card(cg, {
-				Glyph = def.icon,
+				Glyph = Style.callinCode(def),
+				GlyphSize = 15,
 				Title = def.name,
 				Sub = string.upper(def.category),
 				Badge = slotNum and tostring(slotNum) or nil,
@@ -659,7 +669,7 @@ local function renderArmory(parent: Instance)
 	if armoryFilter ~= "WEAPONS" then
 		for _, c in CallIns.list() do
 			if c.unlock == "armory" then
-				table.insert(items, { kind = "callin", id = c.id, name = c.name, desc = c.desc, price = c.salvage or 0, rank = c.rank or 1, glyph = c.icon, color = Theme.beaconColor(c.beacon), owned = ownedC[c.id] == true, stats = c })
+				table.insert(items, { kind = "callin", id = c.id, name = c.name, desc = c.desc, price = c.salvage or 0, rank = c.rank or 1, glyph = Style.callinCode(c), color = Theme.beaconColor(c.beacon), owned = ownedC[c.id] == true, stats = c })
 			end
 		end
 	end
@@ -694,9 +704,9 @@ local function renderArmory(parent: Instance)
 		elseif locked then
 			state = "RANK " .. it.rank
 		elseif salvage < it.price then
-			state = string.format("⚙ %s", Theme.formatNumber(it.price))
+			state = string.format("%s SALV", Theme.formatNumber(it.price))
 		else
-			state = string.format("BUY  ⚙ %s", Theme.formatNumber(it.price))
+			state = string.format("BUY  %s SALV", Theme.formatNumber(it.price))
 			canBuy = true
 		end
 		local btn = Theme.button({
@@ -775,7 +785,7 @@ local function renderBonds(parent: Instance)
 		local b = Bonds.get(id) :: any
 		local active = id == bondSel
 		local btn = Theme.button({
-			Text = (bondAccess(id) and "" or "🔒 ") .. string.upper(b.name),
+			Text = string.upper(b.name),
 			TextSize = 13,
 			Color = active and b.color or C.PanelLight,
 			TextColor = active and C.Dark or C.Text,
@@ -791,6 +801,17 @@ local function renderBonds(parent: Instance)
 			Parent = tabs,
 		})
 		btn.Font = Enum.Font.GothamBlack
+		if not bondAccess(id) then
+			-- drawn padlock at the left edge (emoji have no glyph in the UI fonts)
+			Style.glyph("lock", {
+				Size = 13,
+				Color = if active then C.Dark else C.Text,
+				Box = UDim2.fromOffset(14, 20),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, 6, 0.5, 0),
+				Parent = btn,
+			})
+		end
 	end
 
 	local top = 46
@@ -816,7 +837,7 @@ local function renderBonds(parent: Instance)
 		})
 		local canAfford = (p.tokens or 0) >= bond.accessCost
 		local b1 = Theme.button({
-			Text = string.format("UNLOCK  ◈ %d", bond.accessCost),
+			Text = string.format("UNLOCK  %d TKN", bond.accessCost),
 			TextSize = 13,
 			Variant = canAfford and "good" or "secondary",
 			Size = UDim2.fromOffset(150, 34),
@@ -873,7 +894,7 @@ local function renderBonds(parent: Instance)
 	end
 	for pg = 1, 3 do
 		local o, total = ownedCount(bondSel, pg)
-		local label = string.format("PAGE %d  %s", pg, pageOpen[pg] and string.format("%d/%d", o, total) or "🔒")
+		local label = string.format("PAGE %d  %s", pg, pageOpen[pg] and string.format("%d/%d", o, total) or "LOCKED")
 		local btn = Theme.button({
 			Text = label,
 			TextSize = 12,
@@ -930,9 +951,9 @@ local function renderBonds(parent: Instance)
 		Theme.label({ Text = it.desc, Font = "Medium", TextSize = 11, Color = C.Muted, Wrap = true, XAlign = Enum.TextXAlignment.Left, YAlign = Enum.TextYAlignment.Top, Size = UDim2.new(1, -16, 0, 30), Position = UDim2.fromOffset(10, 58), Parent = c })
 		local text
 		if owned then
-			text = "OWNED ✓"
+			text = "OWNED"
 		else
-			text = string.format("◈ %d", it.cost)
+			text = string.format("%d TKN", it.cost)
 		end
 		local btn = Theme.button({
 			Text = text,
@@ -965,7 +986,7 @@ local function renderBonds(parent: Instance)
 			if not canAfford and usable then
 				btn.TextColor3 = C.Danger
 			elseif not usable then
-				btn.Text = access and "LOCKED" or "🔒 " .. text
+				btn.Text = access and "LOCKED" or "LOCK " .. text
 			end
 		end
 	end
@@ -986,7 +1007,7 @@ local function renderShop(parent: Instance)
 	local g = grid(body, 3, 138, 2, 10)
 	for i, pk in packs do
 		local c = Theme.panel({ Color = C.Panel, Stroke = C.Friendly, StrokeTransparency = 0.5, LayoutOrder = i, Parent = g })
-		Theme.label({ Text = "◈", Font = "Black", TextSize = 28, Color = C.Friendly, Size = UDim2.new(1, 0, 0, 34), Position = UDim2.fromOffset(0, 8), Parent = c })
+		Style.glyph("token", { Size = 28, Color = C.Friendly, Box = UDim2.new(1, 0, 0, 34), Position = UDim2.fromOffset(0, 8), Parent = c })
 		Theme.label({ Text = Theme.formatNumber(pk.info.tokens) .. " BOND TOKENS", Font = "Black", TextSize = 15, Size = UDim2.new(1, -10, 0, 22), Position = UDim2.fromOffset(5, 46), Parent = c })
 		local btn = Theme.button({
 			Text = string.format("R$ %d", pk.info.robux),
@@ -1038,7 +1059,7 @@ local function renderShop(parent: Instance)
 			Theme.label({ Text = freeNote, Font = "Medium", TextSize = 11, Color = C.Friendly, XAlign = Enum.TextXAlignment.Left, Size = UDim2.new(1, -20, 0, 14), Position = UDim2.fromOffset(10, 90), Parent = c })
 		end
 		local btn = Theme.button({
-			Text = owned and "OWNED ✓" or (info and string.format("R$ %d", info.robux) or "R$"),
+			Text = owned and "OWNED" or (info and string.format("R$ %d", info.robux) or "R$"),
 			TextSize = 14,
 			Variant = owned and "good" or "primary",
 			Size = UDim2.new(1, -20, 0, 30),
@@ -1081,12 +1102,12 @@ end
 
 -- MISSION ------------------------------------------------------------------------------------------------------------------------
 local FACTIONS = {
-	{ id = "COG", name = "Cogwork Legion", glyph = "⚙", color = C.Accent, desc = "Armoured robots that fight at range. Shoot the glowing red eyes." },
-	{ id = "BROOD", name = "Skitter Brood", glyph = "✱", color = Color3.fromHex("8cff3a"), desc = "Swarming bugs with fast melee. Goo sacs pop big." },
+	{ id = "COG", name = "Cogwork Legion", shape = "cog", color = C.Accent, desc = "Armoured robots that fight at range. Shoot the glowing red eyes." },
+	{ id = "BROOD", name = "Skitter Brood", shape = "star", color = Color3.fromHex("8cff3a"), desc = "Swarming bugs with fast melee. Goo sacs pop big." },
 }
 local OBJECTIVES = {
-	{ id = "MISSILE", name = "Missile Launch", glyph = "🚀", desc = "Find the codes, power the generator, set the trajectory, open the silo, launch." },
-	{ id = "UPLINK", name = "Uplink Relay", glyph = "📡", desc = "Find the relay, plug in the uplink, defend the upload, retrieve the data core." },
+	{ id = "MISSILE", name = "Missile Launch", shape = "up", desc = "Find the codes, power the generator, set the trajectory, open the silo, launch." },
+	{ id = "UPLINK", name = "Uplink Relay", shape = "reticle", desc = "Find the relay, plug in the uplink, defend the upload, retrieve the data core." },
 }
 local DIFFICULTY = { "Cadet", "Trooper", "Veteran", "Elite", "Mayhem" }
 
@@ -1096,8 +1117,9 @@ local function renderMission(parent: Instance)
 	local g = grid(body, 2, 92, 2, 10)
 	for i, f in FACTIONS do
 		card(g, {
-			Glyph = f.glyph,
-			GlyphSize = 30,
+			GlyphShape = f.shape,
+			GlyphColor = f.color,
+			GlyphSize = 26,
 			Title = f.name,
 			TitleSize = 16,
 			Desc = f.desc,
@@ -1115,8 +1137,9 @@ local function renderMission(parent: Instance)
 	local g2 = grid(body, 2, 92, 4, 10)
 	for i, o in OBJECTIVES do
 		card(g2, {
-			Glyph = o.glyph,
-			GlyphSize = 28,
+			GlyphShape = o.shape,
+			GlyphColor = C.Friendly,
+			GlyphSize = 24,
 			Title = o.name,
 			TitleSize = 16,
 			Desc = o.desc,
@@ -1180,7 +1203,7 @@ local function renderMission(parent: Instance)
 		Parent = footer,
 	})
 	local launch = Theme.button({
-		Text = "LAUNCH  ▶",
+		Text = "LAUNCH  >>",
 		TextSize = 20,
 		Variant = "primary",
 		Size = UDim2.fromOffset(200, 42),
@@ -1319,7 +1342,7 @@ local function build()
 	hdrSalvage = chipLabel(2, C.Accent)
 	hdrTokens = chipLabel(3, C.Friendly)
 	local close = Theme.button({
-		Text = "✕",
+		Text = "X",
 		TextSize = 20,
 		Variant = "danger",
 		Size = UDim2.fromOffset(44, 44),

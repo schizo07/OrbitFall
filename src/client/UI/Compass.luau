@@ -100,14 +100,12 @@ function Compass.build(parent: Instance, _touch: boolean): Frame
 	ui.layer = layer
 
 	-- breach pip (direction of the current BUILD / BREACH)
-	ui.breachPip = Style.label({
+	ui.breachPip = Style.glyph("up", {
 		Name = "BreachPip",
-		Text = "▲",
-		TextSize = 12,
+		Size = 10,
 		Color = Style.Red,
-		XAlign = Enum.TextXAlignment.Center,
+		Box = UDim2.fromOffset(16, TAPE_H),
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(16, TAPE_H),
 		Position = UDim2.fromScale(0.5, 0.5),
 		Visible = false,
 		ZIndex = 4,
@@ -175,22 +173,21 @@ function Compass.step(cam: Camera, markers: { [string]: any })
 		local rel = wrap180(it.dir - ang)
 		pip.Visible = math.abs(rel) <= SPAN / 2 + 6
 		pip.Position = UDim2.fromScale(Theme.clamp(0.5 + rel / SPAN, 0, 1), 0.5)
-		pip.TextColor3 = if it.state == "build" and not it.extract then Style.Amber else Style.Red
+		Style.tint(pip, if it.state == "build" and not it.extract then Style.Amber else Style.Red)
 	else
 		pip.Visible = false
 	end
 end
 
 -- Pip on the tape for an objective / beacon. Returned label is owned by the caller (HUD.refreshMarkers destroys it).
-function Compass.addPip(layer: Instance, key: string, glyph: string, color: Color3): TextLabel
-	return Style.label({
+-- shape = a Style.glyph shape name ("diamond", "diamondHollow", "up", ...)
+function Compass.addPip(layer: Instance, key: string, shape: string, color: Color3): Frame
+	return Style.glyph(shape, {
 		Name = key,
-		Text = glyph,
-		TextSize = 13,
+		Size = 11,
 		Color = color,
-		XAlign = Enum.TextXAlignment.Center,
+		Box = UDim2.fromOffset(16, TAPE_H),
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(16, TAPE_H),
 		Position = UDim2.fromScale(0.5, 0.5),
 		Parent = layer,
 	})

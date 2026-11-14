@@ -150,7 +150,7 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 		Theme.pad(p, 8, 6, 8, 7)
 		Theme.list(p, Enum.FillDirection.Vertical, 4)
 		Style.label({
-			Text = (if primary.done then "✓ " else "") .. (primary.title or "MISSION"),
+			Text = (if primary.done then "DONE - " else "") .. (primary.title or "MISSION"),
 			TextSize = Style.TEXT,
 			Color = if primary.done then Style.Green else Style.Cyan,
 			XAlign = Enum.TextXAlignment.Right,
@@ -216,7 +216,7 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 		local act = activeStep(o)
 		local text = o.title or ""
 		if act and not o.done and not touch then
-			text ..= "  ·  " .. act.text
+			text ..= "  -  " .. act.text
 		end
 		addRow(text, o.done == true, true, Style.Green)
 	end
