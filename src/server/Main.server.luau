@@ -44,13 +44,16 @@ S.War = try("WarService", function() return root.WarService end)
 S.Mission = try("Mission", function() return root.Mission end)
 S.TestArena = try("TestArena", function() return root.World.TestArena end) -- Studio test arena
 S.DevTools = try("DevTools", function() return root.DevTools end) -- Studio quick start + arena keys remote
+S.Hazards = try("Hazards", function() return root.Hazards end) -- planet hazards (debris showers), started by Mission
+S.LootRunner = try("LootRunner", function() return root.Enemies.LootRunner end) -- loot runner (a courier that runs from the squad), started by Mission
+S.Ping = try("PingService", function() return root.PingService end) -- squad ping relay
 S.Explosions = try("Explosions", function() return root.Explosions end) -- blast entry point + onBlast listeners (no init needed)
 S.Jammers = try("Jammers", function() return root.Jammers end) -- call-in jam areas (no init needed)
 S.Weather = try("WeatherService", function() return root.WeatherService end) -- dust storm phases (workspace Weather attrs)
 
 local ORDER = {
 	"Assets", "Actions", "Fx", "State", "Save", "Progress", "Shop", "Enemies", "Projectiles", "Director",
-	"CallIns", "Map", "Ship", "Objectives", "Extraction", "Players", "Weapons", "War", "Mission", "TestArena", "DevTools",
+	"CallIns", "Map", "Ship", "Objectives", "Extraction", "Players", "Weapons", "War", "Hazards", "LootRunner", "Mission", "TestArena", "DevTools", "Ping",
 	"Weather",
 }
 
@@ -132,6 +135,21 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 		local pos = root.Position + root.CFrame.LookVector * (b or 40)
 		local e = S.Enemies.spawn(a or "TINKER", CFrame.lookAt(pos, root.Position * Vector3.new(1, 0, 1) + Vector3.new(0, pos.Y, 0)))
 		return e and e.id
+	elseif cmd == "elite" then -- elite(affix, distanceInFront): a TINKER elite, affix "Plated" | "Volatile" | "Swift" (default Plated)
+		local root = first and S.Players.getRoot(first)
+		if not root then
+			return "no player"
+		end
+		local affix = a or "Plated"
+		if affix ~= "Plated" and affix ~= "Volatile" and affix ~= "Swift" then
+			return "unknown affix (Plated | Volatile | Swift)"
+		end
+		local pos = root.Position + root.CFrame.LookVector * (b or 40)
+		local e = S.Enemies.spawn("TINKER", CFrame.lookAt(pos, root.Position * Vector3.new(1, 0, 1) + Vector3.new(0, pos.Y, 0)), { elite = affix })
+		return e and e.id
+	elseif cmd == "lootrunner" then -- lootrunner(): one loot runner now, 30-45 studs from a random living trooper (needs a mission / the arena)
+		local e = S.LootRunner and S.LootRunner.spawnNow()
+		return if e then e.id else "none (no mission / no trooper / one already running)"
 	elseif cmd == "callin" then -- run a call-in effect at a point in front of the player
 		local root = first and S.Players.getRoot(first)
 		if not root then

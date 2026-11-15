@@ -1,6 +1,6 @@
 -- Client renderers for the call-in system (server: src/server/CallIns/*).
 -- Fx kinds: Beacon, BeaconEnd, LanceStart/Move/End, Bomb, Jet, Shell, Gas, Smoke, Dome, DropPod, Crater,
--- GravWell, CryoFreeze, Shatter, Railshot, Firestorm.
+-- GravWell, FireVortex, IceVortex, RailOvercharge, CryoFreeze, Shatter, Railshot, Firestorm, OverwatchSkiff, OverwatchEnd.
 -- Everything lives in workspace.CurrentCamera.CallInFx (local only, no collisions, auto-cleaned).
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local OverwatchPath = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("OverwatchPath"))
 
 local TEX_SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local TEX_SPARK = "rbxasset://textures/particles/sparkles_main.dds"
@@ -246,6 +247,7 @@ local BEACON_HOLD = {
 	CRYO = 0.7, -- FALL
 	RAILSHOT = 0.9, -- charge
 	FIRESTORM = 0.9, -- jet reaches the strip start
+	OVERWATCH = 1.5, -- the Skiff is still flying in
 }
 local BEACON_RAMP = 1.2 -- the beam heats up over the last this-many seconds before BeaconEnd
 
@@ -1027,6 +1029,16 @@ end
 local function quality(): number
 	return FxRef and FxRef.quality or 1
 end
+local touchCached: boolean? = nil
+local function lowEnd(): boolean
+	if touchCached == nil then
+		local ok, Theme = pcall(function()
+			return require((script.Parent.Parent :: any).UI.Theme)
+		end)
+		touchCached = ok and Theme.isTouch() == true
+	end
+	return touchCached == true or quality() < 1
+end
 local function qn(n: number): number
 	return math.max(1, math.floor(n * quality() + 0.5))
 end
@@ -1143,6 +1155,207 @@ local function registerNew(Fx: any)
 			punch(VOID, 0.9, 0.7, -0.3, p)
 			flashAt(Color3.fromRGB(235, 210, 255), 0.45, 0.3, p)
 		end)
+	end)
+
+	-- Fire vortex (call-in combo, server/CallIns/Combos): a Gravity Well that caught fire. Spinning ring of flame motes round a
+	-- tall flame column for the rest of the pull; the server's (bigger) blast ends it. Fewer motes / particles on touch and low quality.
+	Fx.register("FireVortex", function(d)
+		local p: Vector3, r: number, dur: number = d.p, d.r or 18, math.max(d.t or 2, 0.4)
+		local lite = lowEnd()
+		local height = 26
+		local base = p + Vector3.new(0, 0.5, 0)
+		local anchor = mkPart({ Size = Vector3.new(r * 0.5, height, r * 0.5), Transparency = 1, CFrame = CFrame.new(base + Vector3.new(0, height / 2, 0)) })
+		local column = emitter(anchor, {
+			Texture = TEX_FIRE,
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 220, 120)),
+				ColorSequenceKeypoint.new(0.5, FIRE),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 40, 20)),
+			}),
+			Size = seq(4.5, 7, 2),
+			Transparency = seq(0.1, 0.3, 1),
+			Lifetime = NumberRange.new(0.9, 1.3),
+			Speed = NumberRange.new(14, 20),
+			SpreadAngle = Vector2.new(8, 8),
+			Rate = (if lite then 28 else 55) * quality(),
+			LightEmission = 1,
+			Rotation = NumberRange.new(0, 360),
+			RotSpeed = NumberRange.new(-60, 60),
+			EmissionDirection = Enum.NormalId.Top,
+			Shape = Enum.ParticleEmitterShape.Cylinder,
+			ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
+		})
+		local smoke = emitter(anchor, {
+			Texture = TEX_SMOKE,
+			Color = ColorSequence.new(Color3.fromRGB(70, 55, 50)),
+			Size = seq(4, 9),
+			Transparency = seq(0.55, 0.8, 1),
+			Lifetime = NumberRange.new(1.4, 2),
+			Speed = NumberRange.new(10, 16),
+			Rate = (if lite then 6 else 14) * quality(),
+			EmissionDirection = Enum.NormalId.Top,
+			Shape = Enum.ParticleEmitterShape.Cylinder,
+		})
+		local core = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(height, 3, 3),
+			Color = FIRE,
+			Transparency = 0.6,
+			CFrame = CFrame.new(base + Vector3.new(0, height / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		local l = light(core, FIRE, r * 1.2, 4)
+		-- ring of flame motes spiralling round the column; each carries a small fire trail emitter
+		local motes = {}
+		for i = 1, qn(if lite then 5 else 9) do
+			local m = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.one * 1.1, Color = Color3.fromRGB(255, 170, 70), CFrame = CFrame.new(base) })
+			emitter(m, {
+				Texture = TEX_FIRE,
+				Color = ColorSequence.new(Color3.fromRGB(255, 200, 100), Color3.fromRGB(200, 60, 20)),
+				Size = seq(2.2, 0.3),
+				Transparency = seq(0.2, 1),
+				Lifetime = NumberRange.new(0.4, 0.6),
+				Speed = NumberRange.new(0, 2),
+				Rate = if lite then 10 else 20,
+				LightEmission = 1,
+			})
+			motes[i] = m
+		end
+		-- ignition thump: the existing Explosion sound, pitched down so the combo is audibly its own thing
+		if not Audio or not pcall(Audio.play, "Explosion", p, { pitch = 0.7 }) then
+			snd("Explosion", p)
+		end
+		trauma(0.5, dur, p, 60)
+		flashAt(FIRE, 0.25, 0.25, p)
+		punch(FIRE, 0.5, 0.5, 0.1, p)
+		animate(dur, function(a)
+			local t = os.clock()
+			local grow = math.min(a * 8, 1) -- the column rises over the first ~1/8 of the pull
+			core.Size = Vector3.new(height * grow, 2.5 + 2 * a, 2.5 + 2 * a)
+			core.CFrame = CFrame.new(base + Vector3.new(0, height * grow / 2, 0)) * CFrame.Angles(t * 5, 0, math.pi / 2)
+			l.Brightness = 4 + 3 * a
+			for i, m in motes do
+				local ang = t * (4 + 3 * a) + i * (math.pi * 2 / #motes)
+				local rad = r * (0.8 - 0.55 * a) * (0.7 + 0.3 * ((i % 3) / 2))
+				local rise = (((t * 6 + i * 3) % height) / height) * height * 0.9
+				m.CFrame = CFrame.new(base + Vector3.new(math.cos(ang) * rad, 1 + rise, math.sin(ang) * rad))
+			end
+		end, function()
+			column.Enabled = false
+			smoke.Enabled = false
+			for _, m in motes do
+				for _, c in m:GetChildren() do
+					if c:IsA("ParticleEmitter") then
+						c.Enabled = false
+					end
+				end
+				m:Destroy()
+			end
+			core:Destroy()
+			Debris:AddItem(anchor, 2.2)
+		end)
+	end)
+
+	-- Ice vortex (call-in combo SHATTER IMPLOSION): a Gravity Well with frozen enemies in it. Ice-blue motes and shards spiral
+	-- inward round a pale core, a frost ring shrinks with the pull. The server's end burst (plus "Shatter" fx) finishes it.
+	Fx.register("IceVortex", function(d)
+		local p: Vector3, r: number, dur: number = d.p, d.r or 18, math.max(d.t or 2, 0.4)
+		local lite = lowEnd()
+		local centre = p + Vector3.new(0, 3, 0)
+		local anchor = mkPart({ Size = Vector3.new(r * 2, 4, r * 2), Transparency = 1, CFrame = CFrame.new(centre) })
+		local swirl = emitter(anchor, {
+			Texture = TEX_SPARK,
+			Color = ColorSequence.new(Color3.fromRGB(235, 250, 255), ICE),
+			Size = seq(0.8, 0.25),
+			Transparency = seq(0.1, 0.05, 1),
+			Lifetime = NumberRange.new(0.9, 1.2),
+			Speed = NumberRange.new(r * 0.8, r * 0.95),
+			Rate = (if lite then 30 else 60) * quality(),
+			LightEmission = 1,
+			Shape = Enum.ParticleEmitterShape.Sphere,
+			ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface,
+			ShapeInOut = Enum.ParticleEmitterShapeInOut.Inward,
+			RotSpeed = NumberRange.new(-180, 180),
+		})
+		local core = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.one * 2, Color = Color3.fromRGB(225, 245, 255), Material = Enum.Material.Ice, Transparency = 0.3, CFrame = CFrame.new(centre) })
+		local frost = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.12, r * 2, r * 2),
+			Color = Color3.fromRGB(205, 240, 255),
+			Material = Enum.Material.Ice,
+			Transparency = 0.6,
+			CFrame = CFrame.new(p + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		local l = light(core, ICE, r * 1.2, 3)
+		-- ice shards on a shrinking spiral
+		local shards = {}
+		for i = 1, qn(if lite then 6 else 11) do
+			shards[i] = mkPart({
+				Size = Vector3.new(0.5, 1.6, 0.5),
+				Color = Color3.fromRGB(195, 238, 255),
+				Material = Enum.Material.Ice,
+				Transparency = 0.15,
+				CFrame = CFrame.new(centre),
+			})
+		end
+		snd("EMPPulse", p)
+		trauma(0.4, dur, p, 60)
+		flashAt(Color3.fromRGB(225, 245, 255), 0.25, 0.25, p)
+		punch(ICE, 0.5, 0.5, -0.3, p)
+		animate(dur, function(a)
+			local t = os.clock()
+			core.Size = Vector3.one * (2 + 3 * a)
+			l.Brightness = 3 + 3 * a
+			frost.Size = Vector3.new(0.12, r * 2 * (1 - 0.6 * a), r * 2 * (1 - 0.6 * a))
+			frost.CFrame = CFrame.new(p + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, -t * 2.5, 0) * CFrame.Angles(0, 0, math.pi / 2)
+			for i, s in shards do
+				local ang = t * (3.5 + 3 * a) + i * (math.pi * 2 / #shards)
+				local rad = r * (0.85 - 0.65 * a) * (0.6 + 0.4 * ((i % 3) / 2))
+				local pp = centre + Vector3.new(math.cos(ang) * rad, math.sin(t * 2 + i) * 2, math.sin(ang) * rad)
+				s.CFrame = CFrame.new(pp, centre) * CFrame.Angles(math.pi / 2, t * 4, 0)
+			end
+		end, function()
+			swirl.Enabled = false
+			for _, s in shards do
+				s:Destroy()
+			end
+			core:Destroy()
+			frost:Destroy()
+			Debris:AddItem(anchor, 1.5)
+		end)
+	end)
+
+	-- Rail overcharge (call-in combo RAIL OVERCHARGE): a Railshot slug landed inside a Gravity Well. Bright purple-white flash,
+	-- a fat beam and a ring sweeping out to the pull radius; the server's bigger blast and the well's burst follow.
+	Fx.register("RailOvercharge", function(d)
+		local p: Vector3, r: number = d.p, d.r or 18
+		local H = 400
+		local OC = Color3.fromRGB(225, 200, 255)
+		local beam = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(H, 7, 7),
+			Color = Color3.fromRGB(250, 240, 255),
+			Transparency = 0,
+			CFrame = CFrame.new(p + Vector3.new(0, H / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		local glow = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(H, 14, 14),
+			Color = VOID,
+			Transparency = 0.5,
+			CFrame = beam.CFrame,
+		})
+		light(beam, OC, 60, 8)
+		tween(beam, 0.4, { Size = Vector3.new(H, 0.1, 0.1) })
+		tween(glow, 0.5, { Size = Vector3.new(H, 0.2, 0.2), Transparency = 1 })
+		Debris:AddItem(beam, 0.45)
+		Debris:AddItem(glow, 0.55)
+		ring(p, OC, 2, r, 0.45, 0.5)
+		ring(p, VOID, 1, r * 0.6, 0.3, 0.4)
+		snd("ShotRail", p)
+		orbitalMini(p, 1.2, OC)
+		trauma(2.8, 0.55, p, 120)
+		punch(OC, 1.1, 0.6, 0.3, p)
+		flashAt(Color3.fromRGB(250, 240, 255), 0.75, 0.3, p)
 	end)
 
 	-- Cryo Bomb: frost disc, ice spikes, ice tint (Highlight) on enemies whose FrozenUntil lies ahead
@@ -1400,6 +1613,79 @@ local function registerNew(Fx: any)
 	end)
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- Overwatch Skiff: a simple Skiff hull flown along shared/OverwatchPath (the server fires the door gun from the same path;
+-- the rounds themselves are drawn by Fx "SkiffGun" in SkiffFx). One model per call-in, destroyed when it has flown out.
+-- ---------------------------------------------------------------------------------------------
+type OverwatchRec = { model: Model, conn: RBXScriptConnection, loop: any }
+local overwatches: { [any]: OverwatchRec } = {}
+
+local function stopOverwatch(id: any)
+	local rec = overwatches[id]
+	if not rec then
+		return
+	end
+	overwatches[id] = nil
+	rec.conn:Disconnect()
+	stopLoop(rec.loop)
+	rec.model:Destroy()
+end
+
+local function buildOverwatchSkiff(): (Model, Part)
+	local white, orange = Color3.fromRGB(226, 228, 236), Color3.fromRGB(235, 120, 40)
+	local grey, dark = Color3.fromRGB(180, 184, 196), Color3.fromRGB(44, 48, 58)
+	local glow = Color3.fromRGB(120, 200, 255)
+	local cyl = Enum.PartType.Cylinder
+	local spec = {
+		{ size = Vector3.new(11, 5.5, 22), cf = CFrame.new(), color = white, material = Enum.Material.SmoothPlastic }, -- hull (pivot)
+		{ size = Vector3.new(10, 4, 7), cf = CFrame.new(0, -0.6, -14) * CFrame.Angles(math.rad(10), 0, 0), color = white, material = Enum.Material.SmoothPlastic },
+		{ size = Vector3.new(8, 2.6, 5), cf = CFrame.new(0, 2.6, -11.5) * CFrame.Angles(math.rad(-24), 0, 0), color = glow, material = Enum.Material.Glass, transparency = 0.25 },
+		{ size = Vector3.new(0.3, 1.4, 22), cf = CFrame.new(-5.6, 0.4, 0), color = orange, material = Enum.Material.SmoothPlastic },
+		{ size = Vector3.new(0.3, 1.4, 22), cf = CFrame.new(5.6, 0.4, 0), color = orange, material = Enum.Material.SmoothPlastic },
+		-- door guns
+		{ size = Vector3.new(0.8, 0.8, 3.2), cf = CFrame.new(-6.6, -2.2, -3.2), color = dark },
+		{ size = Vector3.new(0.8, 0.8, 3.2), cf = CFrame.new(6.6, -2.2, -3.2), color = dark },
+	}
+	for _, s in { -1, 1 } do
+		table.insert(spec, { size = Vector3.new(11, 0.8, 9), cf = CFrame.new(s * 11, -0.6, 3) * CFrame.Angles(0, s * math.rad(-12), s * math.rad(5)), color = grey })
+		table.insert(spec, { shape = cyl, size = Vector3.new(12, 5, 5), cf = CFrame.new(s * 14, 0.4, 4) * CFrame.Angles(0, math.pi / 2, 0), color = Color3.fromRGB(88, 94, 108) })
+		table.insert(spec, { shape = cyl, size = Vector3.new(0.6, 4.2, 4.2), cf = CFrame.new(s * 14, 0.4, 10.3) * CFrame.Angles(0, math.pi / 2, 0), color = glow, material = Enum.Material.Neon })
+		table.insert(spec, { shape = Enum.PartType.Ball, size = Vector3.new(1.2, 1.2, 1.2), cf = CFrame.new(s * 17, -0.2, 0), color = if s < 0 then Color3.fromRGB(255, 50, 50) else Color3.fromRGB(70, 255, 120), material = Enum.Material.Neon })
+	end
+	local model, root = buildModel(spec)
+	light(root, Color3.fromRGB(255, 215, 170), 40, 1.2)
+	return model, root
+end
+
+local function registerOverwatch(Fx: any)
+	Fx.register("OverwatchSkiff", function(d)
+		if type(d) ~= "table" or typeof(d.c) ~= "Vector3" or type(d.r) ~= "number" or type(d.d) ~= "number" or type(d.t0) ~= "number" then
+			return
+		end
+		stopOverwatch(d.id)
+		local centre: Vector3, radius: number, duration: number = d.c, d.r, d.d
+		local total = OverwatchPath.total(duration)
+		local tau0 = math.max(workspace:GetServerTimeNow() - d.t0, 0)
+		if tau0 >= total then
+			return
+		end
+		local model, root = buildOverwatchSkiff()
+		model:PivotTo((OverwatchPath.cframe(centre, radius, duration, tau0)))
+		local recv = os.clock()
+		local conn = animate(total - tau0, function()
+			model:PivotTo((OverwatchPath.cframe(centre, radius, duration, tau0 + os.clock() - recv)))
+		end, function()
+			stopOverwatch(d.id)
+		end)
+		overwatches[d.id] = { model = model, conn = conn, loop = loopAt("SkiffEngine", root) }
+	end)
+	Fx.register("OverwatchEnd", function(d)
+		if type(d) == "table" then
+			stopOverwatch(d.id)
+		end
+	end)
+end
+
 function CallInFx.init(Fx: any, audio: any, juice: any)
 	Audio = audio
 	Juice = juice
@@ -1407,6 +1693,7 @@ function CallInFx.init(Fx: any, audio: any, juice: any)
 	registerLance(Fx)
 	registerFalling(Fx)
 	registerJet(Fx)
+	registerOverwatch(Fx)
 	registerClouds(Fx)
 	registerPods(Fx)
 	FxRef = Fx

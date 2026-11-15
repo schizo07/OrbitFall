@@ -6,6 +6,7 @@
 -- PACE TUNING (playtest: "enemies need to move a bit slower, especially COG"). Faction multipliers on walk / run speed
 -- (Enemy.speed) and on the "charge" dash speed. Applied once to the roster below, so the fodder tier and the limb-loss speed
 -- penalty (server/Enemies/Dismember.luau) inherit them. LUMEN is untouched. Retune here.
+local Config = require(script.Parent.Parent.Config)
 local COG_SPEED_MULT = 0.8 -- robots: -20 %
 local BROOD_SPEED_MULT = 0.9 -- bugs: -10 %
 
@@ -60,6 +61,10 @@ export type Enemy = {
 	-- FLYING DRONE (Drone Foundry side objective): moved and fired by server/Enemies/DroneAI.luau instead of EnemyAI; the model is
 	-- built there too. hover = height band above the ground (studs).
 	drone: { hover: { number } }?,
+	-- LOOT RUNNER (server/Enemies/LootRunner.luau): behavior "flee" = EnemyAI runs from the nearest trooper and never attacks;
+	-- loot = a kill bursts into a resupply (LootRunner) and the Director leaves it alone
+	behavior: string?,
+	loot: boolean?,
 }
 -- base: spread when the target is first acquired (or comes back out of cover); min: spread after `tighten` s of steady aim.
 -- rangeMul: extra spread per Enemies.Aim.rangeRef studs beyond Enemies.Aim.rangeFrom; moveMul: extra spread for a target
@@ -326,6 +331,35 @@ E.SPOREMITE = {
 	salvage = 1, xp = 1, cost = 0.5,
 	desc = "Flying mite popped out of a spore spire. Spits small acid blobs.",
 	drone = { hover = { 8, 14 } },
+}
+
+-- LOOT RUNNERS (server/Enemies/LootRunner.luau): a rare courier that runs from the squad. Never attacks (no attacks, behavior
+-- "flee"), about 250 HP, light armour (1), 1.15 x trooper sprint speed. Added after the faction speed multipliers above so the
+-- speed is exactly that. cost 0: not counted in the Director's live cap. Armour 1 body, the glowing crate / sac is a soft spot.
+local LOOT_SPEED = Config.SprintSpeed * 1.15
+E.LOOT_COG = {
+	id = "LOOT_COG", name = "Scrap Courier", faction = "COG", class = "regular",
+	hp = 250, speed = LOOT_SPEED, size = 2.2,
+	zones = {
+		body = { armor = 1, mult = 1 },
+		crate = { armor = 1, mult = 1.5 },
+	},
+	attacks = {},
+	salvage = 0, xp = 5, cost = 0,
+	desc = "Small fast cart with a glowing crate. Runs from you. Catch it for a resupply.",
+	behavior = "flee", loot = true,
+}
+E.LOOT_BROOD = {
+	id = "LOOT_BROOD", name = "Gilded Grub", faction = "BROOD", class = "regular",
+	hp = 250, speed = LOOT_SPEED, size = 2.2,
+	zones = {
+		body = { armor = 1, mult = 1 },
+		sac = { armor = 1, mult = 1.5 },
+	},
+	attacks = {},
+	salvage = 0, xp = 5, cost = 0,
+	desc = "Fat shiny beetle with a glowing sac. Runs from you. Catch it for a resupply.",
+	behavior = "flee", loot = true,
 }
 
 local Enemies = { byId = E }

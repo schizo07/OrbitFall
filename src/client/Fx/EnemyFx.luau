@@ -1595,6 +1595,266 @@ local function startStaged()
 	end)
 end
 
+-- LOOT RUNNER (server/Enemies/LootRunner.luau) ------------------------------------------
+-- Marker while a runner lives: a gold billboard over it (name, distance, seconds left) and a gold pip on the compass tape
+-- (Compass.setExtra). Fx "LootBurst" {p, f}: glitter + a short ka-ching (Pickup, pitched up). Fx "LootEscape" {p, f}: a puff.
+local LOOT_GOLD = C3(255, 211, 74)
+type LootMark = { gui: BillboardGui, info: TextLabel, key: string, metres: number, secs: number }
+local lootMarks: { [Model]: LootMark } = {}
+local LootStyle: any = nil
+local LootCompass: any = nil
+
+local function lootRemove(m: Instance)
+	local mk = lootMarks[m :: Model]
+	if not mk then
+		return
+	end
+	lootMarks[m :: Model] = nil
+	if LootCompass then
+		LootCompass.setExtra(mk.key, nil)
+	end
+	mk.gui:Destroy()
+end
+
+local function lootAdd(m: Instance)
+	if not m:IsA("Model") or lootMarks[m] or not LootStyle then
+		return
+	end
+	local kind = m:GetAttribute("Kind")
+	local def = type(kind) == "string" and EnemyData.get(kind) or nil
+	if not def or not def.loot then
+		return
+	end
+	local lp = game:GetService("Players").LocalPlayer
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "LootMark"
+	gui.AlwaysOnTop = true
+	gui.LightInfluence = 0
+	gui.ResetOnSpawn = false
+	gui.Size = UDim2.fromOffset(150, 36)
+	gui.StudsOffset = Vector3.new(0, 5.5, 0)
+	gui.Adornee = m.PrimaryPart
+	gui.Parent = lp:WaitForChild("PlayerGui")
+	LootStyle.label({
+		Name = "Title",
+		Text = "LOOT RUNNER",
+		TextSize = 15,
+		Color = LOOT_GOLD,
+		XAlign = Enum.TextXAlignment.Center,
+		Size = UDim2.new(1, 0, 0, 16),
+		Parent = gui,
+	})
+	local info = LootStyle.label({
+		Name = "Info",
+		Text = "",
+		TextSize = 13,
+		XAlign = Enum.TextXAlignment.Center,
+		Position = UDim2.fromOffset(0, 16),
+		Size = UDim2.new(1, 0, 0, 14),
+		Parent = gui,
+	})
+	local id = m:GetAttribute("EnemyId")
+	lootMarks[m] = { gui = gui, info = info, key = "loot" .. tostring(id), metres = -1, secs = -1 }
+end
+
+local function lootStep()
+	if next(lootMarks) == nil then
+		return
+	end
+	local cam = workspace.CurrentCamera
+	if not cam then
+		return
+	end
+	for m, mk in lootMarks do
+		local root = m.PrimaryPart
+		if not m.Parent then
+			lootRemove(m)
+			continue
+		end
+		if not root then
+			continue
+		end
+		if mk.gui.Adornee ~= root then
+			mk.gui.Adornee = root
+		end
+		if LootCompass then
+			LootCompass.setExtra(mk.key, root.Position + Vector3.new(0, 3, 0), LOOT_GOLD)
+		end
+		local metres = math.floor((root.Position - cam.CFrame.Position).Magnitude + 0.5)
+		local ends = m:GetAttribute("LootEnds")
+		local secs = if type(ends) == "number" then math.max(math.ceil(ends - workspace:GetServerTimeNow()), 0) else -1
+		if metres ~= mk.metres or secs ~= mk.secs then
+			mk.metres = metres
+			mk.secs = secs
+			mk.info.Text = if secs >= 0 then string.format("%d m  -  %d s", metres, secs) else string.format("%d m", metres)
+		end
+	end
+end
+
+local function onLootBurst(d: any)
+	if typeof(d.p) ~= "Vector3" or not Fx then
+		return
+	end
+	local p: Vector3 = d.p
+	if Fx.burst then
+		Fx.burst("sparks", p, 40, { color = LOOT_GOLD, scale = 1.4, speed = 1.1 })
+	end
+	if Fx.debris then
+		Fx.debris(p, { n = 22, style = "ember", speed = 42, up = 1.6, scale = 1.6, life = 1.6 })
+	end
+	if Audio and Audio.play then
+		Audio.play("Pickup", p, { pitch = 1.5 })
+		task.delay(0.12, function()
+			Audio.play("Pickup", p, { pitch = 2.0, volume = 0.8 })
+		end)
+	end
+end
+
+local function onLootEscape(d: any)
+	if typeof(d.p) ~= "Vector3" or not Fx or not Fx.burst then
+		return
+	end
+	Fx.burst("puff", d.p, 18, { scale = 1.6 })
+	Fx.burst("dust", d.p, 14, { scale = 1.4 })
+end
+
+local function startLoot()
+	local okS, style = pcall(function()
+		return require(script.Parent.Parent.UI.HudStyle)
+	end)
+	if okS then
+		LootStyle = style
+	end
+	local okC, compass = pcall(function()
+		return require(script.Parent.Parent.UI.Compass)
+	end)
+	if okC then
+		LootCompass = compass
+	end
+	if not LootStyle then
+		return
+	end
+	RunService.RenderStepped:Connect(lootStep)
+	task.spawn(function()
+		local folder = workspace:WaitForChild("Enemies", 120)
+		if not folder then
+			return
+		end
+		for _, m in folder:GetChildren() do
+			lootAdd(m)
+		end
+		folder.ChildAdded:Connect(function(m)
+			task.defer(lootAdd, m)
+		end)
+		folder.ChildRemoved:Connect(lootRemove)
+	end)
+end
+
+-- ELITES (server/Enemies/Elites.luau) ----------------------------------------------------
+-- Enemy models with the attribute Elite = "Plated" | "Volatile" | "Swift" get a coloured outline (Highlight, no fill) and a small
+-- icon + name over the head. Both are local children of the model, so they go away with it (nothing to pool or clean up).
+local ELITE_LOOK = {
+	Plated = { color = C3(110, 165, 235), letter = "P" }, -- steel blue
+	Volatile = { color = C3(255, 140, 40), letter = "V" }, -- orange
+	Swift = { color = C3(90, 230, 110), letter = "S" }, -- green
+}
+
+local function eliteMark(m: Instance)
+	if not m:IsA("Model") or m:FindFirstChild("EliteOutline") then
+		return
+	end
+	local look = ELITE_LOOK[m:GetAttribute("Elite")]
+	local root = m.PrimaryPart
+	if not look or not root then
+		return
+	end
+	local hl = Instance.new("Highlight")
+	hl.Name = "EliteOutline"
+	hl.Adornee = m
+	hl.FillTransparency = 1
+	hl.OutlineColor = look.color
+	hl.OutlineTransparency = 0
+	hl.DepthMode = Enum.HighlightDepthMode.Occluded
+	hl.Parent = m
+
+	local boxCF, boxSize = m:GetBoundingBox()
+	local up = math.max(boxCF.Position.Y + boxSize.Y / 2 - root.Position.Y, 2) + 1.4
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "EliteIcon"
+	gui.AlwaysOnTop = false
+	gui.LightInfluence = 0
+	gui.MaxDistance = 130
+	gui.Size = UDim2.fromOffset(80, 44)
+	gui.StudsOffset = Vector3.new(0, up, 0)
+	gui.Adornee = root
+	local icon = Instance.new("Frame")
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.Position = UDim2.fromScale(0.5, 0)
+	icon.Size = UDim2.fromOffset(26, 26)
+	icon.BackgroundColor3 = C3(14, 16, 20)
+	icon.BackgroundTransparency = 0.25
+	icon.BorderSizePixel = 0
+	icon.Parent = gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = icon
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = look.color
+	stroke.Thickness = 2
+	stroke.Parent = icon
+	local letter = Instance.new("TextLabel")
+	letter.BackgroundTransparency = 1
+	letter.Size = UDim2.fromScale(1, 1)
+	letter.Font = Enum.Font.GothamBlack
+	letter.Text = look.letter
+	letter.TextColor3 = look.color
+	letter.TextSize = 17
+	letter.Parent = icon
+	local word = Instance.new("TextLabel")
+	word.BackgroundTransparency = 1
+	word.AnchorPoint = Vector2.new(0.5, 0)
+	word.Position = UDim2.new(0.5, 0, 0, 28)
+	word.Size = UDim2.new(1, 0, 0, 14)
+	word.Font = Enum.Font.GothamBold
+	word.Text = string.upper(tostring(m:GetAttribute("Elite")))
+	word.TextColor3 = look.color
+	word.TextSize = 11
+	word.TextStrokeTransparency = 0.4
+	word.Parent = gui
+	gui.Parent = root
+end
+
+local function startElites()
+	task.spawn(function()
+		local folder = workspace:WaitForChild("Enemies", 120)
+		if not folder then
+			return
+		end
+		local function watch(m: Instance)
+			if not m:IsA("Model") then
+				return
+			end
+			if m:GetAttribute("Elite") then
+				eliteMark(m)
+			else
+				local conn
+				conn = m:GetAttributeChangedSignal("Elite"):Connect(function()
+					if m:GetAttribute("Elite") then
+						conn:Disconnect()
+						eliteMark(m)
+					end
+				end)
+			end
+		end
+		for _, m in folder:GetChildren() do
+			watch(m)
+		end
+		folder.ChildAdded:Connect(function(m)
+			task.defer(watch, m)
+		end)
+	end)
+end
+
 -- Init -------------------------------------------------------------------------------
 function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx = fx
@@ -1607,8 +1867,12 @@ function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx.register("Breach", onBreach)
 	Fx.register("EnemyAttack", onEnemyAttack)
 	Fx.register("Death", onHeavyDeath) -- staged kinds: flung burning plates (the generic death burst stays in Fx/init.luau)
+	Fx.register("LootBurst", onLootBurst)
+	Fx.register("LootEscape", onLootEscape)
 	startStaged()
 	startDrones() -- foundry drones: rotor blur / wing flutter
+	startLoot()
+	startElites()
 end
 
 return EnemyFx

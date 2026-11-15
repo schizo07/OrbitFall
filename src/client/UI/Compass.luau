@@ -18,6 +18,7 @@ local SHORT = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
 local ui: { [string]: any } = {}
 local items: { { bearing: number, node: GuiObject } } = {}
 local mates: { [Player]: { node: Frame, key: string } } = {}
+local extras: { [string]: { pos: Vector3, node: Frame } } = {} -- Compass.setExtra (squad pings)
 local localPlayer = Players.LocalPlayer
 local headingShown = -1 -- last heading readout written (index * 1000 + degrees)
 local headingLabel: Instance? = nil -- the label it was written to
@@ -266,6 +267,12 @@ function Compass.step(cam: Camera, markers: { [string]: any })
 			ui.radarTag.Visible = on
 		end
 	end
+	for _, x in extras do
+		local d = x.pos - camPos
+		local rel = wrap180(math.deg(math.atan2(d.X, -d.Z)) - ang)
+		x.node.Visible = math.abs(rel) <= SPAN / 2 + 6
+		x.node.Position = UDim2.fromScale(Theme.clamp(0.5 + rel / SPAN, 0, 1), 0.5)
+	end
 
 	-- breach pip
 	local it = Store.get("intensity")
@@ -307,6 +314,38 @@ function Compass.ping(list: { any }, dur: number)
 		end
 	end
 	blipsUntil = os.clock() + dur
+end
+
+-- Extra pip on the tape for a world point (squad pings). Call again with a new pos to move it, with pos = nil to remove it.
+function Compass.setExtra(key: string, pos: Vector3?, color: Color3?)
+	local x = extras[key]
+	if not pos then
+		if x then
+			x.node:Destroy()
+			extras[key] = nil
+		end
+		return
+	end
+	if not x then
+		if not ui.layer then
+			return
+		end
+		x = {
+			pos = pos,
+			node = Style.glyph("diamond", {
+				Name = "Extra_" .. key,
+				Size = 10,
+				Color = color or Style.Amber,
+				Box = UDim2.fromOffset(16, TAPE_H),
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				ZIndex = 4,
+				Parent = ui.layer,
+			}),
+		}
+		extras[key] = x
+	end
+	x.pos = pos
 end
 
 -- Pip on the tape for an objective / beacon. Returned label is owned by the caller (HUD.refreshMarkers destroys it).

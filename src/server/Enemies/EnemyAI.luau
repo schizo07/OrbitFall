@@ -926,7 +926,7 @@ local function startAttack(e: any, idx: number, atk: any, now: number)
 	}
 	e.act = a
 	local cdBase = if atk.kind == "bolt" and not atk.windup then math.max(atk.cooldown, windup) else windup + atk.cooldown
-	e.cd[idx] = now + cdBase * rng:NextNumber(0.9, 1.15)
+	e.cd[idx] = now + cdBase * (e.cdMul or 1) * rng:NextNumber(0.9, 1.15) -- cdMul: elite SWIFT
 	e.gcd = now + windup + 0.35
 	-- replicated to clients: client/Fx/EnemyAnim.luau plays the attack pose (arm recoil / lunge) on AtkSeq changes
 	e.model:SetAttribute("AtkKind", atk.kind)
@@ -1203,6 +1203,46 @@ local function setWish(e: any, dir: Vector3?, speed: number, noSteer: boolean?)
 	e.wishSpeed = speed
 end
 
+-- LOOT RUNNER (def.behavior == "flee", server/Enemies/LootRunner.luau): never fights. Runs from the nearest trooper, switching
+-- between left / right of the straight-away line every 0.5-1.1 s, and bends back towards the map centre near the edge.
+-- Moves through setWish like every other unit (obstacle steering, separation, speed = def.speed).
+local FLEE_ZIG = math.rad(40)
+local FLEE_EDGE = 30 -- studs from the clamp edge where the pull towards the centre starts
+local function fleeThink(e: any, now: number)
+	e.target = nil
+	e.faceDir = nil
+	e.aimAt = nil
+	local from: Target? = nil
+	local nearest = math.huge
+	for _, tt in targets do
+		local d = flat(tt.pos - e.pos).Magnitude
+		if d < nearest then
+			nearest = d
+			from = tt
+		end
+	end
+	if not from then
+		setWish(e, nil, 0)
+		return
+	end
+	local away = flat(e.pos - from.pos)
+	away = if away.Magnitude > 0.05 then away.Unit else heading(e.yaw)
+	if now >= (e.zigUntil or 0) then
+		e.zigUntil = now + rng:NextNumber(0.5, 1.1)
+		e.zigSign = -(e.zigSign or (if rng:NextNumber() < 0.5 then 1 else -1))
+		e.zigAng = FLEE_ZIG * rng:NextNumber(0.6, 1.2)
+	end
+	local dir = CFrame.Angles(0, e.zigSign * e.zigAng, 0) * away
+	local lim = MAP_HALF - FLEE_EDGE
+	local px, pz = e.pos.X, e.pos.Z
+	local ex = if px > lim then lim - px elseif px < -lim then -lim - px else 0
+	local ez = if pz > lim then lim - pz elseif pz < -lim then -lim - pz else 0
+	if ex ~= 0 or ez ~= 0 then
+		dir += Vector3.new(ex, 0, ez) / FLEE_EDGE * 1.6
+	end
+	setWish(e, dir, if nearest > 90 then 0.5 else 1)
+end
+
 local function think(e: any, now: number)
 	local def = e.def
 
@@ -1263,6 +1303,11 @@ local function think(e: any, now: number)
 		end
 		e.faceDir = nil
 		setWish(e, e.wanderDir, 0.6)
+		return
+	end
+
+	if def.behavior == "flee" then
+		fleeThink(e, now)
 		return
 	end
 
@@ -1536,7 +1581,7 @@ local function update(e: any, dt: number, now: number)
 			if slow and slow.untilT > now then
 				mul = 1 - math.clamp(slow.mag or 0.5, 0, 0.9)
 			end
-			target = e.wish * (def.speed * e.wishSpeed * mul)
+			target = e.wish * (def.speed * (e.speedMul or 1) * e.wishSpeed * mul) -- speedMul: elite SWIFT
 		end
 		e.vel = e.vel:Lerp(target, math.min(1, dt * (if noMove then 10 else 6)))
 		if e.vel.Magnitude > 0.05 then

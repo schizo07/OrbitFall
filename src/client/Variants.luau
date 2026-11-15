@@ -432,6 +432,68 @@ local GROUPS = {
 			{ name = "B tight (2.2 deg cone, half lead)", set = { Feel_DroneAim = "tight" } },
 		},
 	},
+	{
+		-- client/UI/Pings + server/PingService: look + middle mouse / D-pad Right / touch long press = squad ping marker
+		name = "SQUAD PING",
+		keys = { "Feel_Ping" },
+		presets = {
+			{ name = "A off (input does nothing)", set = {} },
+			{ name = "B on (middle mouse / D-pad Right / long press)", set = { Feel_Ping = "on" } },
+		},
+	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/CallIns/Effects/RAILSHOT molten pool after the slug (server = mirrored)
+		name = "RAILSHOT HOT GROUND",
+		keys = { "Feel_RailHot" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B molten pool 6 s", set = { Feel_RailHot = "on" } },
+		},
+	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/CallIns/Combos, overlapping call-ins combine (server = mirrored)
+		name = "CALL-IN COMBOS",
+		keys = { "Feel_Combos" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B fire vortex (Gravity Well + fire)", set = { Feel_Combos = "on" } },
+		},
+	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/Hazards debris showers during the mission (server = mirrored)
+		name = "PLANET HAZARD",
+		keys = { "Feel_Hazard" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B debris showers", set = { Feel_Hazard = "debris" } },
+			{ name = "C debris every 30-45 s (testing)", set = { Feel_Hazard = "debris_fast" } },
+		},
+	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/Enemies/LootRunner: a courier runs from the squad, kill it for a resupply (server = mirrored)
+		name = "LOOT RUNNER",
+		keys = { "Feel_LootRunner" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B on (every 3-5 min)", set = { Feel_LootRunner = "on" } },
+			{ name = "C on, every 40-60 s (testing)", set = { Feel_LootRunner = "fast" } },
+		},
+	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/Enemies/Elites: some regular / medium spawns are elites with one affix (server = mirrored)
+		name = "ELITES",
+		keys = { "Feel_Elites" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B on (6 % of spawns)", set = { Feel_Elites = "on" } },
+			{ name = "C on, 40 % (testing)", set = { Feel_Elites = "fast" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough

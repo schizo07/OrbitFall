@@ -110,6 +110,7 @@ end
 local SHORT = {
 	ROCKETDROP = "ROCKET", GATLINGDROP = "GATLING", RAILDROP = "RAIL", REINFORCE = "REINF", HALFTON = "BOMB",
 	BARRAGE = "BARRAGE", STRAFE = "STRAFE", SUPPLY = "SUPPLY", CLUSTER = "CLUSTER",
+	OVERWATCH = "SKIFF",
 }
 function Theme.callinShort(def: any): string
 	if not def then

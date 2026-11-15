@@ -1,5 +1,7 @@
 -- Firestorm Line: a jet lays a strip of fire `length` x `width` along the throw direction (centred on the beacon) that
 -- burns enemies inside it for `duration` s at `dps` (AP `ap`).
+local Combos = require(script.Parent.Parent:WaitForChild("Combos"))
+
 local ALTITUDE = 70
 local APPROACH = 200
 local JET_SPEED = 170
@@ -26,6 +28,15 @@ return function(ctx)
 	local axis = seg / len
 	local startT = os.clock()
 	local last = startT
+	-- combos (CALL-IN COMBOS): the strip is a row of fire zones, each registered as the jet's fire reaches it
+	local comboSpots = {}
+	if Combos.enabled() then
+		local step = math.max(prm.width, 4)
+		for along = 0, len, step do
+			table.insert(comboSpots, along)
+		end
+	end
+	local comboNext = 1
 	while os.clock() - startT < prm.duration + prm.length / JET_SPEED do
 		task.wait(TICK)
 		local t = os.clock()
@@ -33,6 +44,10 @@ return function(ctx)
 		last = t
 		-- the burning part grows along the strip at jet speed
 		local lit = math.min((t - startT) * JET_SPEED, len)
+		while comboSpots[comboNext] and comboSpots[comboNext] <= lit do
+			Combos.addZone("firestorm", a + axis * comboSpots[comboNext], prm.width * 0.6, startT + prm.duration)
+			comboNext += 1
+		end
 		for _, e in S.Enemies.getInRadius(center, half + prm.width) do
 			if e.alive and e.root then
 				local rel = e.root.Position - a
