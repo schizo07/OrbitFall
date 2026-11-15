@@ -120,7 +120,8 @@ end
 local function volatileBlast(pos: Vector3)
 	S.Fx.play("Telegraph", { shape = "circle", p = pos + Vector3.new(0, 0.15, 0), r = VOL_RADIUS, t = VOL_WARN })
 	task.delay(VOL_WARN, function()
-		if not missionLive() then
+		local arena = S.TestArena and S.TestArena.active and S.TestArena.active()
+		if not missionLive() and not arena then
 			return
 		end
 		for _, p in S.Players.getAlive() do
