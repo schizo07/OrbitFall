@@ -176,7 +176,7 @@ function Mission.onPlayerJoined(p: Player)
 end
 
 local function cleanup()
-	for _, svc in { S.Director, S.Objectives, S.Extraction, S.CallIns } do
+	for _, svc in { S.Director, S.Hazards, S.Objectives, S.Extraction, S.CallIns } do
 		if svc then
 			local f = svc.stop or svc.stopAll
 			if svc.stopAll then
@@ -240,6 +240,9 @@ local function finish(success: boolean)
 	local samples = S.Objectives.getSamples and S.Objectives.getSamples() or 0
 	if S.Director then
 		pcall(S.Director.stop)
+	end
+	if S.Hazards then
+		pcall(S.Hazards.stop)
 	end
 	local st = success and "Results" or "Failed"
 	setState(st, success and Config.ResultsTime or Config.FailedTime)
@@ -414,6 +417,9 @@ function Mission.start(p: Player?, args)
 		local okD, errD = pcall(S.Director.start, map, Mission.faction, Mission.difficulty)
 		if not okD then
 			warn("[Mission] Director.start failed:", errD)
+		end
+		if S.Hazards then
+			pcall(S.Hazards.start, map)
 		end
 		tick(my)
 	end)

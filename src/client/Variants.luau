@@ -288,6 +288,17 @@ local GROUPS = {
 			{ name = "B molten pool 6 s", set = { Feel_RailHot = "on" } },
 		},
 	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/Hazards debris showers during the mission (server = mirrored)
+		name = "PLANET HAZARD",
+		keys = { "Feel_Hazard" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B debris showers", set = { Feel_Hazard = "debris" } },
+			{ name = "C debris every 30-45 s (testing)", set = { Feel_Hazard = "debris_fast" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough
