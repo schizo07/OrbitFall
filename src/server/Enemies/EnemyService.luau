@@ -30,6 +30,7 @@ local EnemyModels = require(script.Parent.EnemyModels)
 local EnemyAI = require(script.Parent.EnemyAI)
 local Dismember = require(script.Parent.Dismember) -- limb loss (hooks in hit / explode / init)
 local Wrecks = require(script.Parent.Wrecks) -- wreck left by COG walkers / heavies (def.wreck)
+local Elites = require(script.Parent.Elites) -- elite affixes (rolled in spawn, paid out in kill); see Elites.luau
 
 -- Heavy targets:
 --   DmgStage (model attr, 0..3)  staged damage for def.stages kinds (thresholds EnemyData.Stages); only ever goes up
@@ -83,8 +84,16 @@ local function ensureConn()
 	end)
 end
 
+-- armour of a zone for this instance: elite PLATED adds a tier to the body zone only (weak spots keep theirs)
+local function zoneArmor(e: any, zoneName: string?, zdef: any): number
+	if e.armorBonus and (zoneName == nil or zoneName == "body") then
+		return math.min(zdef.armor + e.armorBonus, math.max(e.armorCap or 4, zdef.armor))
+	end
+	return zdef.armor
+end
+
 local function bodyArmor(e: any): number
-	return e.def.zones.body.armor
+	return zoneArmor(e, "body", e.def.zones.body)
 end
 
 -- Spawning --------------------------------------------------------------------------
@@ -167,6 +176,7 @@ function EnemyService.spawn(kindId: string, cf: CFrame, opts: any?)
 		end
 	end
 
+	Elites.roll(e, opts.elite) -- opts.elite = forced affix (DebugHook "elite"); otherwise the Feel_Elites roll
 	model:PivotTo(cf)
 	model.Parent = getFolder()
 	EnemyAI.register(e, cf, opts)
@@ -213,7 +223,14 @@ local function kill(e: any, source: any?)
 			src = sKind,
 			weak = e.lastWeak == true,
 			blast = sKind == "explosion" or sKind == "callin" or e.lastBlast == true,
+			elite = e.elite, -- affix name: the killer's HUD feed says "ELITE DOWN"
 		})
+	end
+	if e.elite then
+		local okE, errE = pcall(Elites.onDeath, e, source)
+		if not okE then
+			warn("[Enemies] Elites.onDeath failed:", errE)
+		end
 	end
 	if e.def.wreck then
 		Wrecks.spawn(e)
@@ -391,7 +408,8 @@ function EnemyService.hit(part: BasePart, dmg: number, ap: number, source: any?,
 		return { result = "none", dealt = 0, killed = false, weak = false }
 	end
 	local zoneName, zdef = resolveZone(e, part:GetAttribute("Zone"))
-	local dealt, result = Damage.compute(dmg, ap, zdef.armor, zdef.mult)
+	local armor = zoneArmor(e, zoneName, zdef)
+	local dealt, result = Damage.compute(dmg, ap, armor, zdef.mult)
 	if zdef.blocks and result == "pen" and dealt <= 0 then
 		result = "partial" -- absorbed by the plate
 	end
@@ -407,7 +425,7 @@ function EnemyService.hit(part: BasePart, dmg: number, ap: number, source: any?,
 		dealt = dealt,
 		killed = killed,
 		weak = zdef.mult >= 2 and result ~= "deflect",
-		armor = zdef.armor,
+		armor = armor,
 		limb = limb == true,
 	}
 end
@@ -422,7 +440,7 @@ function EnemyService.damage(e: any, dmg: number, ap: number, source: any?, zone
 	if not e.def.zones[zoneName] then
 		zoneName = "body"
 	end
-	local dealt, result = Damage.compute(dmg, ap, zdef.armor, zdef.mult)
+	local dealt, result = Damage.compute(dmg, ap, zoneArmor(e, zoneName, zdef), zdef.mult)
 	local killed = false
 	if dealt > 0 then
 		killed = inflict(e, dealt, source, zoneName, nil)
@@ -651,6 +669,7 @@ function EnemyService.init(s: { [string]: any })
 	getFolder()
 	EnemyAI.init(s)
 	Dismember.init(s) -- dismemberment
+	Elites.init(s)
 	-- blast reactions for player-made explosions (server/Explosions.luau); S.Explosions is set before the init pass
 	if s.Explosions and s.Explosions.onBlast then
 		s.Explosions.onBlast(onBlast)

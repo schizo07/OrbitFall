@@ -978,6 +978,8 @@ local function onKill(d: any)
 		EventFeed.push("BEHEMOTH DOWN", Style.Amber, "kill")
 	elseif class == "heavy" then
 		EventFeed.push("HEAVY DOWN", Style.Amber, "kill")
+	elseif d.elite then -- elite affix kill (server/Enemies/Elites): the bonus grenade + stim toasts follow
+		EventFeed.push("ELITE DOWN", Style.Amber, "kill")
 	end
 	if MILESTONES[streak] and audioMod and audioMod.play2D then
 		pcall(audioMod.play2D, "KillWeak", { pitch = 0.9 + math.min(streak, 15) * 0.04, volume = 0.8, priority = 5 })

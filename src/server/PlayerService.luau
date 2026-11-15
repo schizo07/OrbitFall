@@ -230,6 +230,30 @@ function PlayerService.refill(p: Player, opts: { grenades: number? }?)
 	PlayerService.publish(p)
 end
 
+-- Small pickup (elite kills, server/Enemies/Elites): + grenades and + stims, capped at Config.Grenades / Config.Stims.Max.
+-- Returns what was actually added.
+function PlayerService.topUp(p: Player, grenades: number, stims: number): (number, number)
+	local r = recs[p]
+	if not r then
+		return 0, 0
+	end
+	local g0, s0 = r.grenades, r.stims or 0
+	r.grenades = math.min(Config.Grenades, g0 + grenades)
+	r.stims = math.min(Config.Stims.Max, s0 + stims)
+	local g, s = r.grenades - g0, r.stims - s0
+	if g > 0 or s > 0 then
+		S.Fx.to(p, "Sound", { k = "Pickup" })
+		if g > 0 then
+			S.State.notify(p, "Acquired Grenades +" .. g, Config.Colors.Friendly)
+		end
+		if s > 0 then
+			S.State.notify(p, "Acquired Stims +" .. s, Config.Colors.Friendly)
+		end
+		PlayerService.publish(p)
+	end
+	return g, s
+end
+
 -- Stim sprint length: Config.Stims.Sprint, or the Studio A/B attribute Feel_StimSprint (seconds, 0 = off; mirrored from
 -- the client by the "studioFeel" action, sent by client/Movement.luau).
 local function stimSprintTime(): number

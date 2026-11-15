@@ -21,6 +21,7 @@ Mission.extract = nil :: any
 Mission.kills = {} :: { [Player]: number }
 Mission.lootSalvage = {} :: { [Player]: number } -- bonus salvage from loot runners (server/Enemies/LootRunner), added to the results
 Mission.lastBeacon = nil :: Vector3?
+Mission.activeAt = 0 -- os.clock() when the real mission went Active (0 = not yet / arena)
 Mission.arena = false -- Studio test arena (World/TestArena): an "Active" mission with no objectives, no Director, no tick loop
 
 local token = 0 -- invalidates stale timers when the mission changes
@@ -413,6 +414,7 @@ function Mission.start(p: Player?, args)
 			return
 		end
 		Mission.state = "Active"
+		Mission.activeAt = os.clock() -- server/Enemies/Elites: no elites in the first minute
 		Mission.broadcast()
 		S.Objectives.onMainComplete = beginExtraction
 		-- pcall: a failure here must not skip tick(), or the mission could never end (timer / squad-wipe checks live there)

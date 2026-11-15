@@ -1561,6 +1561,111 @@ local function startLoot()
 	end)
 end
 
+-- ELITES (server/Enemies/Elites.luau) ----------------------------------------------------
+-- Enemy models with the attribute Elite = "Plated" | "Volatile" | "Swift" get a coloured outline (Highlight, no fill) and a small
+-- icon + name over the head. Both are local children of the model, so they go away with it (nothing to pool or clean up).
+local ELITE_LOOK = {
+	Plated = { color = C3(110, 165, 235), letter = "P" }, -- steel blue
+	Volatile = { color = C3(255, 140, 40), letter = "V" }, -- orange
+	Swift = { color = C3(90, 230, 110), letter = "S" }, -- green
+}
+
+local function eliteMark(m: Instance)
+	if not m:IsA("Model") or m:FindFirstChild("EliteOutline") then
+		return
+	end
+	local look = ELITE_LOOK[m:GetAttribute("Elite")]
+	local root = m.PrimaryPart
+	if not look or not root then
+		return
+	end
+	local hl = Instance.new("Highlight")
+	hl.Name = "EliteOutline"
+	hl.Adornee = m
+	hl.FillTransparency = 1
+	hl.OutlineColor = look.color
+	hl.OutlineTransparency = 0
+	hl.DepthMode = Enum.HighlightDepthMode.Occluded
+	hl.Parent = m
+
+	local boxCF, boxSize = m:GetBoundingBox()
+	local up = math.max(boxCF.Position.Y + boxSize.Y / 2 - root.Position.Y, 2) + 1.4
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "EliteIcon"
+	gui.AlwaysOnTop = false
+	gui.LightInfluence = 0
+	gui.MaxDistance = 130
+	gui.Size = UDim2.fromOffset(80, 44)
+	gui.StudsOffset = Vector3.new(0, up, 0)
+	gui.Adornee = root
+	local icon = Instance.new("Frame")
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.Position = UDim2.fromScale(0.5, 0)
+	icon.Size = UDim2.fromOffset(26, 26)
+	icon.BackgroundColor3 = C3(14, 16, 20)
+	icon.BackgroundTransparency = 0.25
+	icon.BorderSizePixel = 0
+	icon.Parent = gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = icon
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = look.color
+	stroke.Thickness = 2
+	stroke.Parent = icon
+	local letter = Instance.new("TextLabel")
+	letter.BackgroundTransparency = 1
+	letter.Size = UDim2.fromScale(1, 1)
+	letter.Font = Enum.Font.GothamBlack
+	letter.Text = look.letter
+	letter.TextColor3 = look.color
+	letter.TextSize = 17
+	letter.Parent = icon
+	local word = Instance.new("TextLabel")
+	word.BackgroundTransparency = 1
+	word.AnchorPoint = Vector2.new(0.5, 0)
+	word.Position = UDim2.new(0.5, 0, 0, 28)
+	word.Size = UDim2.new(1, 0, 0, 14)
+	word.Font = Enum.Font.GothamBold
+	word.Text = string.upper(tostring(m:GetAttribute("Elite")))
+	word.TextColor3 = look.color
+	word.TextSize = 11
+	word.TextStrokeTransparency = 0.4
+	word.Parent = gui
+	gui.Parent = root
+end
+
+local function startElites()
+	task.spawn(function()
+		local folder = workspace:WaitForChild("Enemies", 120)
+		if not folder then
+			return
+		end
+		local function watch(m: Instance)
+			if not m:IsA("Model") then
+				return
+			end
+			if m:GetAttribute("Elite") then
+				eliteMark(m)
+			else
+				local conn
+				conn = m:GetAttributeChangedSignal("Elite"):Connect(function()
+					if m:GetAttribute("Elite") then
+						conn:Disconnect()
+						eliteMark(m)
+					end
+				end)
+			end
+		end
+		for _, m in folder:GetChildren() do
+			watch(m)
+		end
+		folder.ChildAdded:Connect(function(m)
+			task.defer(watch, m)
+		end)
+	end)
+end
+
 -- Init -------------------------------------------------------------------------------
 function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx = fx
@@ -1577,6 +1682,7 @@ function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx.register("LootEscape", onLootEscape)
 	startStaged()
 	startLoot()
+	startElites()
 end
 
 return EnemyFx

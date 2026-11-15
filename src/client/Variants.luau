@@ -352,6 +352,17 @@ local GROUPS = {
 			{ name = "C on, every 40-60 s (testing)", set = { Feel_LootRunner = "fast" } },
 		},
 	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/Enemies/Elites: some regular / medium spawns are elites with one affix (server = mirrored)
+		name = "ELITES",
+		keys = { "Feel_Elites" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B on (6 % of spawns)", set = { Feel_Elites = "on" } },
+			{ name = "C on, 40 % (testing)", set = { Feel_Elites = "fast" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough

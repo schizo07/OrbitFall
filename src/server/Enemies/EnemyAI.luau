@@ -926,7 +926,7 @@ local function startAttack(e: any, idx: number, atk: any, now: number)
 	}
 	e.act = a
 	local cdBase = if atk.kind == "bolt" and not atk.windup then math.max(atk.cooldown, windup) else windup + atk.cooldown
-	e.cd[idx] = now + cdBase * rng:NextNumber(0.9, 1.15)
+	e.cd[idx] = now + cdBase * (e.cdMul or 1) * rng:NextNumber(0.9, 1.15) -- cdMul: elite SWIFT
 	e.gcd = now + windup + 0.35
 	-- replicated to clients: client/Fx/EnemyAnim.luau plays the attack pose (arm recoil / lunge) on AtkSeq changes
 	e.model:SetAttribute("AtkKind", atk.kind)
@@ -1565,7 +1565,7 @@ local function update(e: any, dt: number, now: number)
 			if slow and slow.untilT > now then
 				mul = 1 - math.clamp(slow.mag or 0.5, 0, 0.9)
 			end
-			target = e.wish * (def.speed * e.wishSpeed * mul)
+			target = e.wish * (def.speed * (e.speedMul or 1) * e.wishSpeed * mul) -- speedMul: elite SWIFT
 		end
 		e.vel = e.vel:Lerp(target, math.min(1, dt * (if noMove then 10 else 6)))
 		if e.vel.Magnitude > 0.05 then

@@ -132,6 +132,18 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 		local pos = root.Position + root.CFrame.LookVector * (b or 40)
 		local e = S.Enemies.spawn(a or "TINKER", CFrame.lookAt(pos, root.Position * Vector3.new(1, 0, 1) + Vector3.new(0, pos.Y, 0)))
 		return e and e.id
+	elseif cmd == "elite" then -- elite(affix, distanceInFront): a TINKER elite, affix "Plated" | "Volatile" | "Swift" (default Plated)
+		local root = first and S.Players.getRoot(first)
+		if not root then
+			return "no player"
+		end
+		local affix = a or "Plated"
+		if affix ~= "Plated" and affix ~= "Volatile" and affix ~= "Swift" then
+			return "unknown affix (Plated | Volatile | Swift)"
+		end
+		local pos = root.Position + root.CFrame.LookVector * (b or 40)
+		local e = S.Enemies.spawn("TINKER", CFrame.lookAt(pos, root.Position * Vector3.new(1, 0, 1) + Vector3.new(0, pos.Y, 0)), { elite = affix })
+		return e and e.id
 	elseif cmd == "lootrunner" then -- lootrunner(): one loot runner now, 30-45 studs from a random living trooper (needs a mission / the arena)
 		local e = S.LootRunner and S.LootRunner.spawnNow()
 		return if e then e.id else "none (no mission / no trooper / one already running)"
