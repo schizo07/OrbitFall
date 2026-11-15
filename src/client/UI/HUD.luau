@@ -22,6 +22,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
+local Damage = require(Shared:WaitForChild("Damage"))
 local Weapons = require(Shared:WaitForChild("Data"):WaitForChild("Weapons"))
 local CallIns = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
 local Store = require(script.Parent.Parent.Store)
@@ -220,6 +221,23 @@ local function buildCrosshair()
 		})
 		table.insert(hmPool, { frame = hm, scale = sc, bars = bars, tag = tag, tweens = {} })
 	end
+
+	-- armour tier tag (HUD.hitmarker): one label reused for every hit, sits under the crosshair; a bit bigger on touch
+	local tierTag = Theme.label({
+		Name = "ArmourTag",
+		Text = "",
+		Font = "Black",
+		TextSize = Theme.isTouch() and 16 or 14,
+		Size = UDim2.fromOffset(120, 16),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromOffset(0, 24),
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+		Parent = cross,
+	})
+	ui.tierTag = tierTag
+	ui.tierTween = nil :: Tween?
+	ui.tierGen = 0
 
 	-- reload bar under crosshair
 	local rb = Style.panel({
@@ -673,7 +691,40 @@ function HUD.banner(title: string, subtitle: string?, color: Color3?)
 end
 
 -- Hitmarkers ----------------------------------------------------------------------------------------------------------
-function HUD.hitmarker(result: string, weak: boolean?, killed: boolean?)
+-- Armour tier tag under the crosshair. Studio A/B (Variants group ARMOUR TAG, Feel_ArmourTag): nil = deflect + partial,
+-- "all" = every hit, "off" = never. Grey on a deflect, amber on a partial hit, white on a full pen.
+local TIER_TAG_HOLD = 0.25
+local TIER_TAG_FADE = 0.35
+local TIER_GREY = Color3.fromHex("a9b2c3")
+local function showTierTag(result: string, armor: number?)
+	local lbl: TextLabel? = ui.tierTag
+	if not lbl or not armor then
+		return
+	end
+	local mode = workspace:GetAttribute("Feel_ArmourTag")
+	if mode == "off" or (mode ~= "all" and result == "pen") then
+		return
+	end
+	local prev: Tween? = ui.tierTween
+	if prev then
+		prev:Cancel()
+	end
+	lbl.Text = string.upper(Damage.tierName(armor))
+	lbl.TextColor3 = if result == "deflect" then TIER_GREY elseif result == "partial" then Style.Amber else C.White
+	lbl.TextTransparency = 0
+	lbl.TextStrokeTransparency = 0.4
+	ui.tierGen += 1
+	local gen = ui.tierGen
+	task.delay(TIER_TAG_HOLD, function()
+		if ui.tierGen ~= gen then
+			return
+		end
+		ui.tierTween = tw(lbl, TIER_TAG_FADE, { TextTransparency = 1, TextStrokeTransparency = 1 })
+	end)
+end
+
+function HUD.hitmarker(result: string, weak: boolean?, killed: boolean?, armor: number?)
+	showTierTag(result, armor)
 	local hm = hmPool[hmIndex]
 	if not hm then
 		return

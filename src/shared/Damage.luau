@@ -19,6 +19,29 @@ function Damage.compute(dmg: number, ap: number, armor: number, mult: number?): 
 	end
 end
 
+-- Named armour tiers. The same 0-5 numbers as zone `armor` and weapon `ap`; the names are only for display.
+-- Rule of thumb for enemy data: big enemies have Heavy / Tank bodies but Light (at most Medium) weak spots, so a
+-- Light-AP weapon can still kill one by flanking it. AP 6 beats everything ("Anti-Tank").
+Damage.TIERS = {
+	{ name = "Light", min = 0, max = 2 },
+	{ name = "Medium", min = 3, max = 3 },
+	{ name = "Heavy", min = 4, max = 4 },
+	{ name = "Tank", min = 5, max = 5 },
+}
+Damage.ANTI_TANK = 6
+
+function Damage.tierName(value: number): string
+	if value >= Damage.ANTI_TANK then
+		return "Anti-Tank"
+	end
+	for _, t in Damage.TIERS do
+		if value <= t.max then
+			return t.name
+		end
+	end
+	return "Tank"
+end
+
 -- Explosion falloff: full damage inside core, then a curve down to EDGE at radius, 0 outside.
 -- 2026-11-14 (footage pass): was linear 1 -> 0.25; now 1 -> 0.45 on a u^1.5 curve, so the damage stays high for most of
 -- the ring and only drops near the edge (u = 0.5 gives 0.81, was 0.625). `edge` overrides EDGE for one call.

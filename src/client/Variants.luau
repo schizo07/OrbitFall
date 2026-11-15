@@ -198,6 +198,15 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/Input + UI/ContextPrompt: gamepad X was both Reload and the ProximityPrompt key (needs a pad to test)
+		name = "PAD INTERACT",
+		keys = { "Feel_PadInteract" },
+		presets = {
+			{ name = "A X interacts near a prompt, reloads otherwise", set = {} },
+			{ name = "B prompts on D-pad Up, X always reloads", set = { Feel_PadInteract = "dpad" } },
+		},
+	},
+	{
 		-- client/ThrowArc: predicted path + landing ring while a beacon is armed or the grenade button is held
 		name = "THROW ARC",
 		keys = { "Feel_ThrowArc" },
@@ -225,6 +234,16 @@ local GROUPS = {
 			{ name = "B soft (x0.5)", set = { Feel_CallInPunch = 0.5 } },
 			{ name = "C strong (x1.5)", set = { Feel_CallInPunch = 1.5 } },
 			{ name = "D off (no flash / colour punch)", set = { Feel_CallInPunch = 0 } },
+		},
+	},
+	{
+		-- client/UI/HUD.showTierTag: armour tier of the zone you hit, as a small tag under the crosshair
+		name = "ARMOUR TAG",
+		keys = { "Feel_ArmourTag" },
+		presets = {
+			{ name = "A deflect + partial hits", set = {} },
+			{ name = "B every hit", set = { Feel_ArmourTag = "all" } },
+			{ name = "C off", set = { Feel_ArmourTag = "off" } },
 		},
 	},
 	{

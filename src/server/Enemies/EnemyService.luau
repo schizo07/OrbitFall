@@ -407,6 +407,7 @@ function EnemyService.hit(part: BasePart, dmg: number, ap: number, source: any?,
 		dealt = dealt,
 		killed = killed,
 		weak = zdef.mult >= 2 and result ~= "deflect",
+		armor = zdef.armor,
 		limb = limb == true,
 	}
 end

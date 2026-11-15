@@ -390,7 +390,7 @@ local function traceShot(p: Player, w, origin: Vector3, dir: Vector3, pierceLeft
 			end
 			if hr then
 				if report then
-					hitConfirm:FireClient(p, hr.result, endPos, hr.killed, hr.weak)
+					hitConfirm:FireClient(p, hr.result, endPos, hr.killed, hr.weak, hr.armor)
 				end
 				S.Fx.except(p, "Impact", { p = endPos, n = res.Normal, r = hr.result, m = mat }, true)
 				if w.arc and hr.result ~= "deflect" then

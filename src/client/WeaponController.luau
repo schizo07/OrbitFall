@@ -383,9 +383,9 @@ function WeaponController.init()
 		end
 	end)
 
-	Net.event("HitConfirm").OnClientEvent:Connect(function(result, pos, killed, weak)
+	Net.event("HitConfirm").OnClientEvent:Connect(function(result, pos, killed, weak, armor)
 		if HUD and HUD.hitmarker then
-			HUD.hitmarker(result, weak, killed)
+			HUD.hitmarker(result, weak, killed, armor)
 		end
 		if result == "deflect" then
 			Audio.play2D("HitDeflect")

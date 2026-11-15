@@ -16,6 +16,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
+local Damage = require(Shared:WaitForChild("Damage"))
 local Weapons = require(Shared:WaitForChild("Data"):WaitForChild("Weapons"))
 local CallIns = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
 local Bonds = require(Shared:WaitForChild("Data"):WaitForChild("Bonds"))
@@ -238,15 +239,15 @@ local function statRow(parent: Instance, label: string, frac: number, valueText:
 		Size = UDim2.fromOffset(50, 20),
 		Parent = row,
 	})
-	local bar = Theme.bar({ Size = UDim2.new(1, -120, 0, 9), Position = UDim2.new(0, 54, 0.5, -4), Color = color, Parent = row })
+	local bar = Theme.bar({ Size = UDim2.new(1, -150, 0, 9), Position = UDim2.new(0, 54, 0.5, -4), Color = color, Parent = row })
 	bar:set(frac)
 	Theme.label({
 		Text = valueText,
 		Font = "Black",
 		TextSize = 13,
 		XAlign = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(60, 20),
-		Position = UDim2.new(1, -60, 0, 0),
+		Size = UDim2.fromOffset(90, 20),
+		Position = UDim2.new(1, -90, 0, 0),
 		Parent = row,
 	})
 end
@@ -260,7 +261,7 @@ local function weaponStats(parent: Instance, w: any, startOrder: number)
 		dtxt = tostring(w.splash.damage)
 	end
 	statRow(parent, "DAMAGE", math.sqrt(math.min(dmg, 900) / 900), dtxt, C.Accent, startOrder)
-	statRow(parent, "ARMOUR PEN", w.ap / 5, tostring(w.ap), C.Gold, startOrder + 1)
+	statRow(parent, "ARMOUR PEN", w.ap / 5, string.upper(Damage.tierName(w.ap)) .. " (" .. tostring(w.ap) .. ")", C.Gold, startOrder + 1)
 	if w.rpm then
 		statRow(parent, "RATE", w.rpm / 900, tostring(w.rpm), C.Friendly, startOrder + 2)
 	end
