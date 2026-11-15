@@ -815,6 +815,44 @@ function Audio.preload()
 			end
 			task.wait()
 		end
+		-- keepers (2026-11-15, measured in Studio): a sound file stays decoded only while a Sound using it is IN the game
+		-- tree. Pooled sounds are parentless, so after a pause the first shot's file was dropped and its Sound took
+		-- ~400 ms to start ("delayed shot audio"); with one silent, primed Sound per file parked in SoundService it starts
+		-- in 1 frame. Every one-shot file is kept (weapons, impacts, explosions, enemies, call-ins, UI); music, ambience
+		-- loops and the unused `_Pop` test variants are not.
+		-- All of them measured 83 MB of sound memory: phones / tablets keep only guns, hits and explosions.
+		local UserInputService = game:GetService("UserInputService")
+		local phone = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+		local PHONE_GROUPS = { Weapons = true, Impacts = true, Explosions = true }
+		local keep: { [string]: boolean } = {}
+		for key, entry in Sounds do
+			local groupOk = if phone then PHONE_GROUPS[entry.group] == true else (entry.group ~= "Music" and entry.group ~= "Ambience")
+			if groupOk and not string.find(key, "_Pop", 1, true) then
+				for _, l in entry.layers do
+					if l.id and l.id ~= "" then
+						keep[l.id] = true
+					end
+				end
+			end
+		end
+		local folder = Instance.new("Folder")
+		folder.Name = "AudioKeepers"
+		folder.Parent = SoundService
+		local n = 0
+		for id in keep do
+			local s = Instance.new("Sound")
+			s.SoundId = id
+			s.Volume = 0
+			s.Parent = folder
+			s:Play() -- primed once at volume 0 (first real start measured 17 ms instead of 50)
+			task.delay(0.15, function()
+				s:Stop()
+			end)
+			n += 1
+			if n % 8 == 0 then
+				task.wait()
+			end
+		end
 	end)
 end
 
