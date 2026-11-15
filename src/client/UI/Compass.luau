@@ -19,6 +19,8 @@ local ui: { [string]: any } = {}
 local items: { { bearing: number, node: GuiObject } } = {}
 local mates: { [Player]: { node: Frame, key: string } } = {}
 local localPlayer = Players.LocalPlayer
+local headingShown = -1 -- last heading readout written (index * 1000 + degrees)
+local headingLabel: Instance? = nil -- the label it was written to
 
 local function wrap180(a: number): number
 	return (a + 180) % 360 - 180
@@ -160,7 +162,12 @@ function Compass.step(cam: Camera, markers: { [string]: any })
 	end
 	local deg = (math.floor(ang + 0.5) + 360) % 360
 	local idx = math.floor((deg + 22.5) / 45) % 8 + 1
-	ui.heading.Text = string.format("%s [%03d]", SHORT[idx], deg)
+	-- the readout only changes when the whole-degree heading does; skip the format + Text write (re-layout) otherwise
+	local shown = idx * 1000 + deg
+	if shown ~= headingShown or headingLabel ~= ui.heading then
+		headingShown, headingLabel = shown, ui.heading
+		ui.heading.Text = string.format("%s [%03d]", SHORT[idx], deg)
+	end
 
 	local camPos = cam.CFrame.Position
 	-- teammates (squad colour; a square while carrying a core cell)

@@ -16,6 +16,7 @@ local LIFE = 8 -- seconds a line stays before it fades
 local FADE = 0.6
 local MAX_CHARS = 38
 local OPEN_FOR = 8 -- touch popup auto-close
+local FEED_X = Style.MARGIN + 210 + 66 + 8 -- touch: just right of the own card (HUD: HP_BAR_W 210 + 66 wide)
 
 local ui: { [string]: any } = {}
 local lines: { any } = {}
@@ -91,8 +92,10 @@ function EventFeed.build(parent: Instance, isTouch: boolean)
 	holder.Name = "EventFeed"
 	holder.BackgroundTransparency = 1
 	if touch then
+		-- opens above the FEED button, which sits right of the own card (bottom-left) so it never lands on the
+		-- left column (objectives / uplink list), whose height changes with the mission and the screen
 		holder.AnchorPoint = Vector2.new(0, 1)
-		holder.Position = UDim2.new(0, Style.MARGIN, 0.5, -30)
+		holder.Position = UDim2.new(0, FEED_X, 1, -(Style.MARGIN + 28))
 		holder.Size = UDim2.fromOffset(220, 5 * H + 4 * 2 + 20)
 		holder.Visible = false
 		holder.ZIndex = 5
@@ -142,8 +145,8 @@ function EventFeed.build(parent: Instance, isTouch: boolean)
 		btn.BackgroundColor3 = Style.Black
 		btn.BackgroundTransparency = Style.PANEL_ALPHA
 		btn.BorderSizePixel = 0
-		btn.AnchorPoint = Vector2.new(0, 0)
-		btn.Position = UDim2.new(0, Style.MARGIN, 0.5, -26)
+		btn.AnchorPoint = Vector2.new(0, 1)
+		btn.Position = UDim2.new(0, FEED_X, 1, -Style.MARGIN)
 		btn.Size = UDim2.fromOffset(62, 24)
 		btn.Visible = false
 		btn.ZIndex = 6

@@ -31,6 +31,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
+local CombatPose = require(script.Parent.Parent:WaitForChild("CombatPose"))
 
 local VitalsFx = {}
 
@@ -406,6 +407,7 @@ local function onStim(d: any)
 		return
 	end
 	local mine = d.u == player.UserId
+	CombatPose.stimPose(d.u) -- injection pose + prop for every client
 	local who = Players:GetPlayerByUserId(tonumber(d.u) or 0)
 	local char = who and who.Character
 	local torso = char and (char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")) :: BasePart?
@@ -478,6 +480,7 @@ local function step(dt: number)
 			shownFrac, hitPulse, hitDesat, beatPulse = 1, 0, 0, 0
 			if cc then
 				cc.Saturation, cc.Contrast, cc.TintColor = 0, 0, Color3.new(1, 1, 1)
+				cc.Enabled = false
 			end
 			ContextPrompt.hide("stim")
 		end
@@ -515,9 +518,18 @@ local function step(dt: number)
 	local e = ensureCC()
 	local desat = (math.clamp((missing - 0.2) / 0.8, 0, 1) * 0.7 + hitDesat * 0.4) * k
 	desat = math.min(desat, 0.95)
-	e.Saturation = -desat
-	e.Contrast = 0.08 * desat
-	e.TintColor = Color3.new(1, 1 - 0.12 * desat, 1 - 0.14 * desat)
+	-- at full health this is an identity grade: switch the effect off so it costs no full-screen pass (matters on phones)
+	local grading = desat > 0.001
+	if e.Enabled ~= grading then
+		e.Enabled = grading
+	end
+	if grading then
+		e.Saturation = -desat
+		e.Contrast = 0.08 * desat
+		e.TintColor = Color3.new(1, 1 - 0.12 * desat, 1 - 0.14 * desat)
+	elseif e.Saturation ~= 0 then
+		e.Saturation, e.Contrast, e.TintColor = 0, 0, Color3.new(1, 1, 1)
+	end
 
 	stepStatic(dt)
 

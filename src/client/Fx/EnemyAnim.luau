@@ -1158,6 +1158,7 @@ local function poseLegacy(e: Entry, t: number, dt: number)
 end
 
 -- Main loop -------------------------------------------------------------------------
+local poseCtx: Ctx = { t = 0, dt = 0, amp = 0, ph = 0, vf = 0, fw = 1, pre = 0, kick = 0, post = 0, ak = nil, fsx = 0, fsz = 0, fyaw = 0, stag = 0, fs = 1 }
 local function step(_dt: number)
 	frame += 1
 	local cam = Workspace.CurrentCamera
@@ -1325,23 +1326,23 @@ local function step(_dt: number)
 			stag = (if u < 0.15 then u / 0.15 else (1 - (u - 0.15) / 0.85) ^ 2) * e.stagK
 		end
 		local sp = max(e.speed, 0.01)
-		local c: Ctx = {
-			t = t,
-			dt = dt,
-			amp = e.amp,
-			ph = e.phase,
-			vf = vf,
-			fw = 0.4 + 0.6 * clamp(abs(-lv.Z) / sp, 0, 1),
-			pre = pre,
-			kick = kick,
-			post = post,
-			ak = ak,
-			fsx = e.sx * fsc,
-			fsz = e.sz * fsc,
-			fyaw = e.syaw * fsc,
-			stag = stag,
-			fs = fsc,
-		}
+		-- one shared context, refilled per enemy (the pose functions only read it, within this call): no table per enemy per frame
+		local c = poseCtx
+		c.t = t
+		c.dt = dt
+		c.amp = e.amp
+		c.ph = e.phase
+		c.vf = vf
+		c.fw = 0.4 + 0.6 * clamp(abs(-lv.Z) / sp, 0, 1)
+		c.pre = pre
+		c.kick = kick
+		c.post = post
+		c.ak = ak
+		c.fsx = e.sx * fsc
+		c.fsz = e.sz * fsc
+		c.fyaw = e.syaw * fsc
+		c.stag = stag
+		c.fs = fsc
 		if cfg.type == "biped" then
 			poseBiped(e, c)
 		elseif cfg.type == "quad" then

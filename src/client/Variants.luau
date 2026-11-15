@@ -279,6 +279,26 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/CombatPose (mirrored hold) + client/CameraController (camera fix); press V / R3 to swap shoulders
+		name = "LEFT SHOULDER",
+		keys = { "Feel_LeftShoulder" },
+		presets = {
+			{ name = "A gun to the left hand (mirrored aim)", set = {} },
+			{ name = "B camera fix only (lens left + up, head fades)", set = { Feel_LeftShoulder = "camera" } },
+			{ name = "C old (gun stays right)", set = { Feel_LeftShoulder = "old" } },
+		},
+	},
+	{
+		-- client/CombatPose.luau stimPose: free hand injector pose when a stim is used (any player's stim)
+		name = "STIM POSE",
+		keys = { "Feel_StimPose" },
+		presets = {
+			{ name = "A neck jab (0.55 s)", set = {} },
+			{ name = "B thigh jab, faster (0.4 s)", set = { Feel_StimPose = "thigh" } },
+			{ name = "C off", set = { Feel_StimPose = "off" } },
+		},
+	},
+	{
 		-- IDEA (night/2026-11-14-ideas): server/CallIns/Effects/RAILSHOT molten pool after the slug (server = mirrored)
 		name = "RAILSHOT HOT GROUND",
 		keys = { "Feel_RailHot" },

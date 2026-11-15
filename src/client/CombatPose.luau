@@ -47,6 +47,16 @@ local UP = Vector3.new(0, 1, 0)
 local CF0 = CFrame.identity
 local clamp, exp, sqrt, abs = math.clamp, math.exp, math.sqrt, math.abs
 
+-- X-mirror of a CFrame (reflect through the YZ plane on both sides)
+local function mirrorX(cf: CFrame): CFrame
+	local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
+	return CFrame.new(-x, y, z, r00, -r01, -r02, -r10, r11, r12, -r20, r21, r22)
+end
+-- scale a vector's X (mirror = -1)
+local function sx(v: Vector3, s: number): Vector3
+	return Vector3.new(v.X * s, v.Y, v.Z)
+end
+
 -- ── tunables (studs / radians, UpperTorso space: +X right, +Y up, -Z forward) ──────────────────────────────
 -- Roblox arms are short for the torso width (shoulder->wrist 1.64 studs, shoulders 1.5 off-centre), so a square
 -- stance cannot get the left hand onto a rifle: the chest is BLADED (yawed so the left shoulder comes forward), the
@@ -67,6 +77,12 @@ local LOW_READY_YAW = 0.55 -- muzzle swings to the left across the body
 local LOW_READY_ROLL = -0.35
 local RUN_SPEED = 19 -- horizontal speed above which a character carries the gun low (sprinting)
 local AIM_SEND_EVERY = 0.12
+-- Left shoulder (V / R3, Store "camSide" = -1), Studio A/B workspace attribute Feel_LeftShoulder: nil = the gun
+-- follows the camera to the left shoulder (left hand on the grip, right hand on the handguard); "camera" and "old"
+-- keep the gun right-handed (CameraController owns the "camera" fix). Local player only: the hand does not replicate.
+local HAND_RATE = 10 -- hand swap blend speed (exp rate, 1/s), same as the camera's shoulder swap
+local SWAP_DIP = Vector3.new(0, -0.45, -0.25) -- square chest frame, x (1 - h^2): mid-swap the gun ducks under the chin
+local SWAP_BAND = 0.35 -- the hands trade grip / handguard only while |h| < this (gun near the centre line)
 -- Studio-only live tuning: workspace attributes PoseTune_<name> override the constants above (no restart needed)
 local IS_STUDIO = RunService:IsStudio()
 local function tune(name: string, default: any): any
@@ -103,6 +119,7 @@ type Rig = {
 	pitch: number,
 	low: number,
 	ads: number, -- local aim-down-sights blend (0..1)
+	hand: number, -- smoothed handedness: +1 gun on the right shoulder .. -1 on the left (local player only)
 	active: boolean,
 	gunHidden: boolean?, -- haul carry pose hid the gun (showGun)
 }
@@ -167,6 +184,7 @@ local function buildRig(c: Model): Rig?
 		pitch = 0,
 		low = 0,
 		ads = 0,
+		hand = 1,
 		active = false,
 	}
 end
@@ -330,6 +348,135 @@ local function blocked(r: Rig, isLocal: boolean): boolean
 	return false
 end
 
+-- ── stim injection pose ──────────────────────────────────────────────────────────────────────────────────────
+-- VitalsFx's Fx "Stim" calls CombatPose.stimPose(userId) for every client. The free hand (the support hand: left, or
+-- the right one while the gun sits in the left hand) swings an injector to the neck, jabs, drops back; the gun hand
+-- is untouched, so moving and shooting one-handed carry on. Studio A/B workspace attribute Feel_StimPose:
+-- nil = neck jab 0.55 s, "thigh" = thigh jab 0.4 s without head tilt, "off" = no pose.
+-- Profile times (s): arm up by `rise`, jab runs j0 -> j1 (in) -> j2 (out), arm drops from `drop0` to `dur`.
+local STIM_NECK = { rise = 0.2, j0 = 0.2, j1 = 0.29, j2 = 0.38, drop0 = 0.38, dur = 0.55 }
+local STIM_THIGH = { rise = 0.13, j0 = 0.13, j1 = 0.19, j2 = 0.26, drop0 = 0.26, dur = 0.4 }
+local STIM_PRONE_SHARE = 0.6 -- lying down: the arm only goes this far toward the target, no head tilt
+local STIM_TILT = 0.2 -- head roll (rad) away from the injected side
+type StimState = { t0: number, thigh: boolean, p: any, arm: string?, prop: Instance? }
+local stims: { [Model]: StimState } = {}
+
+local function smooth(x: number): number
+	x = clamp(x, 0, 1)
+	return x * x * (3 - 2 * x)
+end
+
+-- arm weight, jab and head tilt amounts (all 0..1) at elapsed time e
+local function stimEnvelope(p: any, e: number): (number, number, number)
+	local w = smooth(e / p.rise) * (1 - smooth((e - p.drop0) / (p.dur - p.drop0)))
+	local jab = 0
+	if e >= p.j0 and e < p.j1 then
+		jab = smooth((e - p.j0) / (p.j1 - p.j0))
+	elseif e >= p.j1 and e <= p.j2 then
+		jab = 1 - smooth((e - p.j1) / (p.j2 - p.j1))
+	end
+	return w, jab, w * (0.5 + 0.5 * jab)
+end
+
+local function makeInjector(c: Model, arm: string): Instance?
+	local hand = c:FindFirstChild(arm .. "Hand")
+	if not hand or not hand:IsA("BasePart") then
+		return nil
+	end
+	local function part(size: Vector3, color: Color3, mat: Enum.Material, cf: CFrame, shape: Enum.PartType): Part
+		local x = Instance.new("Part")
+		x.Name = "StimInjector"
+		x.Shape = shape
+		x.Size = size
+		x.Color = color
+		x.Material = mat
+		x.CanCollide = false
+		x.CanQuery = false
+		x.CanTouch = false
+		x.Massless = true
+		x.CastShadow = false
+		x.CFrame = (hand :: BasePart).CFrame * cf
+		local w = Instance.new("Weld")
+		w.Part0 = hand :: BasePart
+		w.Part1 = x
+		w.C0 = cf
+		w.Parent = x
+		x.Parent = c
+		return x
+	end
+	-- barrel along the hand's -Y (the fingers' direction), neon tip at the far end
+	local barrel = part(Vector3.new(0.9, 0.25, 0.25), Color3.fromRGB(70, 78, 92), Enum.Material.Metal, CFrame.new(0, -0.3, 0) * CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder)
+	part(Vector3.new(0.22, 0.17, 0.17), Color3.fromRGB(90, 255, 150), Enum.Material.Neon, CFrame.new(0, -0.86, 0) * CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder).Parent = barrel
+	return barrel
+end
+
+local function dropStim(c: Model)
+	local s = stims[c]
+	if s then
+		if s.prop then
+			s.prop:Destroy()
+		end
+		stims[c] = nil
+	end
+end
+
+-- wrist target, elbow pole and hand rotation for the injecting arm (side: -1 left hand, +1 right hand)
+local function stimTarget(thigh: boolean, side: number, upper: CFrame, S: Vector3, jab: number): (Vector3, Vector3, CFrame)
+	local rightV, upV, fwd = upper.RightVector, upper.UpVector, upper.LookVector
+	local off: Vector3, dirIn: Vector3, pole: Vector3
+	if thigh then
+		off = Vector3.new(-side * (0.05 + 0.25 * jab), -1.55 + 0.1 * jab, -0.1 + 0.05 * jab)
+		dirIn = (-rightV * side * 0.8 - upV * 0.6).Unit
+		pole = -fwd * 0.8 + rightV * side * 0.3
+	else
+		off = Vector3.new(-side * (0.1 + 0.2 * jab), 0.45 - 0.05 * jab, -0.35 + 0.05 * jab)
+		dirIn = (-rightV * side - upV * 0.1).Unit
+		pole = rightV * side - upV * 0.6
+	end
+	local Y = -dirIn
+	local X = (fwd - Y * fwd:Dot(Y)).Unit
+	return S + upper:VectorToWorldSpace(off), pole, CFrame.fromMatrix(Vector3.zero, X, Y)
+end
+
+function CombatPose.stimPose(userId: number)
+	local plr = Players:GetPlayerByUserId(tonumber(userId) or 0)
+	local c = plr and plr.Character
+	if not c then
+		return
+	end
+	local mode = Workspace:GetAttribute("Feel_StimPose")
+	if mode == "off" then
+		return
+	end
+	dropStim(c)
+	local thigh = mode == "thigh"
+	stims[c] = { t0 = os.clock(), thigh = thigh, p = if thigh then STIM_THIGH else STIM_NECK }
+end
+
+-- which shoulder the local gun belongs on: -1 only for the mirrored-aim preset (default) while the camera is left
+local function wantedHand(): number
+	local mode = Workspace:GetAttribute("Feel_LeftShoulder")
+	if mode == "camera" or mode == "old" then
+		return 1
+	end
+	return if Store.get("camSide") == -1 then -1 else 1
+end
+
+-- support hand slides along the handguard: as far forward as wanted, but never past what that arm can reach
+-- (long guns on short Roblox arms), so the hand stays ON the gun instead of hovering short of it
+local function handguardTarget(arm: Arm, upper: CFrame, gunCF: CFrame, wrist: Vector3, reach: number): Vector3
+	local want = clamp(reach * 0.5, 0.75, 1.7)
+	local P0 = (gunCF * CFrame.new(wrist)).Position
+	local D = gunCF.LookVector
+	local w = P0 - (upper * arm.sh.C0).Position
+	local R = (arm.a + arm.b) * 0.97
+	local wd = w:Dot(D)
+	local disc = wd * wd - w:Dot(w) + R * R
+	local fg = if disc >= 0 then -wd + sqrt(disc) else -wd
+	fg = clamp(math.min(fg, want), 0.35, want)
+	return P0 + D * fg
+end
+
 local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	local _, handle = findGun(r.c)
 	local grip = handle and r.c:FindFirstChild("RightHand") and (r.c.RightHand :: BasePart):FindFirstChild("RightGrip")
@@ -350,6 +497,42 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 		return
 	end
 	showGun(r, true)
+
+	-- handedness: the local gun follows the camera shoulder (smoothed); other characters stay right-handed
+	local handTarget = if isLocal then wantedHand() else 1
+	r.hand += (handTarget - r.hand) * (1 - exp(-dt * HAND_RATE))
+	local h = clamp(r.hand, -1, 1)
+	local mid = 1 - h * h -- 0 on either shoulder, 1 mid-swap
+	-- gR: the right hand's share of the grip role (1 = right hand on the grip); the hands trade only near the centre line
+	local band = math.max(tune("SwapBand", SWAP_BAND), 0.05)
+	local gR = clamp((h + band) / (2 * band), 0, 1)
+	gR = gR * gR * (3 - 2 * gR)
+
+	-- stim injection: the support hand (left, or the right one while the gun is in the left hand) does the jab
+	local stim = stims[r.c]
+	local stimW, stimJab, stimTilt, stimSide = 0, 0, 0, -1
+	if stim then
+		local e = os.clock() - stim.t0
+		if e < stim.p.dur then
+			if not stim.arm then
+				stim.arm = if gR >= 0.5 then "L" else "R"
+				stim.prop = makeInjector(r.c, stim.arm)
+			end
+			stimSide = if stim.arm == "L" then -1 else 1
+			stimW, stimJab, stimTilt = stimEnvelope(stim.p, e)
+			local stance = r.c:GetAttribute("Stance")
+			if isLocal and Movement and Movement.getStance then
+				stance = Movement.getStance()
+			end
+			if stance == "prone" then
+				stimW *= STIM_PRONE_SHARE
+				stimTilt = 0
+			end
+			if stim.thigh then
+				stimTilt = 0
+			end
+		end
+	end
 
 	-- aim pitch
 	local pitch: number
@@ -378,7 +561,7 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	local pistol = reach < 1.25
 
 	-- spine: lean into the aim pitch, blade the chest for long guns (less while running at low-ready)
-	local blade = (if pistol then tune("PistolBlade", 0.2) else tune("Blade", BLADE)) * (1 - low * 0.6)
+	local blade = (if pistol then tune("PistolBlade", 0.2) else tune("Blade", BLADE)) * (1 - low * 0.6) * h
 	local waistShare = tune("WaistShare", WAIST_SHARE)
 	setC0(
 		r.waist,
@@ -386,7 +569,10 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	)
 	-- head: undo the blade and take part of the remaining pitch, so the visor looks down the sights
 	if r.neck and r.neckBase then
-		setC0(r.neck, r.neckBase * CFrame.Angles(0, blade, 0) * CFrame.Angles(p * (1 - waistShare) * tune("HeadShare", HEAD_SHARE), 0, 0))
+		setC0(
+			r.neck,
+			r.neckBase * CFrame.Angles(0, blade, 0) * CFrame.Angles(p * (1 - waistShare) * tune("HeadShare", HEAD_SHARE), 0, stimSide * STIM_TILT * stimTilt)
+		)
 	end
 
 	-- forward kinematics down to the upper torso (this frame's animated Transforms)
@@ -407,51 +593,69 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	end
 	local yawCF = CFrame.lookAt(Vector3.zero, flat, UP)
 	local gp = r.pitch * (1 - low) + LOW_READY_PITCH * low
-	local aimRot = yawCF * CFrame.Angles(0, LOW_READY_YAW * low, 0) * CFrame.Angles(gp, 0, LOW_READY_ROLL * low)
+	local aimRot = yawCF * CFrame.Angles(0, LOW_READY_YAW * low * h, 0) * CFrame.Angles(gp, 0, LOW_READY_ROLL * low * h)
 
 	local gunCF: CFrame
 	if pistol then
-		local pocket = square * tune("PistolPocket", PISTOL_POCKET)
+		local pocket = square * sx(tune("PistolPocket", PISTOL_POCKET), h)
 		gunCF = CFrame.new(pocket) * aimRot * CFrame.new(0, -0.1, -tune("PistolReach", PISTOL_REACH))
 	else
-		-- right-handed gun: pushing it right only helps over the right shoulder (left shoulder: see docs left-hand design)
-		local wantAds = if isLocal and Input.isDown("Aim") and Store.get("camSide") ~= -1 then 1 else 0
+		-- the ADS slide pushes the gun to the camera's side: right-handed it only helps over the right shoulder, so on
+		-- the left shoulder it stays off unless the gun itself moved to the left hand (mirrored-aim preset)
+		local wantAds = if isLocal and Input.isDown("Aim") and (handTarget == -1 or Store.get("camSide") ~= -1) then 1 else 0
 		r.ads += (wantAds - r.ads) * (1 - exp(-dt * 14)) -- same rate as the camera's aim blend
-		local pocket = square * (tune("Pocket", POCKET) + tune("AdsShift", ADS_POCKET_SHIFT) * r.ads * (1 - low))
+		local shoulderPocket = tune("Pocket", POCKET) + tune("AdsShift", ADS_POCKET_SHIFT) * r.ads * (1 - low)
+		local pocket = square * (sx(shoulderPocket, h) + tune("SwapDip", SWAP_DIP) * mid)
 		gunCF = CFrame.new(pocket) * aimRot * CFrame.new(tune("Grip", GRIP_FROM_POCKET))
 	end
 	if isLocal and GunFeel then
-		gunCF = gunCF * (GunFeel.offset or CF0)
+		local off = GunFeel.offset or CF0
+		if h < 0.999 then
+			off = off:Lerp(mirrorX(off), (1 - h) * 0.5) -- the reload roll tips the other way on the left shoulder
+		end
+		gunCF = gunCF * off
 	end
 
 	-- arms
 	local right = upper.RightVector
 	local back = -upper.LookVector
 	local down = -upper.UpVector
-	local rTarget = (gunCF * CFrame.new(R_WRIST)).Position
-	local lTarget: Vector3
+	-- per-hand grip / support targets (wrist offsets and hand rotations belong to the hand, X-mirrored for the left),
+	-- blended by gR so the hands trade roles mid-swap. At h = 1 this is the plain right-handed hold.
+	local rGripT = (gunCF * CFrame.new(R_WRIST)).Position
+	local lGripT = (gunCF * CFrame.new(sx(R_WRIST, -1))).Position
+	local lSupT: Vector3
+	local rSupT: Vector3
 	if pistol then
-		lTarget = (gunCF * CFrame.new(-0.16, 0.12, 0.16)).Position
+		lSupT = (gunCF * CFrame.new(-0.16, 0.12, 0.16)).Position
+		rSupT = (gunCF * CFrame.new(0.16, 0.12, 0.16)).Position
 	else
-		-- support hand slides along the handguard: as far forward as wanted, but never past what the left arm
-		-- can reach (long guns on short Roblox arms), so the hand stays ON the gun instead of hovering short of it
-		local want = clamp(reach * 0.5, 0.75, 1.7)
-		local P0 = (gunCF * CFrame.new(L_WRIST)).Position
-		local D = gunCF.LookVector
-		local w = P0 - (upper * r.L.sh.C0).Position
-		local R = (r.L.a + r.L.b) * 0.97
-		local wd = w:Dot(D)
-		local disc = wd * wd - w:Dot(w) + R * R
-		local fg = if disc >= 0 then -wd + sqrt(disc) else -wd
-		fg = clamp(math.min(fg, want), 0.35, want)
-		lTarget = P0 + D * fg
+		lSupT = handguardTarget(r.L, upper, gunCF, L_WRIST, reach)
+		-- the right hand only goes on the handguard while swapping or on the left shoulder
+		rSupT = if gR < 1 - 1e-3 then handguardTarget(r.R, upper, gunCF, sx(L_WRIST, -1), reach) else rGripT
 	end
 	local gunRot = gunCF.Rotation
 	-- hands: fingers (-Y) wrap down around the grip / under the handguard, palms facing the gun
-	local rHandRot = gunRot * CFrame.Angles(-0.35, 0, 0)
-	local lHandRot = gunRot * CFrame.Angles(-1.1, 0, -0.5)
-	local rHand = solveArm(r.R, upper, rTarget, down + right * 0.9 + back * 0.35, rHandRot)
-	solveArm(r.L, upper, lTarget, down * 1.2 - right * 0.25 + back * 0.1, lHandRot)
+	local gripRot = gunRot * CFrame.Angles(-0.35, 0, 0) -- symmetric: the same for either hand
+	local lSupRot = gunRot * CFrame.Angles(-1.1, 0, -0.5)
+	local rSupRot = gunRot * CFrame.Angles(-1.1, 0, 0.5)
+	-- elbow poles: grip elbow out to its side and back, support elbow tucked under
+	local rPole = (down * 1.2 + right * 0.25 + back * 0.1):Lerp(down + right * 0.9 + back * 0.35, gR)
+	local lPole = (down - right * 0.9 + back * 0.35):Lerp(down * 1.2 - right * 0.25 + back * 0.1, gR)
+	local rTarget, rRot = rSupT:Lerp(rGripT, gR), rSupRot:Lerp(gripRot, gR)
+	local lTarget, lRot = lGripT:Lerp(lSupT, gR), gripRot:Lerp(lSupRot, gR)
+	if stimW > 0 and stim then
+		-- the injecting arm blends away from the gun; the grip weld below compensates, so the gun stays put
+		local free = if stim.arm == "L" then r.L else r.R
+		local tgt, pole, rot = stimTarget(stim.thigh, stimSide, upper, (upper * free.sh.C0).Position, stimJab)
+		if stim.arm == "L" then
+			lTarget, lPole, lRot = lTarget:Lerp(tgt, stimW), lPole:Lerp(pole, stimW), lRot:Lerp(rot, stimW)
+		else
+			rTarget, rPole, rRot = rTarget:Lerp(tgt, stimW), rPole:Lerp(pole, stimW), rRot:Lerp(rot, stimW)
+		end
+	end
+	local rHand = solveArm(r.R, upper, rTarget, rPole, rRot)
+	solveArm(r.L, upper, lTarget, lPole, lRot)
 
 	-- weld the gun where we want it, relative to the solved right hand
 	grip.C0 = rHand:Inverse() * gunCF * grip.C1
@@ -500,6 +704,12 @@ local function frame(dt: number)
 	for c, r in rigs do
 		if not c.Parent then
 			rigs[c] = nil
+		end
+	end
+	-- stim poses end on their own clock (also when the rig was released mid-way); the injector goes with them
+	for c, s in stims do
+		if not c.Parent or os.clock() - s.t0 >= s.p.dur then
+			dropStim(c)
 		end
 	end
 

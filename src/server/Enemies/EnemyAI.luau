@@ -1047,6 +1047,7 @@ local function pickTarget(e: any): (Target?, number)
 	return nil, bestD
 end
 
+local STEER_DEGS = { 40, -40, 75, -75, 115, -115 }
 local function steer(e: any, dir: Vector3): Vector3
 	-- local obstacle avoidance: raycast ahead, try deflected headings
 	local h = math.min(e.def.size, 3) + 0.5
@@ -1059,7 +1060,7 @@ local function steer(e: any, dir: Vector3): Vector3
 	if not blocked(dir) then
 		return dir
 	end
-	for _, deg in { 40, -40, 75, -75, 115, -115 } do
+	for _, deg in STEER_DEGS do
 		local d = CFrame.Angles(0, math.rad(deg), 0) * dir
 		if not blocked(d) then
 			return d
