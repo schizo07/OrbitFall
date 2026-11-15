@@ -105,6 +105,11 @@ if Weapon then
 end
 if CallIn and Weapon then
 	safeCall("CallIn", CallIn.init, Dial, Weapon.aimPoint)
+	-- squad ping (Variants "SQUAD PING", Feel_Ping): look + middle mouse / D-pad Right / touch long press
+	local Pings = UI and safeRequire(UI:FindFirstChild("Pings"))
+	if Pings then
+		safeCall("Pings", Pings.init, Weapon.aimPoint)
+	end
 end
 
 -- Knockback / hurt feedback from the server

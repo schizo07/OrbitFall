@@ -45,11 +45,12 @@ S.Mission = try("Mission", function() return root.Mission end)
 S.TestArena = try("TestArena", function() return root.World.TestArena end) -- Studio test arena
 S.DevTools = try("DevTools", function() return root.DevTools end) -- Studio quick start + arena keys remote
 S.Hazards = try("Hazards", function() return root.Hazards end) -- planet hazards (debris showers), started by Mission
+S.Ping = try("PingService", function() return root.PingService end) -- squad ping relay
 S.Explosions = try("Explosions", function() return root.Explosions end) -- blast entry point + onBlast listeners (no init needed)
 
 local ORDER = {
 	"Assets", "Actions", "Fx", "State", "Save", "Progress", "Shop", "Enemies", "Projectiles", "Director",
-	"CallIns", "Map", "Ship", "Objectives", "Extraction", "Players", "Weapons", "War", "Hazards", "Mission", "TestArena", "DevTools",
+	"CallIns", "Map", "Ship", "Objectives", "Extraction", "Players", "Weapons", "War", "Hazards", "Mission", "TestArena", "DevTools", "Ping",
 }
 
 for _, name in ORDER do

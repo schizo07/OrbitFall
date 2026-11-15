@@ -1,5 +1,5 @@
 -- Abstract input actions for keyboard/mouse, gamepad and touch (MobileControls calls Input.set).
--- Actions: Fire Aim Reload Grenade Dial Interact Sprint Swap1 Swap2 Swap3 Jump Scoreboard Crouch Prone
+-- Actions: Fire Aim Reload Grenade Dial Interact Sprint Swap1 Swap2 Swap3 Jump Scoreboard Crouch Prone Ping
 local UserInputService = game:GetService("UserInputService")
 
 local Input = {}
@@ -43,6 +43,7 @@ local PASS_GP: { [string]: boolean } = { Jump = true }
 local MOUSE: { [Enum.UserInputType]: string } = {
 	[Enum.UserInputType.MouseButton1] = "Fire",
 	[Enum.UserInputType.MouseButton2] = "Aim",
+	[Enum.UserInputType.MouseButton3] = "Ping", -- squad ping (client/UI/Pings; gamepad D-pad Right + touch long press are read there)
 }
 
 function Input.on(action: string, fn: (boolean) -> ())

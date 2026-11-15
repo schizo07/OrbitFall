@@ -299,6 +299,15 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/UI/Pings + server/PingService: look + middle mouse / D-pad Right / touch long press = squad ping marker
+		name = "SQUAD PING",
+		keys = { "Feel_Ping" },
+		presets = {
+			{ name = "A off (input does nothing)", set = {} },
+			{ name = "B on (middle mouse / D-pad Right / long press)", set = { Feel_Ping = "on" } },
+		},
+	},
+	{
 		-- IDEA (night/2026-11-14-ideas): server/CallIns/Effects/RAILSHOT molten pool after the slug (server = mirrored)
 		name = "RAILSHOT HOT GROUND",
 		keys = { "Feel_RailHot" },
