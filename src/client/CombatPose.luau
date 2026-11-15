@@ -348,6 +348,111 @@ local function blocked(r: Rig, isLocal: boolean): boolean
 	return false
 end
 
+-- ── stim injection pose ──────────────────────────────────────────────────────────────────────────────────────
+-- VitalsFx's Fx "Stim" calls CombatPose.stimPose(userId) for every client. The free hand (the support hand: left, or
+-- the right one while the gun sits in the left hand) swings an injector to the neck, jabs, drops back; the gun hand
+-- is untouched, so moving and shooting one-handed carry on. Studio A/B workspace attribute Feel_StimPose:
+-- nil = neck jab 0.55 s, "thigh" = thigh jab 0.4 s without head tilt, "off" = no pose.
+-- Profile times (s): arm up by `rise`, jab runs j0 -> j1 (in) -> j2 (out), arm drops from `drop0` to `dur`.
+local STIM_NECK = { rise = 0.2, j0 = 0.2, j1 = 0.29, j2 = 0.38, drop0 = 0.38, dur = 0.55 }
+local STIM_THIGH = { rise = 0.13, j0 = 0.13, j1 = 0.19, j2 = 0.26, drop0 = 0.26, dur = 0.4 }
+local STIM_PRONE_SHARE = 0.6 -- lying down: the arm only goes this far toward the target, no head tilt
+local STIM_TILT = 0.2 -- head roll (rad) away from the injected side
+type StimState = { t0: number, thigh: boolean, p: any, arm: string?, prop: Instance? }
+local stims: { [Model]: StimState } = {}
+
+local function smooth(x: number): number
+	x = clamp(x, 0, 1)
+	return x * x * (3 - 2 * x)
+end
+
+-- arm weight, jab and head tilt amounts (all 0..1) at elapsed time e
+local function stimEnvelope(p: any, e: number): (number, number, number)
+	local w = smooth(e / p.rise) * (1 - smooth((e - p.drop0) / (p.dur - p.drop0)))
+	local jab = 0
+	if e >= p.j0 and e < p.j1 then
+		jab = smooth((e - p.j0) / (p.j1 - p.j0))
+	elseif e >= p.j1 and e <= p.j2 then
+		jab = 1 - smooth((e - p.j1) / (p.j2 - p.j1))
+	end
+	return w, jab, w * (0.5 + 0.5 * jab)
+end
+
+local function makeInjector(c: Model, arm: string): Instance?
+	local hand = c:FindFirstChild(arm .. "Hand")
+	if not hand or not hand:IsA("BasePart") then
+		return nil
+	end
+	local function part(size: Vector3, color: Color3, mat: Enum.Material, cf: CFrame, shape: Enum.PartType): Part
+		local x = Instance.new("Part")
+		x.Name = "StimInjector"
+		x.Shape = shape
+		x.Size = size
+		x.Color = color
+		x.Material = mat
+		x.CanCollide = false
+		x.CanQuery = false
+		x.CanTouch = false
+		x.Massless = true
+		x.CastShadow = false
+		x.CFrame = (hand :: BasePart).CFrame * cf
+		local w = Instance.new("Weld")
+		w.Part0 = hand :: BasePart
+		w.Part1 = x
+		w.C0 = cf
+		w.Parent = x
+		x.Parent = c
+		return x
+	end
+	-- barrel along the hand's -Y (the fingers' direction), neon tip at the far end
+	local barrel = part(Vector3.new(0.9, 0.25, 0.25), Color3.fromRGB(70, 78, 92), Enum.Material.Metal, CFrame.new(0, -0.3, 0) * CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder)
+	part(Vector3.new(0.22, 0.17, 0.17), Color3.fromRGB(90, 255, 150), Enum.Material.Neon, CFrame.new(0, -0.86, 0) * CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder).Parent = barrel
+	return barrel
+end
+
+local function dropStim(c: Model)
+	local s = stims[c]
+	if s then
+		if s.prop then
+			s.prop:Destroy()
+		end
+		stims[c] = nil
+	end
+end
+
+-- wrist target, elbow pole and hand rotation for the injecting arm (side: -1 left hand, +1 right hand)
+local function stimTarget(thigh: boolean, side: number, upper: CFrame, S: Vector3, jab: number): (Vector3, Vector3, CFrame)
+	local rightV, upV, fwd = upper.RightVector, upper.UpVector, upper.LookVector
+	local off: Vector3, dirIn: Vector3, pole: Vector3
+	if thigh then
+		off = Vector3.new(-side * (0.05 + 0.25 * jab), -1.55 + 0.1 * jab, -0.1 + 0.05 * jab)
+		dirIn = (-rightV * side * 0.8 - upV * 0.6).Unit
+		pole = -fwd * 0.8 + rightV * side * 0.3
+	else
+		off = Vector3.new(-side * (0.1 + 0.2 * jab), 0.45 - 0.05 * jab, -0.35 + 0.05 * jab)
+		dirIn = (-rightV * side - upV * 0.1).Unit
+		pole = rightV * side - upV * 0.6
+	end
+	local Y = -dirIn
+	local X = (fwd - Y * fwd:Dot(Y)).Unit
+	return S + upper:VectorToWorldSpace(off), pole, CFrame.fromMatrix(Vector3.zero, X, Y)
+end
+
+function CombatPose.stimPose(userId: number)
+	local plr = Players:GetPlayerByUserId(tonumber(userId) or 0)
+	local c = plr and plr.Character
+	if not c then
+		return
+	end
+	local mode = Workspace:GetAttribute("Feel_StimPose")
+	if mode == "off" then
+		return
+	end
+	dropStim(c)
+	local thigh = mode == "thigh"
+	stims[c] = { t0 = os.clock(), thigh = thigh, p = if thigh then STIM_THIGH else STIM_NECK }
+end
+
 -- which shoulder the local gun belongs on: -1 only for the mirrored-aim preset (default) while the camera is left
 local function wantedHand(): number
 	local mode = Workspace:GetAttribute("Feel_LeftShoulder")
@@ -403,6 +508,32 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	local gR = clamp((h + band) / (2 * band), 0, 1)
 	gR = gR * gR * (3 - 2 * gR)
 
+	-- stim injection: the support hand (left, or the right one while the gun is in the left hand) does the jab
+	local stim = stims[r.c]
+	local stimW, stimJab, stimTilt, stimSide = 0, 0, 0, -1
+	if stim then
+		local e = os.clock() - stim.t0
+		if e < stim.p.dur then
+			if not stim.arm then
+				stim.arm = if gR >= 0.5 then "L" else "R"
+				stim.prop = makeInjector(r.c, stim.arm)
+			end
+			stimSide = if stim.arm == "L" then -1 else 1
+			stimW, stimJab, stimTilt = stimEnvelope(stim.p, e)
+			local stance = r.c:GetAttribute("Stance")
+			if isLocal and Movement and Movement.getStance then
+				stance = Movement.getStance()
+			end
+			if stance == "prone" then
+				stimW *= STIM_PRONE_SHARE
+				stimTilt = 0
+			end
+			if stim.thigh then
+				stimTilt = 0
+			end
+		end
+	end
+
 	-- aim pitch
 	local pitch: number
 	if isLocal then
@@ -438,7 +569,10 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	)
 	-- head: undo the blade and take part of the remaining pitch, so the visor looks down the sights
 	if r.neck and r.neckBase then
-		setC0(r.neck, r.neckBase * CFrame.Angles(0, blade, 0) * CFrame.Angles(p * (1 - waistShare) * tune("HeadShare", HEAD_SHARE), 0, 0))
+		setC0(
+			r.neck,
+			r.neckBase * CFrame.Angles(0, blade, 0) * CFrame.Angles(p * (1 - waistShare) * tune("HeadShare", HEAD_SHARE), 0, stimSide * STIM_TILT * stimTilt)
+		)
 	end
 
 	-- forward kinematics down to the upper torso (this frame's animated Transforms)
@@ -508,8 +642,20 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	-- elbow poles: grip elbow out to its side and back, support elbow tucked under
 	local rPole = (down * 1.2 + right * 0.25 + back * 0.1):Lerp(down + right * 0.9 + back * 0.35, gR)
 	local lPole = (down - right * 0.9 + back * 0.35):Lerp(down * 1.2 - right * 0.25 + back * 0.1, gR)
-	local rHand = solveArm(r.R, upper, rSupT:Lerp(rGripT, gR), rPole, rSupRot:Lerp(gripRot, gR))
-	solveArm(r.L, upper, lGripT:Lerp(lSupT, gR), lPole, gripRot:Lerp(lSupRot, gR))
+	local rTarget, rRot = rSupT:Lerp(rGripT, gR), rSupRot:Lerp(gripRot, gR)
+	local lTarget, lRot = lGripT:Lerp(lSupT, gR), gripRot:Lerp(lSupRot, gR)
+	if stimW > 0 and stim then
+		-- the injecting arm blends away from the gun; the grip weld below compensates, so the gun stays put
+		local free = if stim.arm == "L" then r.L else r.R
+		local tgt, pole, rot = stimTarget(stim.thigh, stimSide, upper, (upper * free.sh.C0).Position, stimJab)
+		if stim.arm == "L" then
+			lTarget, lPole, lRot = lTarget:Lerp(tgt, stimW), lPole:Lerp(pole, stimW), lRot:Lerp(rot, stimW)
+		else
+			rTarget, rPole, rRot = rTarget:Lerp(tgt, stimW), rPole:Lerp(pole, stimW), rRot:Lerp(rot, stimW)
+		end
+	end
+	local rHand = solveArm(r.R, upper, rTarget, rPole, rRot)
+	solveArm(r.L, upper, lTarget, lPole, lRot)
 
 	-- weld the gun where we want it, relative to the solved right hand
 	grip.C0 = rHand:Inverse() * gunCF * grip.C1
@@ -558,6 +704,12 @@ local function frame(dt: number)
 	for c, r in rigs do
 		if not c.Parent then
 			rigs[c] = nil
+		end
+	end
+	-- stim poses end on their own clock (also when the rig was released mid-way); the injector goes with them
+	for c, s in stims do
+		if not c.Parent or os.clock() - s.t0 >= s.p.dur then
+			dropStim(c)
 		end
 	end
 

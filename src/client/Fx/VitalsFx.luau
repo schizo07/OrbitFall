@@ -31,6 +31,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
+local CombatPose = require(script.Parent.Parent:WaitForChild("CombatPose"))
 
 local VitalsFx = {}
 
@@ -406,6 +407,7 @@ local function onStim(d: any)
 		return
 	end
 	local mine = d.u == player.UserId
+	CombatPose.stimPose(d.u) -- injection pose + prop for every client
 	local who = Players:GetPlayerByUserId(tonumber(d.u) or 0)
 	local char = who and who.Character
 	local torso = char and (char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")) :: BasePart?
