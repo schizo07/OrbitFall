@@ -10,6 +10,7 @@
 
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local EnemyFx = {}
 
@@ -175,7 +176,10 @@ local function removeBolt(id: any, b: any)
 end
 
 -- returns true when the bolt is finished
-local function stepBolt(b: any, now: number): boolean
+-- Studio A/B Feel_PerfSaver ("touch" = phones only, "all" = everywhere): bolts more than SAVER_FAR studs from the camera
+-- raycast every 2nd frame; the ray then sweeps from the last checked position, so the doubled segment cannot tunnel.
+local SAVER_FAR = 60
+local function stepBolt(b: any, now: number, camPos: Vector3?): boolean
 	local t = now - b.t0
 	if t > b.life + 0.15 or not b.part.Parent then
 		return true
@@ -187,14 +191,21 @@ local function stepBolt(b: any, now: number): boolean
 		vel = b.v - Vector3.new(0, b.g * t, 0)
 	end
 	local prev = b.prev
-	if prev then
+	local skipRay = false
+	if camPos and prev and (pos - camPos).Magnitude > SAVER_FAR then
+		b.skipRay = not b.skipRay
+		skipRay = b.skipRay
+	end
+	if prev and not skipRay then
 		local seg = pos - prev
 		local m = seg.Magnitude
 		if m > 0.05 and m < 2000 and workspace:Raycast(prev, seg, boltRay) then
 			return true -- reached the ground: the slug vanishes there (BoltEnd plays the impact)
 		end
 	end
-	b.prev = pos
+	if not skipRay then
+		b.prev = pos
+	end
 	local cf
 	if b.oriented and vel.Magnitude > 0.1 then
 		local dir = vel.Unit
@@ -227,9 +238,18 @@ local function step(dt: number)
 	if next(bolts) then
 		refreshBoltRay()
 		local now = os.clock()
+		-- perf saver (Studio A/B): far bolts raycast every 2nd frame; camPos stays nil when the saver is off
+		local camPos: Vector3? = nil
+		if RunService:IsStudio() then
+			local mode = workspace:GetAttribute("Feel_PerfSaver")
+			if mode == "all" or (mode == "touch" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) then
+				local cam = workspace.CurrentCamera
+				camPos = if cam then cam.CFrame.Position else nil
+			end
+		end
 		-- one bad bolt must never abort the loop (that would freeze every bolt after it in place, forever)
 		for id, b in bolts do
-			local ok, done = pcall(stepBolt, b, now)
+			local ok, done = pcall(stepBolt, b, now, camPos)
 			if not ok then
 				stepWarn("bolt", done)
 			end
