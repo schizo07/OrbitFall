@@ -1686,6 +1686,79 @@ local function registerOverwatch(Fx: any)
 	end)
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- Holo Decoy: the hologram model itself and its flicker are server parts (Effects/DECOY); here the materialise ping that
+-- shows the taunt radius, and the harmless shower of light when it ends.
+-- ---------------------------------------------------------------------------------------------
+local function registerDecoy(Fx: any)
+	local cyan = Color3.fromRGB(80, 235, 255)
+	Fx.register("DecoyPing", function(d)
+		local p: Vector3 = d.p
+		if typeof(p) ~= "Vector3" or camDist(p) > 260 then
+			return
+		end
+		local radius = if type(d.r) == "number" then d.r else 40
+		ring(p, cyan, 1, radius, 0.9, 0.2)
+		ring(p, cyan, 1, 5, 0.5, 0.35)
+		-- scan lines climbing the hologram
+		local lines = {}
+		for i = 1, qn(4) do
+			lines[i] = mkPart({
+				Size = Vector3.new(3.2, 0.12, 3.2),
+				Color = cyan,
+				Transparency = 0.3,
+				CFrame = CFrame.new(p + Vector3.new(0, 0.2, 0)),
+			})
+		end
+		animate(0.8, function(a)
+			for i, l in lines do
+				local k = (a * 2 + (i - 1) / #lines) % 1
+				l.CFrame = CFrame.new(p + Vector3.new(0, 0.2 + k * 6, 0))
+				l.Transparency = 0.3 + 0.7 * k
+			end
+		end, function()
+			for _, l in lines do
+				l:Destroy()
+			end
+		end)
+	end)
+
+	Fx.register("DecoyBurst", function(d)
+		local p: Vector3 = d.p
+		if typeof(p) ~= "Vector3" or camDist(p) > 260 then
+			return
+		end
+		local bits = {}
+		for i = 1, qn(18) do
+			local s = rand(0.25, 0.6)
+			local b = mkPart({
+				Size = Vector3.new(s, s, s),
+				Color = if i % 3 == 0 then Color3.fromRGB(255, 255, 255) else cyan,
+				Transparency = 0.1,
+				CFrame = CFrame.new(p),
+			})
+			bits[i] = { part = b, v = Vector3.new(rand(-12, 12), rand(8, 20), rand(-12, 12)), rx = rand(-6, 6), ry = rand(-6, 6) }
+		end
+		local glow = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.new(2, 2, 2), Color = cyan, Transparency = 0.4, CFrame = CFrame.new(p) })
+		light(glow, cyan, 18, 2.5)
+		tween(glow, 0.45, { Size = Vector3.new(9, 9, 9), Transparency = 1 })
+		ring(Vector3.new(p.X, p.Y - 2.8, p.Z), cyan, 1, 9, 0.6, 0.2)
+		snd("HitPartial", p)
+		animate(1.0, function(a, dt)
+			for _, b in bits do
+				b.v -= Vector3.new(0, 30 * dt, 0)
+				b.part.CFrame = (b.part.CFrame + b.v * dt) * CFrame.Angles(b.rx * dt, b.ry * dt, 0)
+				b.part.Transparency = 0.1 + 0.9 * a
+			end
+		end, function()
+			for _, b in bits do
+				b.part:Destroy()
+			end
+			glow:Destroy()
+		end)
+	end)
+end
+
 function CallInFx.init(Fx: any, audio: any, juice: any)
 	Audio = audio
 	Juice = juice
@@ -1694,6 +1767,7 @@ function CallInFx.init(Fx: any, audio: any, juice: any)
 	registerFalling(Fx)
 	registerJet(Fx)
 	registerOverwatch(Fx)
+	registerDecoy(Fx)
 	registerClouds(Fx)
 	registerPods(Fx)
 	FxRef = Fx

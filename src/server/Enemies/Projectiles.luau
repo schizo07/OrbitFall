@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Damage = require(Shared.Damage)
+local Decoys = require(script.Parent.Parent.Decoys) -- Holo Decoy targets: shots / splash damage them, no player API involved
 
 local MAX_LIVE = 120
 
@@ -91,7 +92,7 @@ local function damagePlayer(p: Player, amount: number, from: Vector3, knock: num
 	end
 end
 
-local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, blocked: boolean, miss: boolean)
+local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, blocked: boolean, miss: boolean, hitDecoy: any?)
 	-- remove (swap-remove)
 	local n = #live
 	live[i] = live[n]
@@ -128,6 +129,23 @@ local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, bloc
 			end
 		elseif hitPlayer then
 			damagePlayer(hitPlayer, pr.damage, pr.prev or pr.a, pr.knockback, pr.kind)
+		end
+		if Decoys.count() > 0 then
+			-- hologram: direct hit damages it, a splash hurts every decoy in range (falloff like troopers); nothing else happens
+			if radius > 0 then
+				local falloff = if S.Explosions and S.Explosions.playerFalloff then S.Explosions.playerFalloff else Damage.falloff
+				for _, d in Decoys.list do
+					local dd = (d.pos - pos).Magnitude
+					if d.alive and dd < radius + 1.2 then
+						local f = falloff(math.max(dd - 1.2, 0), radius * 0.35, radius)
+						if f > 0 then
+							Decoys.damage(d, pr.damage * f)
+						end
+					end
+				end
+			elseif hitDecoy then
+				Decoys.damage(hitDecoy, pr.damage)
+			end
 		end
 		if pr.puddle then
 			table.insert(puddles, {
@@ -214,8 +232,26 @@ local function step(dt: number)
 						end
 					end
 				end
-				if hitPlayer or worldHit then
-					finish(i, pr, hitPos, hitPlayer, false, false)
+				-- Holo Decoys (a hit that is nearer than any trooper / wall wins; the shot then ends there)
+				local hitDecoy: any = nil
+				if Decoys.count() > 0 then
+					for _, d in Decoys.list do
+						if d.alive then
+							local q = closestOnSegment(prev, nextPos, d.pos)
+							if (d.pos - q).Magnitude <= hr + d.hitRadius then
+								local dist = (q - prev).Magnitude
+								if dist < bestDist then
+									bestDist = dist
+									hitDecoy = d
+									hitPlayer = nil
+									hitPos = q
+								end
+							end
+						end
+					end
+				end
+				if hitPlayer or hitDecoy or worldHit then
+					finish(i, pr, hitPos, hitPlayer, false, false, hitDecoy)
 					done = true
 				end
 			end
