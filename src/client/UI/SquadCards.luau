@@ -24,6 +24,7 @@ local touch = false
 local want = false
 local lastMe: any = nil
 local lastMission: any = nil
+local lastT = 0
 
 local MAX_ICONS = 4
 local CELL = Color3.fromRGB(110, 225, 255) -- shared/Carry.luau COLOR
@@ -32,8 +33,34 @@ local function cardWidth(): number
 	return if touch then 140 else 200
 end
 
+-- Phones with a full squad: when the stack would run up into the objective list the cards go compact (22 px, one text row;
+-- the state text replaces the weapon name). HUD tells us how much room there is via setRoom().
+local TOUCH_H, TOUCH_COMPACT_H = 30, 22
+local compact = false
+local roomA, roomB, xB = math.huge, 0, 0
+
 local function cardHeight(): number
-	return if touch then 30 else 40
+	if touch then
+		return if compact then TOUCH_COMPACT_H else TOUCH_H
+	end
+	return 40
+end
+
+local function applyGeometry(c: any)
+	c.frame.Size = UDim2.fromOffset(cardWidth(), cardHeight())
+	if not touch then
+		return
+	end
+	local y = 2
+	c.tag.Position = UDim2.fromOffset(6, y)
+	c.name.Position = UDim2.fromOffset(30, y)
+	c.cell.Position = UDim2.new(1, -6, 0, y)
+	-- the state text shares the tag's row (it used to sit under the tag and clip it), so it starts right of the callsign tag
+	c.status.Position = UDim2.fromOffset(30, y)
+	c.status.Size = UDim2.new(1, -36, 0, 14)
+	c.status.TextTruncate = Enum.TextTruncate.AtEnd
+	c.bar.back.Size = UDim2.new(1, -12, 0, if compact then 2 else 3)
+	c.bar.back.Position = UDim2.new(0, 6, 1, if compact then -1 else -4)
 end
 
 local function weaponName(m: any): string
@@ -115,7 +142,9 @@ local function makeCard(m: any, order: number): any
 		Position = UDim2.fromOffset(15, 0),
 		Parent = cell,
 	})
-	return { frame = f, tag = tag, name = name, nameW = nameW, icons = icons, status = status, bar = bar, cell = cell, iconKey = "", alive = nil, m = m }
+	local c = { frame = f, tag = tag, name = name, nameW = nameW, icons = icons, status = status, bar = bar, cell = cell, iconKey = "", alive = nil, m = m }
+	applyGeometry(c)
+	return c
 end
 
 local function setIcons(c: any, ids: any)
@@ -206,7 +235,13 @@ local function refreshCard(c: any, m: any, t: number)
 		c.bar.set(1, Style.Red)
 		c.bar.fill.BackgroundTransparency = 0.6
 		c.status.Visible = true
-		c.status.Text = text
+		-- phone cards have ~100 px for the text: drop the long words
+		local shown = text
+		if touch then
+			shown = string.gsub(shown, " AVAILABLE", "")
+			shown = string.gsub(shown, "REINFORCEMENTS", "REINFORCE")
+		end
+		c.status.Text = shown
 		c.status.TextColor3 = col
 		-- slow pulse while the reinforce is actually callable
 		c.status.TextTransparency = if text == "REINFORCE AVAILABLE" then 0.15 + 0.3 * math.abs(math.sin(t * 3)) else 0
@@ -214,8 +249,50 @@ local function refreshCard(c: any, m: any, t: number)
 	if (alive or deploy == "loadout") and c.alive == false then
 		c.bar.fill.BackgroundTransparency = 0
 	end
+	if touch then
+		c.name.Visible = alive and not c.status.Visible -- one text row: the state text takes the name's place
+	end
 	c.alive = alive
 	c.special = deploy ~= nil or carrying
+end
+
+local function applyPosition()
+	if ui.holder then
+		ui.holder.Position = UDim2.new(0, ui.x or Style.MARGIN, 1, -math.floor(ui.bottom or 200))
+	end
+end
+
+-- Phones: pick card size and column so the stack never covers the objective list.
+--   1) full cards under the objective column  2) compact cards there  3) compact cards under the uplink column (roomB, xB)
+local function refit()
+	if not touch then
+		return
+	end
+	local n = 0
+	for _ in cards do
+		n += 1
+	end
+	local needCompact, x = false, Style.MARGIN
+	if n > 0 and n * TOUCH_H + (n - 1) * 3 > roomA then
+		needCompact = true
+		if n * TOUCH_COMPACT_H + (n - 1) * 2 > roomA and roomB > roomA then
+			x = xB
+		end
+	end
+	if x ~= ui.x then
+		ui.x = x
+		applyPosition()
+	end
+	if needCompact == compact then
+		return
+	end
+	compact = needCompact
+	ui.layout.Padding = UDim.new(0, if compact then 2 else 3)
+	for _, c in cards do
+		applyGeometry(c)
+		c.name.Visible = true
+		refreshCard(c, c.m, lastT)
+	end
 end
 
 local function relayout()
@@ -231,9 +308,8 @@ end
 
 -- offset: content px from the bottom edge to the bottom of the stack
 function SquadCards.setBottom(offset: number)
-	if ui.holder then
-		ui.holder.Position = UDim2.new(0, Style.MARGIN, 1, -math.floor(offset))
-	end
+	ui.bottom = offset
+	applyPosition()
 end
 
 function SquadCards.build(parent: Instance, isTouch: boolean)
@@ -248,8 +324,15 @@ function SquadCards.build(parent: Instance, isTouch: boolean)
 	holder.AutomaticSize = Enum.AutomaticSize.Y
 	holder.Visible = false
 	holder.Parent = parent
-	Theme.list(holder, Enum.FillDirection.Vertical, if touch then 3 else 4)
+	ui.layout = Theme.list(holder, Enum.FillDirection.Vertical, if touch then 3 else 4)
 	ui.holder = holder
+end
+
+-- Content px of free height above the stack's bottom edge: roomA under the objective column (x = margin), roomB under the
+-- uplink column (starts at content x xB). HUD recomputes these whenever those columns or the own card change size.
+function SquadCards.setRoom(a: number, b: number, bx: number)
+	roomA, roomB, xB = a, b, bx
+	refit()
 end
 
 function SquadCards.setVisible(on: boolean)
@@ -262,7 +345,7 @@ function SquadCards.update(squad: any, me: any, mission: any, userId: number, t:
 	if not ui.holder then
 		return
 	end
-	lastMe, lastMission = me, mission
+	lastMe, lastMission, lastT = me, mission, t
 	local seen: { [number]: boolean } = {}
 	local order = 0
 	if type(squad) == "table" then
@@ -287,6 +370,7 @@ function SquadCards.update(squad: any, me: any, mission: any, userId: number, t:
 			cards[id] = nil
 		end
 	end
+	refit()
 	relayout()
 end
 
@@ -295,7 +379,7 @@ function SquadCards.tick(me: any, mission: any, t: number)
 	if not ui.holder or not ui.holder.Visible then
 		return
 	end
-	lastMe, lastMission = me, mission
+	lastMe, lastMission, lastT = me, mission, t
 	for _, c in cards do
 		-- dead cards (countdown / pulse) + join / carry states, and any card whose join / carry attribute just changed
 		local plr = Players:GetPlayerByUserId(c.m.userId)
