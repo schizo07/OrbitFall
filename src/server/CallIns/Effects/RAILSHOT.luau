@@ -5,6 +5,9 @@ local Blasts = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared
 
 local Combos = require(script.Parent.Parent:WaitForChild("Combos"))
 
+local OVERCHARGE_RADIUS_MUL = 1.5
+local OVERCHARGE_COLOR = Color3.fromRGB(225, 200, 255)
+
 return function(ctx)
 	local S = ctx.S
 	local prm = Blasts.merge("RAILSHOT", ctx.params)
@@ -13,11 +16,26 @@ return function(ctx)
 	S.Fx.play("Railshot", { p = pos, t = prm.charge })
 	task.wait(prm.charge)
 
-	for _, e in S.Enemies.getInRadius(pos, prm.hitRadius + 6) do
+	-- RAIL OVERCHARGE combo (Studio A/B CALL-IN COMBOS): a slug landing inside a pulling Gravity Well overcharges. The direct hit
+	-- reaches the well's whole pull radius, the splash grows and the slug collapses the well on the spot (its burst follows).
+	local hitRadius, radius, vis = prm.hitRadius, prm.radius, prm.vis
+	local well = Combos.wellNear(pos)
+	if well then
+		hitRadius = math.max(hitRadius, well.radius)
+		radius = prm.radius * OVERCHARGE_RADIUS_MUL
+		vis = prm.vis * OVERCHARGE_RADIUS_MUL
+		well.handle.collapse = true
+		S.Fx.play("RailOvercharge", { p = pos, r = hitRadius })
+		if S.State and S.State.notify then
+			S.State.notify(nil, "COMBO: RAIL OVERCHARGE", OVERCHARGE_COLOR, "callin")
+		end
+	end
+
+	for _, e in S.Enemies.getInRadius(pos, hitRadius + 6) do
 		if e.alive and e.root then
 			local rp = e.root.Position
 			local flat = math.sqrt((rp.X - pos.X) ^ 2 + (rp.Z - pos.Z) ^ 2)
-			if flat <= prm.hitRadius + (e.def.size or 2) * 0.6 and math.abs(rp.Y - pos.Y) < 30 then
+			if flat <= hitRadius + (e.def.size or 2) * 0.6 and math.abs(rp.Y - pos.Y) < 30 then
 				local mult = S.Explosions.frozenMult(e) -- Cryo shatter on the direct hit
 				S.Enemies.damage(e, prm.damage * mult, prm.ap, ctx.source, "body")
 				if mult > 1 then
@@ -28,16 +46,16 @@ return function(ctx)
 	end
 
 	S.Explosions.blast(pos, {
-		radius = prm.radius,
+		radius = radius,
 		core = prm.core,
 		damage = prm.splash,
 		ap = prm.splashAp,
 		size = "M",
 		style = "rail",
-		vis = prm.vis,
+		vis = vis,
 		knock = prm.knock,
 		shake = prm.shake,
-		legacy = { shake = 1.2, shakeR = 70, shockwave = prm.radius * 1.5, crater = 3 },
+		legacy = { shake = 1.2, shakeR = 70, shockwave = radius * 1.5, crater = 3 },
 	}, ctx.source)
 
 	-- Idea (Studio A/B "RAILSHOT HOT GROUND", Feel_RailHot = "on"): the slug leaves a molten pool that burns for a few s

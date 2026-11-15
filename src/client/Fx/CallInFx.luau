@@ -1,6 +1,6 @@
 -- Client renderers for the call-in system (server: src/server/CallIns/*).
 -- Fx kinds: Beacon, BeaconEnd, LanceStart/Move/End, Bomb, Jet, Shell, Gas, Smoke, Dome, DropPod, Crater,
--- GravWell, FireVortex, CryoFreeze, Shatter, Railshot, Firestorm, OverwatchSkiff, OverwatchEnd.
+-- GravWell, FireVortex, IceVortex, RailOvercharge, CryoFreeze, Shatter, Railshot, Firestorm, OverwatchSkiff, OverwatchEnd.
 -- Everything lives in workspace.CurrentCamera.CallInFx (local only, no collisions, auto-cleaned).
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1253,6 +1253,109 @@ local function registerNew(Fx: any)
 			core:Destroy()
 			Debris:AddItem(anchor, 2.2)
 		end)
+	end)
+
+	-- Ice vortex (call-in combo SHATTER IMPLOSION): a Gravity Well with frozen enemies in it. Ice-blue motes and shards spiral
+	-- inward round a pale core, a frost ring shrinks with the pull. The server's end burst (plus "Shatter" fx) finishes it.
+	Fx.register("IceVortex", function(d)
+		local p: Vector3, r: number, dur: number = d.p, d.r or 18, math.max(d.t or 2, 0.4)
+		local lite = lowEnd()
+		local centre = p + Vector3.new(0, 3, 0)
+		local anchor = mkPart({ Size = Vector3.new(r * 2, 4, r * 2), Transparency = 1, CFrame = CFrame.new(centre) })
+		local swirl = emitter(anchor, {
+			Texture = TEX_SPARK,
+			Color = ColorSequence.new(Color3.fromRGB(235, 250, 255), ICE),
+			Size = seq(0.8, 0.25),
+			Transparency = seq(0.1, 0.05, 1),
+			Lifetime = NumberRange.new(0.9, 1.2),
+			Speed = NumberRange.new(r * 0.8, r * 0.95),
+			Rate = (if lite then 30 else 60) * quality(),
+			LightEmission = 1,
+			Shape = Enum.ParticleEmitterShape.Sphere,
+			ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface,
+			ShapeInOut = Enum.ParticleEmitterShapeInOut.Inward,
+			RotSpeed = NumberRange.new(-180, 180),
+		})
+		local core = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.one * 2, Color = Color3.fromRGB(225, 245, 255), Material = Enum.Material.Ice, Transparency = 0.3, CFrame = CFrame.new(centre) })
+		local frost = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.12, r * 2, r * 2),
+			Color = Color3.fromRGB(205, 240, 255),
+			Material = Enum.Material.Ice,
+			Transparency = 0.6,
+			CFrame = CFrame.new(p + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		local l = light(core, ICE, r * 1.2, 3)
+		-- ice shards on a shrinking spiral
+		local shards = {}
+		for i = 1, qn(if lite then 6 else 11) do
+			shards[i] = mkPart({
+				Size = Vector3.new(0.5, 1.6, 0.5),
+				Color = Color3.fromRGB(195, 238, 255),
+				Material = Enum.Material.Ice,
+				Transparency = 0.15,
+				CFrame = CFrame.new(centre),
+			})
+		end
+		snd("EMPPulse", p)
+		trauma(0.4, dur, p, 60)
+		flashAt(Color3.fromRGB(225, 245, 255), 0.25, 0.25, p)
+		punch(ICE, 0.5, 0.5, -0.3, p)
+		animate(dur, function(a)
+			local t = os.clock()
+			core.Size = Vector3.one * (2 + 3 * a)
+			l.Brightness = 3 + 3 * a
+			frost.Size = Vector3.new(0.12, r * 2 * (1 - 0.6 * a), r * 2 * (1 - 0.6 * a))
+			frost.CFrame = CFrame.new(p + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, -t * 2.5, 0) * CFrame.Angles(0, 0, math.pi / 2)
+			for i, s in shards do
+				local ang = t * (3.5 + 3 * a) + i * (math.pi * 2 / #shards)
+				local rad = r * (0.85 - 0.65 * a) * (0.6 + 0.4 * ((i % 3) / 2))
+				local pp = centre + Vector3.new(math.cos(ang) * rad, math.sin(t * 2 + i) * 2, math.sin(ang) * rad)
+				s.CFrame = CFrame.new(pp, centre) * CFrame.Angles(math.pi / 2, t * 4, 0)
+			end
+		end, function()
+			swirl.Enabled = false
+			for _, s in shards do
+				s:Destroy()
+			end
+			core:Destroy()
+			frost:Destroy()
+			Debris:AddItem(anchor, 1.5)
+		end)
+	end)
+
+	-- Rail overcharge (call-in combo RAIL OVERCHARGE): a Railshot slug landed inside a Gravity Well. Bright purple-white flash,
+	-- a fat beam and a ring sweeping out to the pull radius; the server's bigger blast and the well's burst follow.
+	Fx.register("RailOvercharge", function(d)
+		local p: Vector3, r: number = d.p, d.r or 18
+		local H = 400
+		local OC = Color3.fromRGB(225, 200, 255)
+		local beam = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(H, 7, 7),
+			Color = Color3.fromRGB(250, 240, 255),
+			Transparency = 0,
+			CFrame = CFrame.new(p + Vector3.new(0, H / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		local glow = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(H, 14, 14),
+			Color = VOID,
+			Transparency = 0.5,
+			CFrame = beam.CFrame,
+		})
+		light(beam, OC, 60, 8)
+		tween(beam, 0.4, { Size = Vector3.new(H, 0.1, 0.1) })
+		tween(glow, 0.5, { Size = Vector3.new(H, 0.2, 0.2), Transparency = 1 })
+		Debris:AddItem(beam, 0.45)
+		Debris:AddItem(glow, 0.55)
+		ring(p, OC, 2, r, 0.45, 0.5)
+		ring(p, VOID, 1, r * 0.6, 0.3, 0.4)
+		snd("ShotRail", p)
+		orbitalMini(p, 1.2, OC)
+		trauma(2.8, 0.55, p, 120)
+		punch(OC, 1.1, 0.6, 0.3, p)
+		flashAt(Color3.fromRGB(250, 240, 255), 0.75, 0.3, p)
 	end)
 
 	-- Cryo Bomb: frost disc, ice spikes, ice tint (Highlight) on enemies whose FrozenUntil lies ahead

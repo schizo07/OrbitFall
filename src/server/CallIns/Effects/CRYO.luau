@@ -3,6 +3,8 @@
 -- from bullets and blasts while frozen (server/WeaponService, server/Explosions). Radius / effect size: Data/Blasts.luau.
 local Blasts = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Blasts"))
 
+local Combos = require(script.Parent.Parent:WaitForChild("Combos"))
+
 local FALL = 0.7
 
 return function(ctx)
@@ -39,4 +41,11 @@ return function(ctx)
 		end
 	end
 	S.Fx.play("CryoFreeze", { p = pos, r = prm.radius, t = prm.freeze })
+
+	-- SHATTER IMPLOSION combo (Studio A/B CALL-IN COMBOS): going off inside a pulling Gravity Well flags it; its end burst
+	-- then shatters everything frozen it pulled (Effects/GRAVWELL.luau)
+	local well = Combos.wellNear(pos)
+	if well then
+		well.handle.shatter = true
+	end
 end
