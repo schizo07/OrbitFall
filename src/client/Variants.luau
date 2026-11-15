@@ -33,6 +33,16 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/Fx/Blast.luau: mushroom cloud (stem + cap + rolling ring) on fire blasts from a Huge frag up
+		name = "MUSHROOM",
+		keys = { "Feel_Mushroom" },
+		presets = {
+			{ name = "A on", set = {} },
+			{ name = "B bigger cap (x1.35)", set = { Feel_Mushroom = "big" } },
+			{ name = "C off", set = { Feel_Mushroom = "off" } },
+		},
+	},
+	{
 		-- client/UI/Theme.applyFont: swaps the face of every HUD / menu text live (sizes stay)
 		name = "UI FONT",
 		keys = { "Feel_Font" },

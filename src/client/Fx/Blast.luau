@@ -36,7 +36,8 @@ local TEX_SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local TEX_SPARK = "rbxasset://textures/particles/sparkles_main.dds"
 
 -- caps -----------------------------------------------------------------------------------------------------------
-local BALL_CAP = 90 -- live fireball / smoke balls (x quality at init: 63 on a phone)
+local BALL_CAP = 110 -- live fireball / smoke / mushroom balls (x quality at init: 77 on a phone)
+local lastMushroom = 0
 local LIGHT_CAP = 4
 local RING_CAP = 5
 local RING_SEGS = 12
@@ -164,7 +165,7 @@ end
 -- one ball: grows to `peak` (diameter) by tPeak with overshoot, then goes to `endSize` while colour / transparency run
 -- through the given keys and it rises `rise` studs over its life
 local function ball(material: Enum.Material, at: Vector3, s0: number, peak: number, endSize: number, tPeak: number, life: number,
-	c0: Color3, c1: Color3, tr0: number, tr1: number, rise: number, delay: number?)
+	c0: Color3, c1: Color3, tr0: number, tr1: number, rise: number, delay: number?, drift: Vector3?)
 	local b = getBall(material)
 	if not b then
 		return
@@ -185,7 +186,8 @@ local function ball(material: Enum.Material, at: Vector3, s0: number, peak: numb
 		end
 		local u = t / life
 		b.Size = Vector3.one * math.max(s, 0.05)
-		b.CFrame = CFrame.new(at + V3(0, rise * easeOut(u), 0))
+		local e = easeOut(u)
+		b.CFrame = CFrame.new(at + V3(0, rise * e, 0) + (if drift then drift * e else Vector3.zero))
 		b.Color = c0:Lerp(c1, smooth(u * 1.4))
 		b.Transparency = tr0 + (tr1 - tr0) * smooth(u)
 	end, function()
@@ -613,6 +615,37 @@ function Blast.play(p: Vector3, opts: any?)
 		end
 	end
 
+	-- mushroom cloud (2026-11-15 playtest: "keep the ball, add more mushroom cloud"): a stem of smoke balls racing up
+	-- from the ground, a cap ball on top and a ring of balls rolling outward under it. Fire blasts from K 1.2 (a frag at
+	-- the Huge scale) up; one per 0.3 s so cluster drops / barrages do not stack 30 of them.
+	-- Studio A/B Feel_Mushroom: nil = on, "big" = cap x1.35, "off".
+	local mushroom = if IS_STUDIO then workspace:GetAttribute("Feel_Mushroom") else nil
+	local now = os.clock()
+	if style == "fire" and K >= 1.2 and d < 700 and mushroom ~= "off" and now - lastMushroom > 0.3 then
+		lastMushroom = now
+		local capK = if mushroom == "big" then 1.35 else 1
+		local capH = FR * (1.5 + 0.22 * K)
+		local life = 2.2 + 0.6 * K
+		local lit, dark = st.mid:Lerp(st.edge, 0.5), st.smoke:Lerp(C3(120, 115, 110), 0.3)
+		local nStem = q(4)
+		for i = 1, nStem do
+			local h = capH * (i - 0.5) / nStem
+			ball(Enum.Material.SmoothPlastic, g + V3(0, h * 0.4, 0), FR * 0.3, FR * 0.6, FR * 0.8, 0.25, life * 0.8,
+				lit, dark, 0.05, 1, h * 0.6 + FR * 0.3, 0.04 * i)
+		end
+		ball(Enum.Material.SmoothPlastic, g + V3(0, capH * 0.6, 0), FR * 0.5 * capK, FR * 1.5 * capK, FR * 1.9 * capK, 0.35, life,
+			st.hot:Lerp(st.edge, 0.4), dark, 0.05, 1, capH * 0.4 + FR * 0.7, 0.1)
+		local nRing = q(7)
+		local a0 = rnd(0, math.pi * 2)
+		for i = 1, nRing do
+			local a = a0 + (i - 1) / nRing * math.pi * 2
+			local dir = V3(math.cos(a), 0, math.sin(a))
+			ball(Enum.Material.SmoothPlastic, g + V3(0, capH * 0.5, 0) + dir * FR * 0.4, FR * 0.4 * capK, FR * 1.0 * capK,
+				FR * 1.4 * capK, 0.3, life * rnd(0.85, 1.05), lit, dark, 0.05, 1, capH * 0.45 + FR * 0.4, 0.14 + 0.01 * i,
+				dir * FR * 1.1 * capK)
+		end
+	end
+
 	-- sparks + embers
 	if d < 500 then
 		sparksAt(mid, K, st.spark)
@@ -695,7 +728,7 @@ function Blast.init(fx: any, audio: any, juice: any)
 	Fx.explosionLegacy = legacyExplosion
 	Fx.blastIsNew = Blast.isNew -- Spectacle: the new look does its own camera work, skip the orbital's
 	Fx.blastScale = Blast.scale
-	BALL_CAP = math.floor(36 + 54 * (Fx.quality or 1))
+	BALL_CAP = math.floor(40 + 70 * (Fx.quality or 1))
 	Fx.explosion = function(p: Vector3, opts: any?)
 		Blast.play(p, opts)
 	end

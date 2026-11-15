@@ -56,6 +56,7 @@ local quality = 1
 local activeBiome: string? = nil
 local cc: ColorCorrectionEffect? = nil
 local box: Part? = nil
+local front: Part? = nil
 local emitters: { { pe: ParticleEmitter, rate: number } } = {}
 local lastRateK = -1
 local windLoop: any = nil
@@ -204,8 +205,8 @@ local function emitter(parent: Instance, props: { [string]: any }, rate: number)
 	pe.LockedToPart = false
 	pe.Rotation = NumberRange.new(0, 360)
 	for k, v in props do
-		if k == "grit" then
-			pe:SetAttribute("Grit", v)
+		if k == "grit" or k == "front" then
+			pe:SetAttribute(if k == "grit" then "Grit" else "Front", v)
 		else
 			(pe :: any)[k] = v
 		end
@@ -230,17 +231,20 @@ local function buildStorm(biome: string)
 	p.Size = Vector3.new(130, 34, 24)
 	p.Parent = Workspace
 	box = p
-	-- wide dust sheets rolling across the view
+	-- 2026-11-15 playtest ("looks like air passing by"): slower, tumbling two-tone billows instead of fast faint sheets,
+	-- grit drawn as wind-aligned streaks, and a dust front that rolls in from upwind while the storm builds (stormFront)
+	local light, darkDust = s.dust:Lerp(Color3.new(1, 1, 1), 0.12), s.dust:Lerp(Color3.new(0, 0, 0), 0.22)
 	emitter(p, {
-		Lifetime = NumberRange.new(2.4, 3.4),
-		Speed = NumberRange.new(38, 52),
-		SpreadAngle = Vector2.new(6, 4),
-		Size = NS({ NK(0, 10), NK(0.5, 20), NK(1, 26) }),
-		Transparency = NS({ NK(0, 1), NK(0.2, 0.7), NK(0.7, 0.74), NK(1, 1) }),
-		Color = ColorSequence.new(s.dust),
-		LightInfluence = 0.75,
-		RotSpeed = NumberRange.new(-25, 25),
-	}, 26)
+		Lifetime = NumberRange.new(3.6, 4.6),
+		Speed = NumberRange.new(24, 34),
+		SpreadAngle = Vector2.new(8, 5),
+		Size = NS({ NK(0, 9), NK(0.5, 18), NK(1, 28) }),
+		Transparency = NS({ NK(0, 1), NK(0.2, 0.62), NK(0.7, 0.68), NK(1, 1) }),
+		Color = ColorSequence.new(light, darkDust),
+		LightInfluence = 0.8,
+		RotSpeed = NumberRange.new(-45, 45),
+		Acceleration = Vector3.new(0, 1.5, 0),
+	}, 20)
 	-- low rolling dust along the ground
 	emitter(p, {
 		Lifetime = NumberRange.new(3, 4),
@@ -253,17 +257,43 @@ local function buildStorm(biome: string)
 		Acceleration = Vector3.new(0, -2, 0),
 		RotSpeed = NumberRange.new(-12, 12),
 	}, 7)
-	-- fine grit streaking past
+	-- fine grit streaking past (stretched along its flight)
 	emitter(p, {
 		Lifetime = NumberRange.new(1.4, 2),
-		Speed = NumberRange.new(60, 80),
+		Speed = NumberRange.new(55, 75),
 		SpreadAngle = Vector2.new(5, 5),
-		Size = NS({ NK(0, 0.18), NK(1, 0.12) }),
-		Transparency = NS({ NK(0, 0.35), NK(1, 0.8) }),
-		Color = ColorSequence.new(s.dust:Lerp(Color3.new(1, 1, 1), 0.2)),
+		Size = NS({ NK(0, 0.22), NK(1, 0.16) }),
+		Squash = NS({ NK(0, 2.6), NK(1, 2.6) }),
+		Orientation = Enum.ParticleOrientation.VelocityParallel,
+		Transparency = NS({ NK(0, 0.3), NK(1, 0.75) }),
+		Color = ColorSequence.new(s.dust:Lerp(Color3.new(1, 1, 1), 0.25)),
 		LightInfluence = 0.6,
 		grit = true,
 	} :: any, 90)
+	-- the storm front: huge slow billows far upwind, moved in from ~300 studs as the storm ramps up (step)
+	local f = Instance.new("Part")
+	f.Name = "ClientStormFront"
+	f.Anchored = true
+	f.CanCollide = false
+	f.CanQuery = false
+	f.CanTouch = false
+	f.CastShadow = false
+	f.Transparency = 1
+	f.Size = Vector3.new(520, 70, 30)
+	f.Parent = Workspace
+	front = f
+	emitter(f, {
+		Lifetime = NumberRange.new(6, 8),
+		Speed = NumberRange.new(8, 12),
+		SpreadAngle = Vector2.new(6, 10),
+		Size = NS({ NK(0, 40), NK(0.5, 70), NK(1, 95) }),
+		Transparency = NS({ NK(0, 1), NK(0.25, 0.35), NK(0.75, 0.45), NK(1, 1) }),
+		Color = ColorSequence.new(s.dust, darkDust),
+		LightInfluence = 0.9,
+		RotSpeed = NumberRange.new(-10, 10),
+		Acceleration = Vector3.new(0, 2.5, 0),
+		front = true,
+	} :: any, 12)
 end
 
 local function setRates(storm: number)
@@ -271,7 +301,9 @@ local function setRates(storm: number)
 	local q = math.clamp(quality, 0.3, 1) * (if touch then TOUCH_RATE else 1)
 	for _, e in emitters do
 		local skip = touch and e.pe:GetAttribute("Grit") == true
-		e.pe.Rate = if skip then 0 else e.rate * q * storm
+		-- the front is at full rate from the first moment of the ramp (it is far away then: that is the build-up)
+		local k = if e.pe:GetAttribute("Front") == true then (if storm > 0.01 then 1 else 0) else storm
+		e.pe.Rate = if skip then 0 else e.rate * q * k
 	end
 end
 
@@ -283,6 +315,10 @@ local function teardownStorm()
 	if box then
 		box:Destroy()
 		box = nil
+	end
+	if front then
+		front:Destroy()
+		front = nil
 	end
 	lastRateK = -1
 	if windLoop then
@@ -372,6 +408,11 @@ local function step()
 			local w = windDir()
 			local c = cam.CFrame.Position - w * 45 + Vector3.new(0, 4, 0)
 			box.CFrame = CFrame.lookAt(c, c + w)
+			-- the front rolls in from ~370 studs upwind while the storm builds, then hangs just upwind of the squad
+			if front then
+				local fc = cam.CFrame.Position - w * (70 + 300 * (1 - storm)) + Vector3.new(0, 18, 0)
+				front.CFrame = CFrame.lookAt(fc, fc + w)
+			end
 		end
 	end
 	if math.abs(storm - lastRateK) > 0.02 or (storm == 0 and lastRateK ~= 0) then
