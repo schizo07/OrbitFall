@@ -21,6 +21,7 @@ local Weapons = require(Shared.Data.Weapons)
 
 local Store = require(script.Parent.Store)
 local Input = require(script.Parent.Input)
+local CombatPose = require(script.Parent.CombatPose)
 
 local ThrowArc = {}
 
@@ -203,7 +204,7 @@ local function current(): (string?, any, Color3?, number)
 		return "beacon", launch, color, math.clamp(if r > 0 then r else 2.5, 2.5, 30)
 	end
 	if grenadeHeld and not holding and not Store.get("dialOpen") and (m.grenades or 0) > 0 and not Input.isGated("Grenade") then
-		local origin = Aim.origin(char)
+		local origin = Aim.origin(char, CombatPose.handSign())
 		if not origin then
 			return nil, nil, nil, 0
 		end

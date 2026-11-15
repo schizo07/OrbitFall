@@ -311,9 +311,12 @@ local function excludeList(shooter: Player): { Instance }
 	return list
 end
 
--- shared with the client's barrel trace (shared/Aim.luau): root + stance height + right shoulder
+-- shared with the client's barrel trace (shared/Aim.luau): root + stance height + the gun's shoulder (character
+-- attribute Hand, +1 right / -1 left, set by the "hand" action; missing = right)
 local function muzzleOrigin(p: Player): Vector3?
-	return Aim.origin(p.Character)
+	local c = p.Character
+	local hand = if c then c:GetAttribute("Hand") else nil
+	return Aim.origin(c, if type(hand) == "number" then hand else 1)
 end
 
 local function materialFor(inst: Instance): string

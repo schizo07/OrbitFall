@@ -155,6 +155,17 @@ function MovementService.init(s, playerService)
 	game:GetService("Players").PlayerRemoving:Connect(function(p)
 		lastAim[p] = nil
 	end)
+	-- which shoulder the gun is on (+1 right, -1 left): other clients' CombatPose and the bullet / grenade origin
+	-- (shared/Aim.origin) read the character attribute Hand; missing = +1
+	S.Actions.on("hand", function(p: Player, hand: any)
+		if typeof(hand) ~= "number" or hand ~= hand then
+			return
+		end
+		local c = p.Character
+		if c then
+			c:SetAttribute("Hand", if hand < 0 then -1 else 1)
+		end
+	end)
 	S.Actions.on("dive", function(p: Player)
 		local m = get(p)
 		local t = now()

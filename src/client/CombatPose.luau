@@ -79,7 +79,8 @@ local RUN_SPEED = 19 -- horizontal speed above which a character carries the gun
 local AIM_SEND_EVERY = 0.12
 -- Left shoulder (V / R3, Store "camSide" = -1), Studio A/B workspace attribute Feel_LeftShoulder: nil = the gun
 -- follows the camera to the left shoulder (left hand on the grip, right hand on the handguard); "camera" and "old"
--- keep the gun right-handed (CameraController owns the "camera" fix). Local player only: the hand does not replicate.
+-- keep the gun right-handed (CameraController owns the "camera" fix). The owner sends its hand through the "hand"
+-- action (server: character attribute Hand), other clients draw the same hold and Aim.origin uses it for bullets.
 local HAND_RATE = 10 -- hand swap blend speed (exp rate, 1/s), same as the camera's shoulder swap
 local SWAP_DIP = Vector3.new(0, -0.45, -0.25) -- square chest frame, x (1 - h^2): mid-swap the gun ducks under the chin
 local SWAP_BAND = 0.35 -- the hands trade grip / handguard only while |h| < this (gun near the centre line)
@@ -119,7 +120,7 @@ type Rig = {
 	pitch: number,
 	low: number,
 	ads: number, -- local aim-down-sights blend (0..1)
-	hand: number, -- smoothed handedness: +1 gun on the right shoulder .. -1 on the left (local player only)
+	hand: number, -- smoothed handedness: +1 gun on the right shoulder .. -1 on the left (local: localHand, others: the replicated Hand attribute)
 	active: boolean,
 	gunHidden: boolean?, -- haul carry pose hid the gun (showGun)
 }
@@ -157,6 +158,20 @@ local function buildArm(c: Model, side: string): Arm?
 	return { sh = sh, el = el, wr = wr, a = a, b = b, uB = boneBasis(ub / a):Inverse(), lB = boneBasis(lb / b):Inverse() }
 end
 
+-- the local player's smoothed hand (+1 .. -1), advanced every frame (also with no gun out) so handSign() is current
+local localHand = 1
+-- the sign of the hand blend: +1 until it crosses the centre line toward the left shoulder. The shared bullet / grenade
+-- origin (Aim.origin) uses it on the owning client ahead of the server's replicated `Hand` attribute
+function CombatPose.handSign(): number
+	return if localHand < 0 then -1 else 1
+end
+
+-- a character's hand from its replicated `Hand` attribute (missing = right)
+local function remoteHand(c: Model): number
+	local v = c:GetAttribute("Hand")
+	return if type(v) == "number" and v < 0 then -1 else 1
+end
+
 local function buildRig(c: Model): Rig?
 	local hrp = c:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local hum = c:FindFirstChildOfClass("Humanoid")
@@ -184,7 +199,7 @@ local function buildRig(c: Model): Rig?
 		pitch = 0,
 		low = 0,
 		ads = 0,
-		hand = 1,
+		hand = if c == player.Character then localHand else remoteHand(c),
 		active = false,
 	}
 end
@@ -498,9 +513,13 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	end
 	showGun(r, true)
 
-	-- handedness: the local gun follows the camera shoulder (smoothed); other characters stay right-handed
-	local handTarget = if isLocal then wantedHand() else 1
-	r.hand += (handTarget - r.hand) * (1 - exp(-dt * HAND_RATE))
+	-- handedness: the local gun follows the camera shoulder (smoothed in frame()); other characters follow their
+	-- replicated Hand attribute, smoothed here at the same rate so everyone sees the same swap motion
+	if isLocal then
+		r.hand = localHand
+	else
+		r.hand += (remoteHand(r.c) - r.hand) * (1 - exp(-dt * HAND_RATE))
+	end
 	local h = clamp(r.hand, -1, 1)
 	local mid = 1 - h * h -- 0 on either shoulder, 1 mid-swap
 	-- gR: the right hand's share of the grip role (1 = right hand on the grip); the hands trade only near the centre line
@@ -602,7 +621,7 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	else
 		-- the ADS slide pushes the gun to the camera's side: right-handed it only helps over the right shoulder, so on
 		-- the left shoulder it stays off unless the gun itself moved to the left hand (mirrored-aim preset)
-		local wantAds = if isLocal and Input.isDown("Aim") and (handTarget == -1 or Store.get("camSide") ~= -1) then 1 else 0
+		local wantAds = if isLocal and Input.isDown("Aim") and (wantedHand() == -1 or Store.get("camSide") ~= -1) then 1 else 0
 		r.ads += (wantAds - r.ads) * (1 - exp(-dt * 14)) -- same rate as the camera's aim blend
 		local shoulderPocket = tune("Pocket", POCKET) + tune("AdsShift", ADS_POCKET_SHIFT) * r.ads * (1 - low)
 		local pocket = square * (sx(shoulderPocket, h) + tune("SwapDip", SWAP_DIP) * mid)
@@ -662,12 +681,15 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 end
 
 local lastSent, lastSentAt = 0, 0
+local sentHand, sentHandAt = 1, 0 -- last hand sign sent through the "hand" action (the server default is +1)
+local HAND_RESEND = 0.5 -- re-send when the replicated Hand attribute still disagrees after this long
 
 local function frame(dt: number)
 	local cam = Workspace.CurrentCamera
 	if not cam then
 		return
 	end
+	localHand += (wantedHand() - localHand) * (1 - exp(-dt * HAND_RATE))
 	local camPos = cam.CFrame.Position
 	for _, plr in Players:GetPlayers() do
 		local c = plr.Character
@@ -713,8 +735,24 @@ local function frame(dt: number)
 		end
 	end
 
-	-- share our aim pitch
+	-- share our hand: sent when its sign changes (preset A only moves it off +1), re-sent while the replicated
+	-- attribute disagrees (dropped event, or a respawn: the new character has no attribute and the camera side carries over)
 	local t = os.clock()
+	if actionEv then
+		local hs = CombatPose.handSign()
+		if hs ~= sentHand then
+			sentHand, sentHandAt = hs, t
+			actionEv:FireServer("hand", hs)
+		else
+			local c = player.Character
+			if c and t - sentHandAt > HAND_RESEND and remoteHand(c) ~= hs then
+				sentHandAt = t
+				actionEv:FireServer("hand", hs)
+			end
+		end
+	end
+
+	-- share our aim pitch
 	if actionEv and t - lastSentAt > AIM_SEND_EVERY then
 		local pitch = math.asin(clamp(cam.CFrame.LookVector.Y, -1, 1))
 		if abs(pitch - lastSent) > 0.03 then
