@@ -46,12 +46,23 @@ local ADS_DIST = 2.6 -- lens distance behind the focus while aiming
 local ADS_SHOULDER = Vector3.new(1.15, 0.55, 0) -- right-shoulder offset while aiming
 local ADS_FOV_DROP = 24 -- 72 -> 48 FOV at full aim
 local ADS_SENS = 0.5 -- look sensitivity multiplier at full aim
+local LEFT_ADS_EXTRA = Vector3.new(0.6, 0.3, 0) -- extra lens offset (away from the head, up) aiming over the left shoulder, "camera" preset
+local LEFT_HEAD_FADE = 0.6 -- local head / helmet / hat LocalTransparencyModifier at full left-shoulder aim, "camera" preset
+-- accessories that sit on the head (the trooper helmet itself is the TrooperArmor Helmet / Visor parts)
+local HEAD_ACCESSORIES: { [Enum.AccessoryType]: boolean } = {
+	[Enum.AccessoryType.Hat] = true,
+	[Enum.AccessoryType.Hair] = true,
+	[Enum.AccessoryType.Face] = true,
+	[Enum.AccessoryType.Eyebrow] = true,
+	[Enum.AccessoryType.Eyelash] = true,
+}
 local lowBlend = 0 -- prone / dive framing
 local side = 1 -- 1 = right shoulder, -1 = left (V / R3)
 local sideBlend = 1
 local rollCur = 0
 local focusXZ: Vector3? = nil
 local lastFade = 0
+local lastHeadFade = 0
 local freeMouse = false -- set by dial/menus
 CameraController.sens = 0.0042
 CameraController.touchSens = 0.0065
@@ -69,6 +80,21 @@ local function tune(name: string, default: any): any
 end
 
 local touchLook: { [InputObject]: Vector3 } = {}
+
+-- the head Part, its face decals, the trooper helmet / visor pieces and head accessories
+local function isHeadPart(p: Instance): boolean
+	if p.Name == "Head" or (p.Parent and p.Parent.Name == "Head") then
+		return true
+	end
+	local acc = p:FindFirstAncestorOfClass("Accessory")
+	if acc then
+		return HEAD_ACCESSORIES[acc.AccessoryType] == true
+	end
+	if p.Parent and p.Parent.Name == "TrooperArmor" then
+		return string.find(p.Name, "^Helmet") ~= nil or string.find(p.Name, "^Visor") ~= nil
+	end
+	return false
+end
 
 function CameraController.setFreeMouse(v: boolean)
 	freeMouse = v
@@ -131,7 +157,7 @@ function CameraController.init()
 	Input.on("Shoulder", function(isDown)
 		if isDown then
 			side = -side
-			Store.set("camSide", side) -- CombatPose: the ADS gun shift only applies over the right shoulder
+			Store.set("camSide", side) -- CombatPose: the gun follows to the left hand (Feel_LeftShoulder)
 		end
 	end)
 
@@ -269,6 +295,14 @@ function CameraController.init()
 		local wantDist = hipDist + (tune("AdsDist", ADS_DIST) - hipDist) * ads
 		local shoulder = hipShoulder:Lerp(tune("AdsShoulder", ADS_SHOULDER), ads)
 		sideBlend += (side - sideBlend) * (1 - math.exp(-dt * SIDE_RATE))
+		-- LEFT SHOULDER "camera" preset (Studio A/B Feel_LeftShoulder): the gun stays on the right, so while aiming over
+		-- the left shoulder the lens goes further left and up, and the local head fades (below), to keep the gun line clear
+		local leftAds = 0
+		if workspace:GetAttribute("Feel_LeftShoulder") == "camera" then
+			leftAds = ads * math.clamp(-sideBlend, 0, 1)
+			local extra = tune("LeftAdsExtra", LEFT_ADS_EXTRA) :: Vector3
+			shoulder += extra * leftAds
+		end
 		shoulder = Vector3.new(shoulder.X * sideBlend, shoulder.Y, shoulder.Z)
 		local desired = CFrame.new(focus) * rot * CFrame.new(shoulder + Vector3.new(0, 0, wantDist))
 		-- collision: pull in toward focus
@@ -312,11 +346,13 @@ function CameraController.init()
 			local d = math.min((camPos - focus).Magnitude, camDist)
 			local fade = if d < FADE_DIST then math.clamp((FADE_DIST - d) / 1.0, 0, 0.85) else 0
 			fade = math.floor(fade * 20 + 0.5) / 20
-			if fade ~= lastFade then
-				lastFade = fade
+			-- left-shoulder "camera" preset: the head and helmet go semi-transparent so the gun line shows through
+			local headFade = math.floor(tune("LeftHeadFade", LEFT_HEAD_FADE) * leftAds * 20 + 0.5) / 20
+			if fade ~= lastFade or headFade ~= lastHeadFade then
+				lastFade, lastHeadFade = fade, headFade
 				for _, p in c:GetDescendants() do
 					if p:IsA("BasePart") or p:IsA("Decal") then
-						(p :: any).LocalTransparencyModifier = fade
+						(p :: any).LocalTransparencyModifier = if headFade > fade and isHeadPart(p) then headFade else fade
 					end
 				end
 			end

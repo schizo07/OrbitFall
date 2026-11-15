@@ -278,6 +278,16 @@ local GROUPS = {
 			{ name = "C 25 min (old)", set = { Feel_MissionTime = 25 } },
 		},
 	},
+	{
+		-- client/CombatPose (mirrored hold) + client/CameraController (camera fix); press V / R3 to swap shoulders
+		name = "LEFT SHOULDER",
+		keys = { "Feel_LeftShoulder" },
+		presets = {
+			{ name = "A gun to the left hand (mirrored aim)", set = {} },
+			{ name = "B camera fix only (lens left + up, head fades)", set = { Feel_LeftShoulder = "camera" } },
+			{ name = "C old (gun stays right)", set = { Feel_LeftShoulder = "old" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough
