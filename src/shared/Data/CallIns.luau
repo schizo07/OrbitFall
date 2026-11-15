@@ -12,7 +12,7 @@ export type CallIn = {
 	uses: number?, -- nil = unlimited
 	charges: number?, -- nil = 1
 	icon: string, -- short glyph used by UI until real icons exist
-	unlock: string, -- "starter" | "armory" | "bond:<BOND>" | "mission"
+	unlock: string, -- "starter" | "armory" | "bond:<BOND>" | "mission" | "debug" (Studio DebugCallIns only)
 	salvage: number?,
 	rank: number?,
 	params: { [string]: any },
@@ -138,6 +138,13 @@ local C: { [string]: CallIn } = {
 		params = { length = 32, width = 7, duration = 10, dps = 110, ap = 3, patches = 8 },
 		desc = "Sets a 32-stud strip on fire along your throw direction for 10 s.",
 	},
+	-- unlock "debug": not sold, never owned, so it never reaches the armoury or a loadout; only the Studio DebugCallIns attribute
+	OVERWATCH = {
+		id = "OVERWATCH", name = "Overwatch Skiff", category = "air", beacon = "offense",
+		delay = 4, cooldown = 150, icon = "✇", unlock = "debug",
+		params = { duration = 20, radius = 28, altitude = 40, rpm = 300, damage = 55, ap = 3, acquire = 45 },
+		desc = "The Skiff circles the beacon for 20 s and shoots enemies near it with its door gun.",
+	},
 	REINFORCE = {
 		id = "REINFORCE", name = "Reinforce", category = "mission", beacon = "supply",
 		delay = 2, cooldown = 10, icon = "✚", unlock = "mission",
@@ -163,6 +170,7 @@ local CODES: { [string]: string } = {
 	TOXIN = "ULUD",
 	SMOKE = "ULRU",
 	CLUSTER = "ULRDR",
+	OVERWATCH = "ULUU",
 	-- defense: R L ...
 	SENTRY = "RLUU",
 	MINES = "RLDR",
@@ -192,6 +200,7 @@ local CALLOUT_OVERRIDES: { [string]: string } = {
 	CRYO = "Cryo going down. Shoot the frozen ones.",
 	RAILSHOT = "Railshot inbound. One shot, make it count.",
 	FIRESTORM = "Firestorm line. Don't stand in it.",
+	OVERWATCH = "Skiff on overwatch. Keep it in sight.",
 }
 for id, line in CALLOUT_OVERRIDES do
 	local def = C[id]

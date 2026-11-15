@@ -1,6 +1,6 @@
 -- Client renderers for the call-in system (server: src/server/CallIns/*).
 -- Fx kinds: Beacon, BeaconEnd, LanceStart/Move/End, Bomb, Jet, Shell, Gas, Smoke, Dome, DropPod, Crater,
--- GravWell, CryoFreeze, Shatter, Railshot, Firestorm.
+-- GravWell, CryoFreeze, Shatter, Railshot, Firestorm, OverwatchSkiff, OverwatchEnd.
 -- Everything lives in workspace.CurrentCamera.CallInFx (local only, no collisions, auto-cleaned).
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local OverwatchPath = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("OverwatchPath"))
 
 local TEX_SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local TEX_SPARK = "rbxasset://textures/particles/sparkles_main.dds"
@@ -246,6 +247,7 @@ local BEACON_HOLD = {
 	CRYO = 0.7, -- FALL
 	RAILSHOT = 0.9, -- charge
 	FIRESTORM = 0.9, -- jet reaches the strip start
+	OVERWATCH = 1.5, -- the Skiff is still flying in
 }
 local BEACON_RAMP = 1.2 -- the beam heats up over the last this-many seconds before BeaconEnd
 
@@ -1400,6 +1402,79 @@ local function registerNew(Fx: any)
 	end)
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- Overwatch Skiff: a simple Skiff hull flown along shared/OverwatchPath (the server fires the door gun from the same path;
+-- the rounds themselves are drawn by Fx "SkiffGun" in SkiffFx). One model per call-in, destroyed when it has flown out.
+-- ---------------------------------------------------------------------------------------------
+type OverwatchRec = { model: Model, conn: RBXScriptConnection, loop: any }
+local overwatches: { [any]: OverwatchRec } = {}
+
+local function stopOverwatch(id: any)
+	local rec = overwatches[id]
+	if not rec then
+		return
+	end
+	overwatches[id] = nil
+	rec.conn:Disconnect()
+	stopLoop(rec.loop)
+	rec.model:Destroy()
+end
+
+local function buildOverwatchSkiff(): (Model, Part)
+	local white, orange = Color3.fromRGB(226, 228, 236), Color3.fromRGB(235, 120, 40)
+	local grey, dark = Color3.fromRGB(180, 184, 196), Color3.fromRGB(44, 48, 58)
+	local glow = Color3.fromRGB(120, 200, 255)
+	local cyl = Enum.PartType.Cylinder
+	local spec = {
+		{ size = Vector3.new(11, 5.5, 22), cf = CFrame.new(), color = white, material = Enum.Material.SmoothPlastic }, -- hull (pivot)
+		{ size = Vector3.new(10, 4, 7), cf = CFrame.new(0, -0.6, -14) * CFrame.Angles(math.rad(10), 0, 0), color = white, material = Enum.Material.SmoothPlastic },
+		{ size = Vector3.new(8, 2.6, 5), cf = CFrame.new(0, 2.6, -11.5) * CFrame.Angles(math.rad(-24), 0, 0), color = glow, material = Enum.Material.Glass, transparency = 0.25 },
+		{ size = Vector3.new(0.3, 1.4, 22), cf = CFrame.new(-5.6, 0.4, 0), color = orange, material = Enum.Material.SmoothPlastic },
+		{ size = Vector3.new(0.3, 1.4, 22), cf = CFrame.new(5.6, 0.4, 0), color = orange, material = Enum.Material.SmoothPlastic },
+		-- door guns
+		{ size = Vector3.new(0.8, 0.8, 3.2), cf = CFrame.new(-6.6, -2.2, -3.2), color = dark },
+		{ size = Vector3.new(0.8, 0.8, 3.2), cf = CFrame.new(6.6, -2.2, -3.2), color = dark },
+	}
+	for _, s in { -1, 1 } do
+		table.insert(spec, { size = Vector3.new(11, 0.8, 9), cf = CFrame.new(s * 11, -0.6, 3) * CFrame.Angles(0, s * math.rad(-12), s * math.rad(5)), color = grey })
+		table.insert(spec, { shape = cyl, size = Vector3.new(12, 5, 5), cf = CFrame.new(s * 14, 0.4, 4) * CFrame.Angles(0, math.pi / 2, 0), color = Color3.fromRGB(88, 94, 108) })
+		table.insert(spec, { shape = cyl, size = Vector3.new(0.6, 4.2, 4.2), cf = CFrame.new(s * 14, 0.4, 10.3) * CFrame.Angles(0, math.pi / 2, 0), color = glow, material = Enum.Material.Neon })
+		table.insert(spec, { shape = Enum.PartType.Ball, size = Vector3.new(1.2, 1.2, 1.2), cf = CFrame.new(s * 17, -0.2, 0), color = if s < 0 then Color3.fromRGB(255, 50, 50) else Color3.fromRGB(70, 255, 120), material = Enum.Material.Neon })
+	end
+	local model, root = buildModel(spec)
+	light(root, Color3.fromRGB(255, 215, 170), 40, 1.2)
+	return model, root
+end
+
+local function registerOverwatch(Fx: any)
+	Fx.register("OverwatchSkiff", function(d)
+		if type(d) ~= "table" or typeof(d.c) ~= "Vector3" or type(d.r) ~= "number" or type(d.d) ~= "number" or type(d.t0) ~= "number" then
+			return
+		end
+		stopOverwatch(d.id)
+		local centre: Vector3, radius: number, duration: number = d.c, d.r, d.d
+		local total = OverwatchPath.total(duration)
+		local tau0 = math.max(workspace:GetServerTimeNow() - d.t0, 0)
+		if tau0 >= total then
+			return
+		end
+		local model, root = buildOverwatchSkiff()
+		model:PivotTo((OverwatchPath.cframe(centre, radius, duration, tau0)))
+		local recv = os.clock()
+		local conn = animate(total - tau0, function()
+			model:PivotTo((OverwatchPath.cframe(centre, radius, duration, tau0 + os.clock() - recv)))
+		end, function()
+			stopOverwatch(d.id)
+		end)
+		overwatches[d.id] = { model = model, conn = conn, loop = loopAt("SkiffEngine", root) }
+	end)
+	Fx.register("OverwatchEnd", function(d)
+		if type(d) == "table" then
+			stopOverwatch(d.id)
+		end
+	end)
+end
+
 function CallInFx.init(Fx: any, audio: any, juice: any)
 	Audio = audio
 	Juice = juice
@@ -1407,6 +1482,7 @@ function CallInFx.init(Fx: any, audio: any, juice: any)
 	registerLance(Fx)
 	registerFalling(Fx)
 	registerJet(Fx)
+	registerOverwatch(Fx)
 	registerClouds(Fx)
 	registerPods(Fx)
 	FxRef = Fx
