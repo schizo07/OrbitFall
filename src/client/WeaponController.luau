@@ -262,7 +262,11 @@ local function tryReload()
 	if not w or not ws or not slot then
 		return
 	end
-	if ws.spare <= 0 or (localMag[slot] or ws.mag) >= (w.mag or 0) then
+	-- an ammo backpack (character attributes from server/WeaponService) feeds whole-mag reloads of its weapon
+	local c = player.Character
+	local pack = c and c:GetAttribute("AmmoPack")
+	local hasPack = not w.perShellReload and type(pack) == "number" and pack > 0 and c:GetAttribute("AmmoPackFor") == ws.id
+	if (ws.spare <= 0 and not hasPack) or (localMag[slot] or ws.mag) >= (w.mag or 0) then
 		return
 	end
 	actionEv:FireServer("reload")
@@ -333,6 +337,19 @@ end
 
 function WeaponController.init()
 	RunService.RenderStepped:Connect(stepBarrels)
+	-- scope overlay (zoom >= 2 weapons) and the HUD ammo-pack count
+	local ui = script.Parent:FindFirstChild("UI")
+	for _, name in { "ScopeOverlay", "AmmoPackCount" } do
+		local mod = ui and ui:FindFirstChild(name)
+		if mod then
+			local ok, err = pcall(function()
+				require(mod :: ModuleScript).init(Cam)
+			end)
+			if not ok then
+				warn("[Weapon] " .. name .. " failed:", err)
+			end
+		end
+	end
 	fireEv = Net.event("Fire")
 	actionEv = Net.event("Action")
 	Store.on("me", onMe)

@@ -21,6 +21,8 @@ local mates: { [Player]: { node: Frame, key: string } } = {}
 local localPlayer = Players.LocalPlayer
 local headingShown = -1 -- last heading readout written (index * 1000 + degrees)
 local headingLabel: Instance? = nil -- the label it was written to
+local blips: { { pos: Vector3, node: Frame } } = {} -- radar ping blips (Compass.ping), cleared after blipsUntil
+local blipsUntil = 0
 
 local function wrap180(a: number): number
 	return (a + 180) % 360 - 180
@@ -135,6 +137,25 @@ function Compass.build(parent: Instance, _touch: boolean): Frame
 		Parent = chip,
 	})
 	ui.chip = chip
+	-- RADAR ONLINE tag left of the heading chip (radar side objective: workspace attribute RadarOnline)
+	local radarTag = Style.panel({
+		Name = "RadarTag",
+		Size = UDim2.fromOffset(96, 16),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(0.5, -40, 1, 2),
+		Visible = false,
+		Parent = holder,
+	})
+	Style.label({
+		Text = "RADAR ONLINE",
+		TextSize = 12,
+		Color = Style.Green,
+		XAlign = Enum.TextXAlignment.Center,
+		Size = UDim2.fromScale(1, 1),
+		Parent = radarTag,
+	})
+	ui.radarTag = radarTag
+	pcall(require(script.Parent.Parent:WaitForChild("Fx"):WaitForChild("Weather")).compassTag, holder) -- STORM tag (Fx/Weather)
 	return layer
 end
 
@@ -223,6 +244,29 @@ function Compass.step(cam: Camera, markers: { [string]: any })
 		m.compass.Position = UDim2.fromScale(Theme.clamp(0.5 + rel / SPAN, 0, 1), 0.5)
 	end
 
+	-- radar ping blips (red dots for enemy groups, red arrows for breach sources) + the RADAR ONLINE tag
+	if #blips > 0 then
+		if os.clock() > blipsUntil then
+			for _, bl in blips do
+				bl.node:Destroy()
+			end
+			table.clear(blips)
+		else
+			for _, bl in blips do
+				local d = bl.pos - camPos
+				local rel = wrap180(math.deg(math.atan2(d.X, -d.Z)) - ang)
+				bl.node.Visible = math.abs(rel) <= SPAN / 2 + 6
+				bl.node.Position = UDim2.fromScale(Theme.clamp(0.5 + rel / SPAN, 0, 1), 0.5)
+			end
+		end
+	end
+	if ui.radarTag then
+		local on = workspace:GetAttribute("RadarOnline") == true
+		if on ~= ui.radarTag.Visible then
+			ui.radarTag.Visible = on
+		end
+	end
+
 	-- breach pip
 	local it = Store.get("intensity")
 	local pip = ui.breachPip
@@ -236,9 +280,41 @@ function Compass.step(cam: Camera, markers: { [string]: any })
 	end
 end
 
+-- Radar ping (UI/RadarTune, Fx "RadarPing"): red blips on the tape for `dur` s, replacing the last ping's.
+-- list = { { p = Vector3, n = enemies, src = true for a breach source } }
+function Compass.ping(list: { any }, dur: number)
+	for _, bl in blips do
+		bl.node:Destroy()
+	end
+	table.clear(blips)
+	if not ui.layer then
+		return
+	end
+	for _, b in list do
+		if typeof(b.p) == "Vector3" then
+			local node = Style.glyph(if b.src then "up" else "dot", {
+				Name = "RadarBlip",
+				Size = if b.src then 10 elseif (tonumber(b.n) or 1) >= 5 then 9 else 7,
+				Color = Style.Red,
+				Box = UDim2.fromOffset(12, TAPE_H),
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				Visible = false,
+				ZIndex = 4,
+				Parent = ui.layer,
+			})
+			table.insert(blips, { pos = b.p, node = node })
+		end
+	end
+	blipsUntil = os.clock() + dur
+end
+
 -- Pip on the tape for an objective / beacon. Returned label is owned by the caller (HUD.refreshMarkers destroys it).
 -- shape = a Style.glyph shape name ("diamond", "diamondHollow", "up", ...)
 function Compass.addPip(layer: Instance, key: string, shape: string, color: Color3): Frame
+	if string.sub(key, 1, 9) == "objJAMMER" then
+		color = Style.Red -- call-in jammer site: red pip
+	end
 	return Style.glyph(shape, {
 		Name = key,
 		Size = 11,

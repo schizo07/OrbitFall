@@ -37,6 +37,25 @@ local function missionTime(): number
 end
 local OBJECTIVE_NAMES = { MISSILE = "Missile Launch", UPLINK = "Uplink Relay", HAUL = "Recover Core Cells" }
 
+-- Side objectives: NEST + SAMPLES plus one random extra. Studio: workspace attribute QuickStartSides (comma list, e.g.
+-- "RADAR,FOUNDRY,WRECK") replaces the list. ObjectiveService ignores kinds it doesn't know.
+local EXTRA_SIDES = { "RADAR", "FOUNDRY", "WRECK", "JAMMER", "CONVOY" }
+local function pickSides(): { string }
+	if RunService:IsStudio() then
+		local q = workspace:GetAttribute("QuickStartSides")
+		if type(q) == "string" and q ~= "" then
+			local out = {}
+			for word in string.gmatch(string.upper(q), "[%w_]+") do
+				table.insert(out, word)
+			end
+			if #out > 0 then
+				return out
+			end
+		end
+	end
+	return { "NEST", "SAMPLES", EXTRA_SIDES[math.random(1, #EXTRA_SIDES)] }
+end
+
 -- Squad-card join state, replicated as the Player attribute `Deploy`: "loadout" (joined mid-mission, still on the
 -- Halcyon) -> "dropping" (in the drop capsule) -> nil (on the ground: the card shows health / DOWN as before).
 local LOADOUT_HOLD = 3 -- s a mid-mission joiner stays IN LOADOUT (after the profile loads) before the capsule drops
@@ -407,7 +426,7 @@ function Mission.start(p: Player?, args)
 		Mission.broadcast()
 		S.Objectives.onMainComplete = beginExtraction
 		-- pcall: a failure here must not skip tick(), or the mission could never end (timer / squad-wipe checks live there)
-		local okO, errO = pcall(S.Objectives.start, map, { main = Mission.objective, sides = { "NEST", "SAMPLES" }, faction = Mission.faction, difficulty = Mission.difficulty })
+		local okO, errO = pcall(S.Objectives.start, map, { main = Mission.objective, sides = pickSides(), faction = Mission.faction, difficulty = Mission.difficulty })
 		if not okO then
 			warn("[Mission] Objectives.start failed:", errO)
 		end

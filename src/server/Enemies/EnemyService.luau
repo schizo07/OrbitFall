@@ -30,6 +30,7 @@ local EnemyModels = require(script.Parent.EnemyModels)
 local EnemyAI = require(script.Parent.EnemyAI)
 local Dismember = require(script.Parent.Dismember) -- limb loss (hooks in hit / explode / init)
 local Wrecks = require(script.Parent.Wrecks) -- wreck left by COG walkers / heavies (def.wreck)
+local DroneAI = require(script.Parent.DroneAI) -- DRONE hook: flying foundry drones (def.drone) are built and moved there
 
 -- Heavy targets:
 --   DmgStage (model attr, 0..3)  staged damage for def.stages kinds (thresholds EnemyData.Stages); only ever goes up
@@ -45,6 +46,7 @@ local EnemyService = {}
 
 local S: { [string]: any } = {}
 local enemies: { [number]: any } = {}
+local ground: { [number]: any } = {} -- DRONE hook: every enemy except drones (the set EnemyAI steps)
 local liveCount = 0
 local liveLoad = 0 -- sum of e.cost over live enemies (the Director's cap is counted in load)
 local nextId = 0
@@ -79,7 +81,8 @@ local function ensureConn()
 		return
 	end
 	conn = RunService.Heartbeat:Connect(function(dt)
-		EnemyAI.step(dt, enemies)
+		EnemyAI.step(dt, ground) -- DRONE hook: was `enemies`; drones are stepped by DroneAI below
+		DroneAI.step(dt)
 	end)
 end
 
@@ -100,7 +103,12 @@ function EnemyService.spawn(kindId: string, cf: CFrame, opts: any?)
 	local id = nextId
 
 	local baseKind = def.modelKind or kindId
-	local model, rig = EnemyModels.build(baseKind, id, def.modelScale)
+	local model, rig
+	if def.drone then -- DRONE hook
+		model, rig = DroneAI.build(baseKind, id)
+	else
+		model, rig = EnemyModels.build(baseKind, id, def.modelScale)
+	end
 	if def.fodder then
 		model:SetAttribute("Fodder", true)
 	end
@@ -169,7 +177,12 @@ function EnemyService.spawn(kindId: string, cf: CFrame, opts: any?)
 
 	model:PivotTo(cf)
 	model.Parent = getFolder()
-	EnemyAI.register(e, cf, opts)
+	if def.drone then -- DRONE hook
+		DroneAI.register(e, cf, opts)
+	else
+		ground[id] = e
+		EnemyAI.register(e, cf, opts)
+	end
 	ensureConn()
 	return e
 end
@@ -185,7 +198,12 @@ local function removeEnemy(e: any)
 		liveCount -= 1
 		liveLoad -= e.cost or 1
 	end
-	EnemyAI.unregister(e)
+	ground[e.id] = nil -- DRONE hook
+	if e.drone then
+		DroneAI.unregister(e)
+	else
+		EnemyAI.unregister(e)
+	end
 	return true
 end
 
@@ -434,6 +452,10 @@ end
 -- Outside push for call-ins (Gravity Well pull): velocity studs/s for dur s, scaled down for heavier classes (EnemyAI.push).
 function EnemyService.push(e: any, velocity: Vector3, dur: number)
 	if e and e.alive then
+		if e.drone then -- DRONE hook
+			DroneAI.push(e, velocity, dur)
+			return
+		end
 		EnemyAI.push(e, velocity, dur)
 	end
 end
@@ -507,6 +529,10 @@ end
 -- Blast reaction by class (EnemyData.Blast): fodder / regular tumble, medium stagger, heavy flinch, behemoth / static nothing.
 -- power ~ 1 for a frag grenade at its centre (up to BLAST.maxMul).
 function EnemyService.blastReact(e: any, from: Vector3, power: number)
+	if e and e.alive and e.drone then -- DRONE hook
+		DroneAI.knock(e, from, power)
+		return
+	end
 	if not e or not e.alive or e.def.static or e.class == "behemoth" then
 		return
 	end
@@ -632,6 +658,8 @@ function EnemyService.clear()
 		end
 	end
 	table.clear(enemies)
+	table.clear(ground) -- DRONE hook
+	DroneAI.clear()
 	liveCount = 0
 	liveLoad = 0
 	EnemyService.kills = 0
@@ -650,6 +678,7 @@ function EnemyService.init(s: { [string]: any })
 	S = s
 	getFolder()
 	EnemyAI.init(s)
+	DroneAI.init(s) -- DRONE hook
 	Dismember.init(s) -- dismemberment
 	-- blast reactions for player-made explosions (server/Explosions.luau); S.Explosions is set before the init pass
 	if s.Explosions and s.Explosions.onBlast then

@@ -1285,6 +1285,14 @@ local function think(e: any, now: number)
 		e.slot = nil
 		e.circling = nil
 		-- idle / patrol movement
+		if e.routeTo then
+			-- convoy walkers (side objective): follow the route (SideConvoy sets routeTo / routeSpeed)
+			local rt = flat(e.routeTo - e.pos)
+			if rt.Magnitude > 1 then
+				setWish(e, rt, e.routeSpeed or 0.5)
+				return
+			end
+		end
 		if e.patrol and #targets > 0 and (not e.goal or now > (e.goalRefresh or 0)) then
 			local np = targets[1]
 			local nd = math.huge
@@ -1416,6 +1424,14 @@ local function think(e: any, now: number)
 			end
 			moveDir = Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir
 			moveSpeed = 0.7
+		end
+	end
+	-- convoy walkers (side objective): keep marching along the route while shooting back
+	if e.routeTo then
+		local rt = flat(e.routeTo - e.pos)
+		if rt.Magnitude > 1 then
+			moveDir = rt
+			moveSpeed = e.routeSpeed or 0.5
 		end
 	end
 	-- stuck detection: wiggle out

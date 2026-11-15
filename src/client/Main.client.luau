@@ -73,6 +73,12 @@ end
 if Dial and Dial.init then
 	safeCall("UplinkDial", Dial.init)
 end
+do -- radar side objective: tune mini-game + compass ping (client/UI/RadarTune.luau)
+	local RadarTune = UI and safeRequire(UI:FindFirstChild("RadarTune"))
+	if RadarTune and Fx then
+		safeCall("RadarTune", RadarTune.init, Fx, Audio)
+	end
+end
 safeCall("Camera", Cam.init)
 local MovementMod = safeRequire(root:FindFirstChild("Movement")) or {}
 safeCall("Movement", MovementMod.init) -- stamina, stances, dive, mantle, knockdown

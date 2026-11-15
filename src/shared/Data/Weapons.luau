@@ -22,7 +22,8 @@ export type Weapon = {
 	charge: number?,
 	spinUp: number?,
 	arc: number?,
-	zoom: number?,
+	zoom: number?, -- >= 2: first-person scope while aiming (client/CameraController, client/UI/ScopeOverlay)
+	packMags: number?, -- big-ammo support weapons: reloads an ammo backpack carries (server/WeaponService)
 	recoil: number?, -- camera kick degrees
 	sound: string, -- Sounds catalogue key
 	tracer: Color3?,
@@ -100,20 +101,20 @@ local W: { [string]: Weapon } = {
 	},
 	ROCKET = {
 		id = "ROCKET", name = "Breacher Rocket Tube", slot = "support", kind = "rocket",
-		damage = 650, ap = 5, rpm = 20, mag = 1, spareMags = 6, reload = 3.0, spread = 0.3, range = 500,
+		damage = 650, ap = 5, rpm = 20, mag = 1, spareMags = 6, packMags = 6, reload = 3.0, spread = 0.3, range = 500,
 		splash = { radius = 6, core = 2, damage = 250, ap = 3 },
 		recoil = 5, sound = "ShotRocket", tracer = Color3.fromHex("ffa040"), unlock = "callin",
 		desc = "Anti-armour rocket. Aim for the eye.",
 	},
 	GATLING = {
 		id = "GATLING", name = "Thrum Gatling", slot = "support", kind = "auto",
-		damage = 45, ap = 3, rpm = 900, mag = 150, spareMags = 2, reload = 4.0, spread = 2.2, range = 350, spinUp = 0.4,
+		damage = 45, ap = 3, rpm = 900, mag = 150, spareMags = 2, packMags = 2, reload = 4.0, spread = 2.2, range = 350, spinUp = 0.4,
 		recoil = 0.35, sound = "ShotGatling", tracer = Color3.fromHex("ffe07a"), unlock = "callin",
 		desc = "Spins up, shreds everything medium and below.",
 	},
 	RAIL = {
 		id = "RAIL", name = "Rail Lance", slot = "support", kind = "rail",
-		damage = 900, ap = 5, rpm = 30, mag = 1, spareMags = 12, reload = 1.0, spread = 0, range = 800, charge = 2, pierce = 2,
+		damage = 900, ap = 5, rpm = 30, mag = 1, spareMags = 12, packMags = 8, reload = 1.0, spread = 0, range = 800, charge = 2, pierce = 2,
 		recoil = 4, sound = "ShotRail", tracer = Color3.fromHex("8affff"), unlock = "callin",
 		desc = "Charge 2 s, pierce two targets. Behemoth eyes beware.",
 	},

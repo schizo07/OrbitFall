@@ -1234,8 +1234,197 @@ local function stageTick()
 	end
 end
 
+-- Foundry drones (model attribute Drone = "COG" | "BROOD", server/Enemies/DroneAI.luau) ------------------------------
+-- Local-only extras that follow the server-moved model: COG = a translucent blur disc + spinning blade over each Rotor*
+-- part; BROOD = two translucent wings flapping at the Wing* parts. Parts live in camera.DroneFx (not the swept EnemyFx
+-- folder) and go back to a pool when the drone is gone; drones further than DRONE_FX_DIST skip the extras.
+local DRONE_FX_DIST = 220
+local DRONE_POOL_MAX = 48
+local droneFolder: Folder? = nil
+local dronePool: { Part } = {}
+local droneTracked: { [Model]: { any } } = {}
+local droneConn: RBXScriptConnection? = nil
+
+local function droneFxFolder(): Folder
+	local cam = workspace.CurrentCamera or workspace
+	if droneFolder and droneFolder.Parent == cam then
+		return droneFolder
+	end
+	local f = cam:FindFirstChild("DroneFx")
+	if not f then
+		f = Instance.new("Folder")
+		f.Name = "DroneFx"
+		f.Parent = cam
+	end
+	droneFolder = f :: Folder
+	return droneFolder :: Folder
+end
+
+local function dronePart(size: Vector3, color: Color3, mat: Enum.Material, transp: number, shape: Enum.PartType): Part
+	local p = table.remove(dronePool)
+	if not p then
+		p = Instance.new("Part")
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+	end
+	local q = p :: Part
+	q.Shape = shape
+	q.Size = size
+	q.Color = color
+	q.Material = mat
+	q.Transparency = transp
+	q.Parent = droneFxFolder()
+	return q
+end
+
+local function droneRelease(p: Part)
+	if #dronePool < DRONE_POOL_MAX then
+		p.Parent = nil
+		table.insert(dronePool, p)
+	else
+		p:Destroy()
+	end
+end
+
+local function untrackDrone(m: Instance)
+	local items = droneTracked[m :: Model]
+	if not items then
+		return
+	end
+	droneTracked[m :: Model] = nil
+	for _, it in items do
+		for _, p in it.parts do
+			droneRelease(p)
+		end
+	end
+end
+
+local function droneStep()
+	local cam = workspace.CurrentCamera
+	local camPos = if cam then cam.CFrame.Position else Vector3.zero
+	local t = os.clock()
+	for m, items in droneTracked do
+		if not m.Parent then
+			untrackDrone(m)
+			continue
+		end
+		local root = m.PrimaryPart
+		local near = root ~= nil and (root.Position - camPos).Magnitude < DRONE_FX_DIST
+		for _, it in items do
+			local anchor: BasePart = it.anchor
+			if not anchor.Parent then
+				continue
+			end
+			if not near then
+				if not it.hidden then
+					it.hidden = true
+					for _, p in it.parts do
+						p.Transparency = 1
+					end
+				end
+				continue
+			end
+			if it.hidden then
+				it.hidden = false
+				for k, p in it.parts do
+					p.Transparency = it.transp[k]
+				end
+			end
+			if it.kind == "rotor" then
+				-- the hub is a cylinder whose X axis points up: the blur disc and the blade sit on top and spin about X
+				local top = anchor.CFrame * CFrame.new(0.4, 0, 0)
+				it.parts[1].CFrame = top
+				it.parts[2].CFrame = top * CFrame.Angles(t * 42 + it.a, 0, 0)
+			else
+				local flap = math.sin(t * 38 + it.a) * 0.65 + 0.15
+				it.parts[1].CFrame = anchor.CFrame * CFrame.Angles(0, 0, it.side * flap) * CFrame.new(it.side * 1.2, 0, 0.1)
+			end
+		end
+	end
+end
+
+local function trackDrone(m: Instance, tries: number?)
+	if not m:IsA("Model") or droneTracked[m] then
+		return
+	end
+	local style = m:GetAttribute("Drone")
+	if style ~= "COG" and style ~= "BROOD" then
+		return
+	end
+	local items = {}
+	for _, c in m:GetChildren() do
+		if not c:IsA("BasePart") then
+			continue
+		end
+		if style == "COG" and string.sub(c.Name, 1, 5) == "Rotor" then
+			local disc = dronePart(Vector3.new(0.1, 3.4, 3.4), Color3.fromRGB(205, 210, 220), Enum.Material.SmoothPlastic, 0.75, Enum.PartType.Cylinder)
+			local blade = dronePart(Vector3.new(0.14, 0.32, 3.1), Color3.fromRGB(60, 64, 72), Enum.Material.Metal, 0.3, Enum.PartType.Block)
+			table.insert(items, { kind = "rotor", anchor = c, parts = { disc, blade }, transp = { 0.75, 0.3 }, a = math.random() * 6 })
+		elseif style == "BROOD" and string.sub(c.Name, 1, 4) == "Wing" then
+			local wing = dronePart(Vector3.new(2.4, 0.08, 1.3), Color3.fromRGB(205, 255, 200), Enum.Material.Glass, 0.45, Enum.PartType.Block)
+			table.insert(items, { kind = "wing", anchor = c, parts = { wing }, transp = { 0.45 }, side = if c.Name == "WingL" then -1 else 1, a = math.random() * 6 })
+		end
+	end
+	if #items == 0 then
+		-- children not replicated yet
+		local n = tries or 0
+		if n < 5 then
+			task.delay(0.3, trackDrone, m, n + 1)
+		end
+		return
+	end
+	droneTracked[m] = items
+	if not droneConn then
+		droneConn = RunService.RenderStepped:Connect(function()
+			local ok, err = pcall(droneStep)
+			if not ok then
+				warn("[EnemyFx] drone step failed: " .. tostring(err))
+			end
+		end)
+	end
+end
+
+local function startDrones()
+	task.spawn(function()
+		local f = workspace:WaitForChild("Enemies", 120)
+		if not f then
+			return
+		end
+		for _, m in f:GetChildren() do
+			trackDrone(m)
+		end
+		f.ChildAdded:Connect(function(m)
+			task.defer(trackDrone, m)
+		end)
+		f.ChildRemoved:Connect(untrackDrone)
+	end)
+end
+
+-- Death pop: a quick bright puff + flat ring (COG orange spark, BROOD green spore burst); the generic burst still plays
+local DRONE_POP = { DRONE_COG = C3(255, 150, 70), SPOREMITE = C3(160, 255, 100) }
+local function dronePop(d: any)
+	local col = DRONE_POP[d.kind]
+	if not col or typeof(d.p) ~= "Vector3" then
+		return
+	end
+	if Fx and Fx.camDistance and Fx.camDistance(d.p) > 300 then
+		return
+	end
+	local ball = mk(Vector3.new(1.2, 1.2, 1.2), col, CFrame.new(d.p), Enum.PartType.Ball, Enum.Material.Neon, 0.1, 0.6)
+	tween(ball, 0.22, { Size = Vector3.new(5.5, 5.5, 5.5), Transparency = 1 })
+	local ring = mk(Vector3.new(0.2, 1.5, 1.5), col, CFrame.new(d.p) * CFrame.Angles(0, 0, math.pi / 2), Enum.PartType.Cylinder, Enum.Material.Neon, 0.3, 0.6)
+	tween(ring, 0.3, { Size = Vector3.new(0.1, 9, 9), Transparency = 1 })
+end
+
 -- Death: armour plates / shell chunks flung outward, still burning / dripping for a few seconds
 local function onHeavyDeath(d: any)
+	if DRONE_POP[d.kind] then -- foundry drones: small pop only
+		dronePop(d)
+		return
+	end
 	if d.fodder == true or typeof(d.p) ~= "Vector3" or not Fx then
 		return
 	end
@@ -1419,6 +1608,7 @@ function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx.register("EnemyAttack", onEnemyAttack)
 	Fx.register("Death", onHeavyDeath) -- staged kinds: flung burning plates (the generic death burst stays in Fx/init.luau)
 	startStaged()
+	startDrones() -- foundry drones: rotor blur / wing flutter
 end
 
 return EnemyFx

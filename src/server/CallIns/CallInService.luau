@@ -84,6 +84,16 @@ local function notify(player: Player, text: string)
 	end
 end
 
+-- Jammer sites (S.Jammers): a trooper standing inside a jam radius can't arm a call-in or throw a beacon.
+local function jammed(player: Player): boolean
+	local jm = S and S.Jammers
+	if not jm or not jm.isJammed then
+		return false
+	end
+	local root = S.Players and S.Players.getRoot and S.Players.getRoot(player)
+	return root ~= nil and jm.isJammed(root.Position) == true
+end
+
 local function getFolder(): Folder
 	local f = workspace:FindFirstChild("CallInObjects")
 	if not f then
@@ -712,6 +722,12 @@ local function throwBeacon(player: Player, aim: any)
 	if not root then
 		return
 	end
+	if jammed(player) then
+		st.holding = nil
+		notify(player, "UPLINK JAMMED")
+		publish(player)
+		return
+	end
 	local def = CallInData.get(holding.id)
 	if not def then
 		st.holding = nil
@@ -856,6 +872,10 @@ local function onReady(player: Player, slotIndex: any, perfect: any)
 	end
 	st.lastReady = clock
 	if not S.Players.isAlive(player) then
+		return
+	end
+	if jammed(player) then
+		notify(player, "UPLINK JAMMED")
 		return
 	end
 	local isPerfect = perfect == true

@@ -52,6 +52,9 @@ return function(ctx)
 		Color = Color3.fromRGB(47, 139, 255), CFrame = cf * CFrame.new(0, 0.3, -1.65), CanCollide = false,
 	}).Parent = model
 	model.PrimaryPart = body
+	if S.Weapons and S.Weapons.spawnAmmoPack then -- big-ammo backpack beside the crate (server/WeaponService)
+		S.Weapons.spawnAmmoPack(model, cf * CFrame.new(3.3, -0.45, 0))
+	end
 	model.Parent = ctx.folder
 	ctx.onStop(function()
 		model:Destroy()

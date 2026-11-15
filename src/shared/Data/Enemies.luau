@@ -57,6 +57,9 @@ export type Enemy = {
 	wreck: boolean?, -- leaves a wreck model for ~60 s (server/Enemies/Wrecks.luau)
 	-- ENEMY AIM (bolt / burst shooters, server/Enemies/EnemyAI.luau shootBolt). Cone half-angles in degrees. Missing = Enemies.AimDefault.
 	aim: Aim?,
+	-- FLYING DRONE (Drone Foundry side objective): moved and fired by server/Enemies/DroneAI.luau instead of EnemyAI; the model is
+	-- built there too. hover = height band above the ground (studs).
+	drone: { hover: { number } }?,
 }
 -- base: spread when the target is first acquired (or comes back out of cover); min: spread after `tighten` s of steady aim.
 -- rangeMul: extra spread per Enemies.Aim.rangeRef studs beyond Enemies.Aim.rangeFrom; moveMul: extra spread for a target
@@ -296,6 +299,34 @@ E.SKITTER_SWARM = fodder("SKITTER", "SKITTER_SWARM", "Skitterling Swarm", 1.05,
 	{ kind = "bite", damage = 8, range = 4.5, cooldown = 1.2, windup = 0.3 }, nil)
 E.SHARDLING_SWARM = fodder("SHARDLING", "SHARDLING_SWARM", "Shard Swarmer", 1.1,
 	{ kind = "needle", damage = 5, range = 50, cooldown = 1.7, speed = 140, count = 1, interval = 0.1, spread = 4 }, 18)
+
+-- FLYING DRONES (Drone Foundry side objective, server/Objectives/SideFoundry.luau). Easy to kill, erratic, harass the nearest
+-- trooper. Not in any faction roster: only the foundry launches them. Behaviour + model: server/Enemies/DroneAI.luau.
+-- Light armour everywhere; `aim` = the loose cone, Studio A/B Feel_DroneAim "tight" narrows it (DroneAI).
+E.DRONE_COG = {
+	id = "DRONE_COG", name = "Gnat Drone", faction = "COG", class = "regular",
+	hp = 40, speed = 17, size = 1.4,
+	zones = {
+		body = { armor = 1, mult = 1 },
+		eye = { armor = 0, mult = 2, fatal = 15 },
+	},
+	attacks = { { kind = "bolt", damage = 6, range = 55, cooldown = 1.5, speed = 95 } },
+	salvage = 1, xp = 1, cost = 0.5,
+	desc = "Buzzing rotor drone from a COG foundry. Weak, twitchy, annoying.",
+	drone = { hover = { 8, 14 } },
+}
+E.SPOREMITE = {
+	id = "SPOREMITE", name = "Spore-Mite", faction = "BROOD", class = "regular",
+	hp = 40, speed = 15, size = 1.4,
+	zones = {
+		body = { armor = 0, mult = 1 },
+		sac = { armor = 0, mult = 2, fatal = 15 },
+	},
+	attacks = { { kind = "spit", damage = 8, range = 45, cooldown = 1.9, speed = 55, radius = 3 } },
+	salvage = 1, xp = 1, cost = 0.5,
+	desc = "Flying mite popped out of a spore spire. Spits small acid blobs.",
+	drone = { hover = { 8, 14 } },
+}
 
 local Enemies = { byId = E }
 

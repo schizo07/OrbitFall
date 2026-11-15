@@ -19,6 +19,17 @@ local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"))
+local Aim = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Aim"))
+local CombatPose = require(script.Parent.CombatPose)
+
+-- First-person scope (weapons with zoom >= 2, aiming): the lens sits on the shared bullet origin (shared/Aim.origin,
+-- the point the server traces every shot from), so the scope's centre ray and the bullet line are the same line.
+-- Studio A/B "SCOPE" (Feel_Scope): nil = scope, "old" = third-person zoom, "fade" = scope fading in over 0.15 s.
+local SCOPE_MIN_ZOOM = 2
+local SCOPE_FOV_DIV = 1.65 -- scope FOV = base FOV / (zoom * this): 66 -> 20 at 2x
+local scoped = false
+local scopeSince = 0
+local lastScopeHide = 0
 
 -- Framing (intensity spec §1): tight over-the-shoulder, trooper fills the lower-left, body clipped at the thighs.
 local yaw, pitch = 0, -0.15
@@ -104,6 +115,11 @@ function CameraController.setZoom(mult: number)
 	zoomMult = mult
 end
 
+-- the scope view is on (first-person lens + overlay), and os.clock() when it came on
+function CameraController.scopeState(): (boolean, number)
+	return scoped, scopeSince
+end
+
 function CameraController.getYaw(): number
 	return yaw
 end
@@ -174,8 +190,9 @@ function CameraController.init()
 			if last then
 				local d = io.Position - last
 				touchLook[io] = io.Position
-				yaw -= d.X * CameraController.touchSens
-				pitch -= d.Y * CameraController.touchSens
+				local k = CameraController.touchSens * (if scoped then ADS_SENS / zoomMult else 1)
+				yaw -= d.X * k
+				pitch -= d.Y * k
 			end
 		end
 		if io.UserInputType == Enum.UserInputType.MouseWheel and not gp then
@@ -224,14 +241,16 @@ function CameraController.init()
 		UserInputService.MouseIconEnabled = not lockMouse
 
 		-- touch FIRE-drag look + gamepad right stick
+		-- scoped: touch and stick turn slower with the zoom (the mouse already divides by zoomMult)
+		local scopeSens = if scoped then ADS_SENS / zoomMult else 1
 		local lx, ly = Input.takeLook()
-		yaw -= lx * CameraController.touchSens
-		pitch -= ly * CameraController.touchSens
+		yaw -= lx * CameraController.touchSens * scopeSens
+		pitch -= ly * CameraController.touchSens * scopeSens
 		local state = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
 		for _, io in state do
 			if io.KeyCode == Enum.KeyCode.Thumbstick2 and io.Position.Magnitude > 0.15 then
-				yaw -= io.Position.X * CameraController.padSens * dt
-				pitch += io.Position.Y * CameraController.padSens * dt * 0.7
+				yaw -= io.Position.X * CameraController.padSens * dt * scopeSens
+				pitch += io.Position.Y * CameraController.padSens * dt * 0.7 * scopeSens
 			end
 		end
 		pitch = math.clamp(pitch, -1.25, 1.2)
@@ -242,6 +261,18 @@ function CameraController.init()
 		local c = player.Character
 		local root = c and c:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local hum = c and c:FindFirstChildOfClass("Humanoid")
+		local wantScope = aiming
+			and zoomMult >= SCOPE_MIN_ZOOM
+			and workspace:GetAttribute("Feel_Scope") ~= "old"
+			and not menu
+			and root ~= nil
+			and hum ~= nil
+			and hum.Health > 0
+			and not Store.get("holding")
+		if wantScope ~= scoped then
+			scoped = wantScope
+			scopeSince = os.clock()
+		end
 		local focus: Vector3
 		if root then
 			-- horizontal follow lags a touch (weight); snap on teleports / drops
@@ -334,7 +365,8 @@ function CameraController.init()
 		end
 		local camPos = if full > 0 then fromP + offset.Unit * math.min(camDist, full) else toP
 		local cf = CFrame.new(camPos) * rot * bob
-		cf = cf * Juice.step(dt)
+		local juiceCf = Juice.step(dt)
+		cf = cf * juiceCf
 		camera.CFrame = cf
 		camera.Focus = CFrame.new(focus)
 		local fov = tune("Fov", BASE_FOV) - ads * (tune("AdsFovDrop", ADS_FOV_DROP) + (zoomMult - 1) * 22) + SPRINT_FOV_ADD * sprint + Juice.getFov()
@@ -349,7 +381,18 @@ function CameraController.init()
 			fade = math.floor(fade * 20 + 0.5) / 20
 			-- left-shoulder "camera" preset: the head and helmet go semi-transparent so the gun line shows through
 			local headFade = math.floor(tune("LeftHeadFade", LEFT_HEAD_FADE) * leftAds * 20 + 0.5) / 20
-			if fade ~= lastFade or headFade ~= lastHeadFade then
+			-- scope: the whole local trooper (gun and back pack included) is hidden; re-applied 4x a second while
+			-- scoped because gun swaps / mesh loads add new parts
+			local reapply = false
+			if scoped then
+				fade, headFade = 1, 0
+				local t = os.clock()
+				if t - lastScopeHide > 0.25 then
+					lastScopeHide = t
+					reapply = true
+				end
+			end
+			if reapply or fade ~= lastFade or headFade ~= lastHeadFade then
 				lastFade, lastHeadFade = fade, headFade
 				for _, p in c:GetDescendants() do
 					if p:IsA("BasePart") or p:IsA("Decal") then
@@ -364,6 +407,17 @@ function CameraController.init()
 			hum.AutoRotate = false
 			local look = Vector3.new(-math.sin(yaw), 0, -math.cos(yaw))
 			root.CFrame = CFrame.lookAt(root.Position, root.Position + look)
+		end
+
+		-- scope: after the facing so Aim.origin uses this frame's root; no bob / roll, recoil kick and shake kept
+		if scoped and c then
+			local o = Aim.origin(c, CombatPose.handSign())
+			if o then
+				camera.CFrame = CFrame.new(o) * rot * juiceCf
+				camera.Focus = CFrame.new(o)
+				local sfov = tune("Fov", BASE_FOV) / (math.max(zoomMult, 1) * SCOPE_FOV_DIV) + Juice.getFov() * 0.3
+				camera.FieldOfView = math.clamp(sfov, 8, 100)
+			end
 		end
 	end)
 

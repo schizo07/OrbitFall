@@ -311,6 +311,127 @@ local GROUPS = {
 			{ name = "C saver everywhere (judge on PC)", set = { Feel_PerfSaver = "all" } },
 		},
 	},
+	{
+		-- client/CameraController + client/UI/ScopeOverlay: aiming a zoom >= 2 weapon (MR-9 Longwatch)
+		name = "SCOPE",
+		keys = { "Feel_Scope" },
+		presets = {
+			{ name = "A first-person scope", set = {} },
+			{ name = "B old third-person zoom", set = { Feel_Scope = "old" } },
+			{ name = "C scope, 0.15 s fade-in from black", set = { Feel_Scope = "fade" } },
+		},
+	},
+	{
+		-- server/WeaponService: reloads in a supply-drop ammo backpack (ROCKET 6 / GATLING 2 / RAIL 8 at x1); applies to
+		-- the next pack picked up (server = mirrored)
+		name = "AMMO PACK",
+		keys = { "Feel_AmmoPack" },
+		server = true,
+		presets = {
+			{ name = "A full (x1)", set = {} },
+			{ name = "B half (x0.5)", set = { Feel_AmmoPack = 0.5 } },
+			{ name = "C double (x2)", set = { Feel_AmmoPack = 2 } },
+		},
+	},
+	{
+		-- client/Fx/Weather: extra per-biome ColorCorrection on top of the map's own (desert warm, ash grey-red, swamp
+		-- green, ice cool)
+		name = "COLOUR GRADE",
+		keys = { "Feel_Grade" },
+		presets = {
+			{ name = "A new per biome", set = {} },
+			{ name = "B stronger (x1.9)", set = { Feel_Grade = "strong" } },
+			{ name = "C off (map grade only)", set = { Feel_Grade = "off" } },
+		},
+	},
+	{
+		-- server/WeatherService + client/Fx/Weather: dust storms on desert / ash (calm 2-4 min, storm 40-70 s)
+		name = "WEATHER",
+		keys = { "Feel_Weather" },
+		server = true,
+		presets = {
+			{ name = "A storms on", set = {} },
+			{ name = "B always clear", set = { Feel_Weather = "clear" } },
+			{ name = "C storm now (then every 20 s calm)", set = { Feel_Weather = "now" } },
+		},
+	},
+	{
+		-- server/Objectives/SideWreck: download length and wave count, read when the download starts (server = mirrored)
+		name = "WRECK DOWNLOAD",
+		keys = { "Feel_WreckDownload" },
+		server = true,
+		presets = {
+			{ name = "A 45 s, 3 waves", set = {} },
+			{ name = "B 30 s, 2 waves", set = { Feel_WreckDownload = "B" } },
+			{ name = "C 60 s, 4 waves", set = { Feel_WreckDownload = "C" } },
+		},
+	},
+	{
+		-- server/Objectives/SideConvoy: number of Strider walkers, read when the mission starts (server = mirrored)
+		name = "CONVOY",
+		keys = { "Feel_ConvoyCount" },
+		server = true,
+		presets = {
+			{ name = "A 3 walkers", set = {} },
+			{ name = "B 2 walkers", set = { Feel_ConvoyCount = 2 } },
+			{ name = "C 5 walkers", set = { Feel_ConvoyCount = 5 } },
+		},
+	},
+	{
+		-- server/Objectives/SideRadar: how the dish is tuned, read when a player uses the console (server = mirrored)
+		name = "RADAR TUNE",
+		keys = { "Feel_RadarTune" },
+		server = true,
+		presets = {
+			{ name = "A sweep, 3 taps in the band", set = {} },
+			{ name = "B sweep, 2 taps in the band", set = { Feel_RadarTune = "sweep2" } },
+			{ name = "C hold 4 s only (no mini-game)", set = { Feel_RadarTune = "hold" } },
+		},
+	},
+	{
+		-- server/Objectives/SideRadar: enemy-group ping on the compass while the radar runs (server = mirrored)
+		name = "RADAR PING",
+		keys = { "Feel_RadarPing" },
+		server = true,
+		presets = {
+			{ name = "A every 20 s", set = {} },
+			{ name = "B every 12 s", set = { Feel_RadarPing = 12 } },
+			{ name = "C off", set = { Feel_RadarPing = "off" } },
+		},
+	},
+	{
+		-- server/Objectives/SideJammer: jam radius and charge fuse, read when the mission's objectives start (server = mirrored)
+		name = "JAMMER",
+		keys = { "Feel_Jammer" },
+		server = true,
+		presets = {
+			{ name = "A 60 m radius, 10 s fuse", set = {} },
+			{ name = "B 45 m radius, 8 s fuse", set = { Feel_Jammer = "B" } },
+			{ name = "C 80 m radius, 12 s fuse", set = { Feel_Jammer = "C" } },
+		},
+	},
+	{
+		-- server/Objectives/SideFoundry: seconds between drone launches with a trooper within 150 m (far = x25/12),
+		-- read live (server = mirrored)
+		name = "FOUNDRY RATE",
+		keys = { "Feel_FoundryRate" },
+		server = true,
+		presets = {
+			{ name = "A every 12 s (far 25 s)", set = {} },
+			{ name = "B every 8 s (far ~17 s)", set = { Feel_FoundryRate = 8 } },
+			{ name = "C every 18 s (far ~38 s)", set = { Feel_FoundryRate = 18 } },
+		},
+	},
+	{
+		-- server/Enemies/DroneAI: foundry drone shot cone, read per shot (server = mirrored)
+		name = "DRONE AIM",
+		keys = { "Feel_DroneAim" },
+		server = true,
+		presets = {
+			{ name = "A loose (6.5 deg cone, no lead)", set = {} },
+			{ name = "B tight (2.2 deg cone, half lead)", set = { Feel_DroneAim = "tight" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough

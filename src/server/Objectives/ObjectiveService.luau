@@ -21,6 +21,11 @@ local MissileLaunch = require(script.Parent.MissileLaunch)
 local UplinkRelay = require(script.Parent.UplinkRelay)
 local HaulCells = require(script.Parent.HaulCells)
 local SideObjectives = require(script.Parent.SideObjectives)
+local SideWreck = require(script.Parent.SideWreck)
+local SideConvoy = require(script.Parent.SideConvoy)
+local SideRadar = require(script.Parent.SideRadar)
+local SideJammer = require(script.Parent.SideJammer)
+local SideFoundry = require(script.Parent.SideFoundry)
 
 local ObjectiveService = {}
 ObjectiveService.onMainComplete = nil :: (() -> ())?
@@ -136,6 +141,7 @@ local function buildCtx(map: any, faction: string): any
 	ctx.rng = Random.new()
 	ctx.difficulty = 1 -- set by start() (HaulCells: cell count)
 	ctx.freeNests = {} -- nest sites no NEST side objective uses (HaulCells: extra cell cache)
+	ctx.entries = entries -- read-only view of every objective row (SideRadar hides / reveals side markers)
 
 	function ctx.alive(): boolean
 		return running and runId == myRun
@@ -539,6 +545,23 @@ function ObjectiveService.start(map: any, cfg: any)
 	for i = nestCount + 1, #nestSites do
 		table.insert(ctx.freeNests, nestSites[i])
 	end
+	-- spare site for set-piece sides (RADAR / FOUNDRY / WRECK): taken from the END of the shuffled list (the NEST sides use the
+	-- front, HaulCells' extra cache the first free one). Returns (siteName, CFrame) or nil when none is left.
+	local spareTaken = 0
+	function ctx.takeSite(): (string?, CFrame?)
+		while #nestSites - spareTaken > nestCount do
+			local name = nestSites[#nestSites - spareTaken]
+			spareTaken += 1
+			local fi = table.find(ctx.freeNests, name)
+			if fi then
+				table.remove(ctx.freeNests, fi)
+			end
+			if map.sites[name] then
+				return name, map.sites[name]
+			end
+		end
+		return nil, nil
+	end
 
 	local mainKind = cfg.main or "MISSILE"
 	local ctl
@@ -574,6 +597,34 @@ function ObjectiveService.start(map: any, cfg: any)
 		elseif kind == "SAMPLES" then
 			c = SideObjectives.startSamples(ctx, counts[kind])
 			samplesCtl = c
+		elseif kind == "WRECK" then
+			local site, scf = ctx.takeSite()
+			if site and scf then
+				c = SideWreck.start(ctx, scf, counts[kind])
+			end
+		elseif kind == "CONVOY" then
+			if faction == "COG" then
+				c = SideConvoy.start(ctx, counts[kind])
+			else
+				-- COG walkers only: a Brood planet gets a crashed-ship data site instead
+				local site, scf = ctx.takeSite()
+				if site and scf then
+					c = SideWreck.start(ctx, scf, (counts.WRECK or 0) + 1)
+					counts.WRECK = (counts.WRECK or 0) + 1
+				end
+			end
+		elseif kind == "RADAR" then
+			c = SideRadar.start(ctx, counts[kind])
+		elseif kind == "JAMMER" then
+			local site, scf = ctx.takeSite()
+			if site and scf then
+				c = SideJammer.start(ctx, scf, counts[kind])
+			end
+		elseif kind == "FOUNDRY" then
+			local site, scf = ctx.takeSite()
+			if site and scf then
+				c = SideFoundry.start(ctx, scf, counts[kind])
+			end
 		end
 		if c then
 			c.isSide = true
@@ -598,6 +649,7 @@ function ObjectiveService.onExplosion(pos: Vector3, radius: number)
 		return
 	end
 	SideObjectives.onExplosion(pos, radius)
+	SideFoundry.onExplosion(pos, radius)
 end
 
 function ObjectiveService.getState(): { any }

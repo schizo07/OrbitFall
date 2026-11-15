@@ -319,6 +319,149 @@ local function muzzleOrigin(p: Player): Vector3?
 	return Aim.origin(c, if type(hand) == "number" then hand else 1)
 end
 
+-- AMMO BACKPACK --------------------------------------------------------------------------
+-- A supply drop carries one pack for big-ammo support weapons (Weapons packMags: ROCKET, GATLING, RAIL). The wearer's
+-- reloads of that weapon draw from the pack first. Stored on the player record as r.ammoPack = { id, mags, char };
+-- shown to everyone as a part on the back and to the owner's HUD through the character attributes AmmoPack (reloads
+-- left) and AmmoPackFor (weapon id). Lost on death (bound to the character it was put on).
+-- Studio A/B "AMMO PACK" (Feel_AmmoPack, mirrored by "studioFeel"): reload count multiplier.
+local PACK_PART = "AmmoPack"
+
+local function packSize(w): number
+	local n = w.packMags or 0
+	local m = workspace:GetAttribute("Feel_AmmoPack")
+	if game:GetService("RunService"):IsStudio() and type(m) == "number" and m > 0 then
+		n = math.max(1, math.floor(n * m + 0.5))
+	end
+	return n
+end
+
+local function packVisual(c: Model?, pack: any?)
+	if not c then
+		return
+	end
+	local old = c:FindFirstChild(PACK_PART)
+	if not pack or pack.mags <= 0 then
+		if old then
+			old:Destroy()
+		end
+		c:SetAttribute("AmmoPack", nil)
+		c:SetAttribute("AmmoPackFor", nil)
+		return
+	end
+	c:SetAttribute("AmmoPack", pack.mags)
+	c:SetAttribute("AmmoPackFor", pack.id)
+	if old then
+		return
+	end
+	local torsoInst = c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso")
+	if not torsoInst or not torsoInst:IsA("BasePart") then
+		return
+	end
+	local torso: BasePart = torsoInst
+	local m = Instance.new("Model")
+	m.Name = PACK_PART
+	local function piece(size: Vector3, color: Color3, mat: Enum.Material, off: CFrame): Part
+		local p = Instance.new("Part")
+		p.Size = size
+		p.Color = color
+		p.Material = mat
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.Massless = true
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		p.CFrame = torso.CFrame * off
+		local wd = Instance.new("WeldConstraint")
+		wd.Part0 = torso
+		wd.Part1 = p
+		wd.Parent = p
+		p.Parent = m
+		return p
+	end
+	piece(Vector3.new(1.5, 1.7, 0.8), Color3.fromHex("4b5a3a"), Enum.Material.SmoothPlastic, CFrame.new(0, -0.05, 0.95))
+	piece(Vector3.new(1.55, 0.22, 0.85), Color3.fromHex("ffa040"), Enum.Material.Neon, CFrame.new(0, 0.35, 0.95))
+	piece(Vector3.new(1.2, 0.35, 0.6), Color3.fromHex("2e2e34"), Enum.Material.Metal, CFrame.new(0, 0.95, 0.9))
+	m.Parent = c
+end
+
+-- the pack r wears, if it is still on this character and feeds this weapon state
+local function packFor(p: Player, r: any, ws: any): any?
+	local pack = r and r.ammoPack
+	if not pack then
+		return nil
+	end
+	if pack.char ~= p.Character or pack.mags <= 0 then
+		r.ammoPack = nil
+		return nil
+	end
+	return if ws and ws.id == pack.id then pack else nil
+end
+
+-- pickup by a player: true if the pack was taken
+local function takePack(p: Player): boolean
+	local r = S.Players.get(p)
+	if not r or not S.Players.isAlive(p) then
+		return false
+	end
+	local ws = r.weapons[3]
+	local w = ws and Weapons.get(ws.id)
+	if not w or not w.packMags then
+		S.State.notify(p, "Ammo pack needs a rocket, gatling or rail support weapon", nil, "callin")
+		return false
+	end
+	local size = packSize(w)
+	local cur = packFor(p, r, ws)
+	if cur and cur.mags >= size then
+		S.State.notify(p, "Your ammo pack is already full", nil, "callin")
+		return false
+	end
+	r.ammoPack = { id = ws.id, mags = size, char = p.Character }
+	packVisual(p.Character, r.ammoPack)
+	S.Fx.to(p, "Sound", { k = "Pickup" })
+	S.State.notify(p, "Acquired Ammo Pack +" .. size, Config.Colors.Friendly)
+	S.Players.publish(p)
+	return true
+end
+
+-- SUPPLY drop hook: an ammo pack beside the crate (parented into it, so it goes when the crate goes)
+function WeaponService.spawnAmmoPack(parent: Instance, cf: CFrame)
+	local box = Instance.new("Part")
+	box.Name = "AmmoPackPickup"
+	box.Anchored = true
+	box.CanCollide = false
+	box.CanTouch = false
+	box.Size = Vector3.new(1.6, 1.8, 0.9)
+	box.Color = Color3.fromHex("4b5a3a")
+	box.Material = Enum.Material.SmoothPlastic
+	box.CFrame = cf
+	local stripe = Instance.new("Part")
+	stripe.Name = "Stripe"
+	stripe.Anchored = true
+	stripe.CanCollide = false
+	stripe.CanQuery = false
+	stripe.CanTouch = false
+	stripe.Size = Vector3.new(1.65, 0.25, 0.95)
+	stripe.Color = Color3.fromHex("ffa040")
+	stripe.Material = Enum.Material.Neon
+	stripe.CFrame = cf * CFrame.new(0, 0.4, 0)
+	stripe.Parent = box
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Wear"
+	prompt.ObjectText = "Ammo Pack"
+	prompt.HoldDuration = 0.3
+	prompt.MaxActivationDistance = 10
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = box
+	box.Parent = parent
+	prompt.Triggered:Connect(function(pl)
+		if box.Parent and takePack(pl) then
+			box:Destroy()
+		end
+	end)
+end
+
 local function materialFor(inst: Instance): string
 	local enemyId = inst:GetAttribute("EnemyId")
 	if enemyId then
@@ -505,7 +648,7 @@ local function onFire(p: Player, slot: any, aimPoint: any, _seq: any)
 		local e = traceShot(p, w, origin, dir, w.pierce or 0, true)
 		S.Fx.except(p, "Tracer", { a = origin, b = e, c = color, w = w.id, u = p.UserId }, true)
 	end
-	if ws.mag <= 0 and ws.spare > 0 then
+	if ws.mag <= 0 and (ws.spare > 0 or packFor(p, r, ws)) then
 		WeaponService.reload(p)
 	end
 	S.Players.publish(p)
@@ -521,7 +664,9 @@ function WeaponService.reload(p: Player)
 		return
 	end
 	local w = Weapons.get(ws.id)
-	if not w or not w.mag or ws.mag >= w.mag or ws.spare <= 0 then
+	-- the ammo pack only feeds whole-magazine reloads
+	local hasPack = w ~= nil and not w.perShellReload and packFor(p, r, ws) ~= nil
+	if not w or not w.mag or ws.mag >= w.mag or (ws.spare <= 0 and not hasPack) then
 		return
 	end
 	local t = now()
@@ -553,7 +698,21 @@ function WeaponService.reload(p: Player)
 			ws.mag += need
 			ws.spare -= need
 		else
-			ws.spare -= 1
+			local pack = packFor(p, r, ws)
+			if pack then
+				pack.mags -= 1
+				if pack.mags <= 0 then
+					r.ammoPack = nil
+					S.State.notify(p, "Ammo pack empty", nil, "callin")
+				end
+				packVisual(p.Character, r.ammoPack)
+			elseif ws.spare > 0 then
+				ws.spare -= 1
+			else
+				r.reloadUntil = 0
+				S.Players.publish(p)
+				return
+			end
 			ws.mag = w.mag
 		end
 		r.reloadUntil = 0

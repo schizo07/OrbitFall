@@ -45,10 +45,13 @@ S.Mission = try("Mission", function() return root.Mission end)
 S.TestArena = try("TestArena", function() return root.World.TestArena end) -- Studio test arena
 S.DevTools = try("DevTools", function() return root.DevTools end) -- Studio quick start + arena keys remote
 S.Explosions = try("Explosions", function() return root.Explosions end) -- blast entry point + onBlast listeners (no init needed)
+S.Jammers = try("Jammers", function() return root.Jammers end) -- call-in jam areas (no init needed)
+S.Weather = try("WeatherService", function() return root.WeatherService end) -- dust storm phases (workspace Weather attrs)
 
 local ORDER = {
 	"Assets", "Actions", "Fx", "State", "Save", "Progress", "Shop", "Enemies", "Projectiles", "Director",
 	"CallIns", "Map", "Ship", "Objectives", "Extraction", "Players", "Weapons", "War", "Mission", "TestArena", "DevTools",
+	"Weather",
 }
 
 for _, name in ORDER do
