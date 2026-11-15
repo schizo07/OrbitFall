@@ -269,7 +269,9 @@ function AlertBar.setClock(text: string, fraction: number?)
 	if not built or not ui.bar.Visible then
 		return
 	end
-	ui.time.Text = text
+	if ui.time.Text ~= text then -- called every frame by IntensityFx; the text only changes about once a second
+		ui.time.Text = text
+	end
 	if fraction then
 		ui.prog.back.Visible = true
 		ui.prog.set(fraction)

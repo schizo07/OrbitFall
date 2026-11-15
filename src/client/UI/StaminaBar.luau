@@ -60,8 +60,8 @@ function StaminaBar.init(getter: () -> (number, boolean, boolean))
 	local idleFor = 0
 	local lastV = 1
 	RunService.RenderStepped:Connect(function(dt)
-		local v, exhausted, sprinting = getter()
-		local boost = select(4, (getter :: any)()) == true -- stim sprint (Movement): keep the bar up, tinted stim green below
+		local v, exhausted, sprinting, boosted = (getter :: any)()
+		local boost = boosted == true -- stim sprint (Movement): keep the bar up, tinted stim green below
 		lastV = if boost then -1 else lastV
 		local me = Store.get("me")
 		local hidden = Store.get("menuOpen") == true or (type(me) == "table" and me.alive == false)

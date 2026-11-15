@@ -135,6 +135,7 @@ local camDist = 10 -- smoothed collision distance (focus -> lens)
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
+local CAM_EXCLUDE_FOLDERS = { "Enemies", "ClientFx", "CallInObjects" }
 local function camExclude(): { Instance }
 	local list: { Instance } = {}
 	for _, p in Players:GetPlayers() do
@@ -142,7 +143,7 @@ local function camExclude(): { Instance }
 			table.insert(list, p.Character)
 		end
 	end
-	for _, n in { "Enemies", "ClientFx", "CallInObjects" } do
+	for _, n in CAM_EXCLUDE_FOLDERS do
 		local f = workspace:FindFirstChild(n)
 		if f then
 			table.insert(list, f)

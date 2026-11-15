@@ -480,6 +480,7 @@ local function step(dt: number)
 			shownFrac, hitPulse, hitDesat, beatPulse = 1, 0, 0, 0
 			if cc then
 				cc.Saturation, cc.Contrast, cc.TintColor = 0, 0, Color3.new(1, 1, 1)
+				cc.Enabled = false
 			end
 			ContextPrompt.hide("stim")
 		end
@@ -517,9 +518,18 @@ local function step(dt: number)
 	local e = ensureCC()
 	local desat = (math.clamp((missing - 0.2) / 0.8, 0, 1) * 0.7 + hitDesat * 0.4) * k
 	desat = math.min(desat, 0.95)
-	e.Saturation = -desat
-	e.Contrast = 0.08 * desat
-	e.TintColor = Color3.new(1, 1 - 0.12 * desat, 1 - 0.14 * desat)
+	-- at full health this is an identity grade: switch the effect off so it costs no full-screen pass (matters on phones)
+	local grading = desat > 0.001
+	if e.Enabled ~= grading then
+		e.Enabled = grading
+	end
+	if grading then
+		e.Saturation = -desat
+		e.Contrast = 0.08 * desat
+		e.TintColor = Color3.new(1, 1 - 0.12 * desat, 1 - 0.14 * desat)
+	elseif e.Saturation ~= 0 then
+		e.Saturation, e.Contrast, e.TintColor = 0, 0, Color3.new(1, 1, 1)
+	end
 
 	stepStatic(dt)
 

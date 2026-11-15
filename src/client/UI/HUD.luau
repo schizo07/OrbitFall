@@ -55,6 +55,8 @@ local state = "Ship"
 local prevState: string? = nil
 local spreadDeg = 1
 local gap = 8
+local gapShown = -1 -- last gap written to the crosshair ticks
+local segLit, segCol, segTable: any = -1, nil, nil -- last magazine-segment state written (step)
 local reloadProgress: number? = nil
 local flash = 0
 local hitKick = 0 -- crosshair ticks fly outward on a hit and spring back (px)
@@ -1785,10 +1787,19 @@ local function stepMarkers(cam: Camera)
 		end
 		m.world.Visible = true
 		m.world.Position = UDim2.fromOffset(x, y)
-		local dist = (m.pos - camPos).Magnitude
-		local dl = m.world:FindFirstChild("Dist") :: TextLabel
+		-- distance label: found once, rewritten only when the whole-metre value changes (a Text write re-lays out the label)
+		local dl = m.distLabel
+		if dl == nil or dl.Parent == nil then
+			dl = m.world:FindFirstChild("Dist")
+			m.distLabel = dl
+			m.distShown = nil
+		end
 		if dl then
-			dl.Text = string.format("%d m", math.floor(dist + 0.5))
+			local metres = math.floor((m.pos - camPos).Magnitude + 0.5)
+			if metres ~= m.distShown then
+				m.distShown = metres
+				dl.Text = string.format("%d m", metres)
+			end
 		end
 	end
 end
@@ -1801,9 +1812,12 @@ local function step(dt: number)
 		local target = Theme.clamp(spreadDeg * ppd + 5, 5, 170)
 		hitKick *= math.exp(-16 * dt)
 		gap += (target + hitKick - gap) * (1 - math.exp(-22 * dt))
-		for _, t in ui.ticks do
-			local off = gap + t.half
-			t.frame.Position = UDim2.fromOffset(t.dir.X * off, t.dir.Y * off)
+		if gap ~= gapShown then
+			gapShown = gap
+			for _, t in ui.ticks do
+				local off = gap + t.half
+				t.frame.Position = UDim2.fromOffset(t.dir.X * off, t.dir.Y * off)
+			end
 		end
 		Compass.step(cam, markers)
 		stepMarkers(cam)
@@ -1867,13 +1881,17 @@ local function step(dt: number)
 			end
 			magShown += (target - magShown) * (1 - math.exp(-18 * dt))
 			local lit = math.ceil(Theme.clamp(magShown, 0, 1) * MAG_SEGS - 0.001)
-			for i, seg in ui.magSegs do
-				if i <= lit then
-					seg.BackgroundColor3 = col
-					seg.BackgroundTransparency = 0.05
-				else
-					seg.BackgroundColor3 = Style.White
-					seg.BackgroundTransparency = 0.8
+			-- the 20 segments are only rewritten when the lit count or its colour changes (the bar is steady most of the time)
+			if lit ~= segLit or col ~= segCol or ui.magSegs ~= segTable then
+				segLit, segCol, segTable = lit, col, ui.magSegs
+				for i, seg in ui.magSegs do
+					if i <= lit then
+						seg.BackgroundColor3 = col
+						seg.BackgroundTransparency = 0.05
+					else
+						seg.BackgroundColor3 = Style.White
+						seg.BackgroundTransparency = 0.8
+					end
 				end
 			end
 		end
