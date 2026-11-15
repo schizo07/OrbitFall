@@ -552,6 +552,11 @@ local function buildToasts(root: Instance)
 	holder.AnchorPoint = Vector2.new(0.5, 1)
 	holder.Position = UDim2.new(0.5, 0, 0.8, 0)
 	holder.Size = UDim2.fromOffset(440, 0)
+	if touch then
+		-- between the left column and the touch buttons, above the SIDE chip (bottom centre)
+		holder.Position = UDim2.new(0.44, 0, 0.74, 0)
+		holder.Size = UDim2.fromOffset(380, 0)
+	end
 	holder.AutomaticSize = Enum.AutomaticSize.Y
 	holder.Parent = root
 	Theme.list(holder, Enum.FillDirection.Vertical, 4, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Bottom)

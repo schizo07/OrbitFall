@@ -1,8 +1,9 @@
 -- Touch button cluster (right side). Only created when Input.isTouch().
 -- The Roblox dynamic thumbstick stays on the left; we hide the default jump button (it sits where FIRE goes).
--- Input actions driven: Fire Aim Reload Grenade Stim Dial Jump Sprint Crouch Swap1 Swap2 Swap3, plus Input.addLook / Input.setDialPointer.
+-- Input actions driven: Fire Aim Reload Grenade Stim Dial Jump Sprint Crouch Swap1 Swap2 Swap3 Shoulder, plus Input.addLook / Input.setDialPointer.
 -- Store keys read: mission, me, menuOpen, stance.
 
+local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -24,10 +25,21 @@ local buttons: { [string]: any } = {}
 
 local DIAL_DEAD_ZONE = 18
 
+-- Tallest button stack above the bottom edge (STIM top at 294) plus a margin that keeps the right column under the
+-- timer / compass row. On short phones (about 740x360 or less) the safe area is too low for it, so the cluster shrinks.
+local STACK_H = 315
+local MIN_SCALE = 0.75
+
 local function currentScale(): number
 	local cam = workspace.CurrentCamera
 	local y = cam and cam.ViewportSize.Y or 400
-	return Theme.clamp(y / 420, 1, 1.4)
+	local s = Theme.clamp(y / 420, 1, 1.4)
+	-- the HUD (timer / compass row) starts under the top bar, so that strip is not usable by the button column
+	local h = if gui then gui.AbsoluteSize.Y - GuiService:GetGuiInset().Y else 0
+	if h > 0 and STACK_H * s > h then
+		s = math.max(MIN_SCALE, h / STACK_H)
+	end
+	return s
 end
 
 local function refreshScale()
@@ -203,6 +215,7 @@ function MobileControls.init()
 	scaleObj.Parent = root
 	root.Parent = gui
 	refreshScale()
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(refreshScale)
 	local function hookCam()
 		local cam = workspace.CurrentCamera
 		if cam then
@@ -380,6 +393,25 @@ function MobileControls.init()
 		Input.set(action, true)
 		task.delay(0.06, function()
 			Input.set(action, false)
+		end)
+	end)
+
+	-- SHOULDER chip (tap = swap the camera side, same as V / R3): two arrows, "SIDE" caption. Sits left of UPLINK, clear
+	-- of every other button and HUD panel on 740x360, 844x390 and 1024x768.
+	local shoulder = make("Shoulder", 318, 40, 48, "", "SIDE", C.Friendly, 20)
+	for i, dir in { "left", "right" } do
+		Style.glyph(dir, {
+			Size = 11,
+			Color = C.Text,
+			Box = UDim2.fromScale(0.34, 0.5),
+			Position = UDim2.fromScale(if i == 1 then 0.12 else 0.54, 0.12),
+			Parent = shoulder.btn,
+		})
+	end
+	bind(shoulder, function()
+		Input.set("Shoulder", true)
+		task.delay(0.06, function()
+			Input.set("Shoulder", false)
 		end)
 	end)
 
