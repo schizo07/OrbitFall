@@ -926,7 +926,7 @@ local function trimStragglers()
 	end
 	local rows = {}
 	for _, e in all do
-		if e.class == "regular" or e.class == "medium" then -- fodder counts as regular
+		if (e.class == "regular" or e.class == "medium") and not e.def.loot then -- fodder counts as regular; loot runners keep their own timer
 			table.insert(rows, { e = e, d = minDistTo(ps, e.pos or e.root.Position) })
 		end
 	end
@@ -1501,7 +1501,7 @@ local function proximityPass()
 	local A = Config.Action
 	local far = {}
 	for _, e in S.Enemies.getAll() do
-		if (e.class == "regular" or e.class == "medium") and minDistTo(ps, e.pos or e.root.Position) > A.RecycleDist then
+		if (e.class == "regular" or e.class == "medium") and not e.def.loot and minDistTo(ps, e.pos or e.root.Position) > A.RecycleDist then
 			table.insert(far, e)
 			if #far >= A.RecycleMax then
 				break

@@ -19,6 +19,7 @@ Mission.difficulty = 1
 Mission.objective = "MISSILE"
 Mission.extract = nil :: any
 Mission.kills = {} :: { [Player]: number }
+Mission.lootSalvage = {} :: { [Player]: number } -- bonus salvage from loot runners (server/Enemies/LootRunner), added to the results
 Mission.lastBeacon = nil :: Vector3?
 Mission.arena = false -- Studio test arena (World/TestArena): an "Active" mission with no objectives, no Director, no tick loop
 
@@ -176,7 +177,7 @@ function Mission.onPlayerJoined(p: Player)
 end
 
 local function cleanup()
-	for _, svc in { S.Director, S.Hazards, S.Objectives, S.Extraction, S.CallIns } do
+	for _, svc in { S.Director, S.Hazards, S.LootRunner, S.Objectives, S.Extraction, S.CallIns } do
 		if svc then
 			local f = svc.stop or svc.stopAll
 			if svc.stopAll then
@@ -244,6 +245,9 @@ local function finish(success: boolean)
 	if S.Hazards then
 		pcall(S.Hazards.stop)
 	end
+	if S.LootRunner then
+		pcall(S.LootRunner.stop)
+	end
 	local st = success and "Results" or "Failed"
 	setState(st, success and Config.ResultsTime or Config.FailedTime)
 	S.Fx.play("Sound", { k = success and "MissionSuccess" or "MissionFail" })
@@ -258,6 +262,7 @@ local function finish(success: boolean)
 			sides = sides,
 			samples = samples,
 			kills = Mission.kills[p] or 0,
+			loot = Mission.lootSalvage[p] or 0,
 		})
 		if not okR then
 			warn("[Mission] reward failed:", res)
@@ -359,6 +364,7 @@ function Mission.start(p: Player?, args)
 	Mission.objective = if args.objective == "UPLINK" or args.objective == "HAUL" then args.objective else "MISSILE"
 	Mission.difficulty = math.clamp(math.floor(tonumber(args.difficulty) or 1), 1, 5)
 	Mission.kills = {}
+	Mission.lootSalvage = {}
 	Mission.extract = nil
 	token += 1
 	local my = token
@@ -421,6 +427,9 @@ function Mission.start(p: Player?, args)
 		if S.Hazards then
 			pcall(S.Hazards.start, map)
 		end
+		if S.LootRunner then
+			pcall(S.LootRunner.start, map)
+		end
 		tick(my)
 	end)
 	return true, nil
@@ -446,6 +455,7 @@ function Mission.beginArena(faction: string?): (boolean, string?)
 	Mission.objective = "TEST ARENA"
 	Mission.difficulty = 1
 	Mission.kills = {}
+	Mission.lootSalvage = {}
 	Mission.extract = nil
 	Mission.lastBeacon = nil
 	Mission.lives = 99

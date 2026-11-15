@@ -69,7 +69,7 @@ function ProgressService.grantBondPass(p: Player, bondId: string)
 	S.Save.markDirty(p)
 end
 
--- Mission rewards. ctx = {success, mainSteps, sides, samples, kills}
+-- Mission rewards. ctx = {success, mainSteps, sides, samples, kills, loot?}
 function ProgressService.reward(p: Player, ctx)
 	local d = S.Save.get(p)
 	if not d then
@@ -79,6 +79,7 @@ function ProgressService.reward(p: Player, ctx)
 	local scale = ctx.success and 1 or Config.FailRewardScale
 	local xp = math.floor((R.XpBase + R.XpPerMainStep * ctx.mainSteps + R.XpPerSide * ctx.sides + R.XpPerKill * ctx.kills) * scale)
 	local salvage = math.floor((R.SalvageBase + R.SalvagePerSide * ctx.sides + R.SalvagePerSample * ctx.samples) * scale)
+	salvage += ctx.loot or 0 -- loot runner bonus (server/Enemies/LootRunner), not scaled by the fail penalty
 	local tokens = math.floor((R.TokensBase + R.TokensPerSide * ctx.sides) * scale)
 	local bonus = {}
 	local day = dayNumber()

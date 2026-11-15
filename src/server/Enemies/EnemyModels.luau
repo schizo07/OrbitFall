@@ -67,7 +67,7 @@ EnemyModels.Offsets = {
 EnemyModels.height = {
 	TINKER = 6, RIVET = 7, BULWARK = 8, COLOSSUS = 32,
 	SKITTER = 2.2, SPITTER = 4.5, CHARGER = 6.5, TITAN = 25,
-	BASTION = 9,
+	BASTION = 9, LOOT_COG = 3.5, LOOT_BROOD = 4.5,
 } :: { [string]: number }
 
 -- Builder ---------------------------------------------------------------------------
@@ -365,7 +365,46 @@ local function buildTitan(c: Ctx)
 	end
 end
 
+-- LOOT RUNNERS (server/Enemies/LootRunner.luau). Part-built only (no mesh asset). Gold glow = the loot.
+local LOOT_GOLD = Color3.fromRGB(255, 205, 70)
+local LOOT_SHELL = Color3.fromRGB(240, 186, 56)
+local LOOT_SHELL_DARK = Color3.fromRGB(196, 132, 36)
+
+-- "Scrap Courier": small fast wheeled cart with a glowing crate (front = -Z)
+local function buildLootCog(c: Ctx)
+	c.rig.bob = 0.15
+	c.add("Chassis", V(2.2, 0.8, 3.6), at(0, 1.4, 0), GUNMETAL)
+	for i, x in { -1.3, 1.3 } do
+		local w = c.add("Wheel" .. i, V(0.5, 1.7, 1.7), at(x, 0.85, 0.6), DARKMETAL)
+		w.Shape = Enum.PartType.Cylinder -- axis along X
+	end
+	local caster = c.add("Caster", V(0.4, 1.1, 1.1), at(0, 0.55, -1.4), DARKMETAL)
+	caster.Shape = Enum.PartType.Cylinder
+	c.add("Prow", V(1.4, 0.7, 0.8), at(0, 1.9, -1.7), RUST)
+	c.add("Crate", V(1.9, 1.7, 1.9), at(0, 2.65, 0.5), LOOT_GOLD, NEON, "crate")
+	c.add("Frame", V(2.3, 0.3, 2.3), at(0, 1.9, 0.5), STEEL)
+end
+
+-- "Gilded Grub": fat shiny beetle with a glowing sac (front = -Z)
+local function buildLootBrood(c: Ctx)
+	c.rig.bob = 0.12
+	local body = c.add("Body", V(3.4, 2.8, 4.4), at(0, 1.9, 0), LOOT_SHELL, PLASTIC, "body", true)
+	body.Reflectance = 0.25
+	local head = c.add("Head", V(2, 1.6, 1.8), at(0, 1.6, -2.7), LOOT_SHELL_DARK, PLASTIC, "body", true)
+	head.Reflectance = 0.2
+	c.add("Sac", V(2.1, 1.9, 2.3), at(0, 3.5, 0.7), LOOT_GOLD, NEON, "sac", true)
+	local defs = { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }
+	for i, d in defs do
+		local x, zs = d[1] * 1.7, d[2]
+		local cf = CFrame.new(x, 0.75, zs * 1.1) * CFrame.Angles(0, 0, math.rad(-d[1] * 22))
+		local l = c.add("Leg" .. i, V(0.4, 1.6, 0.4), cf, LOOT_SHELL_DARK, PLASTIC)
+		c.leg(l, V(d[1] * 1.4, 1.5, zs * 1.1), 0.6, (i == 1 or i == 4) and 0 or math.pi)
+	end
+end
+
 local BUILDERS: { [string]: (Ctx) -> () } = {
+	LOOT_COG = buildLootCog,
+	LOOT_BROOD = buildLootBrood,
 	TINKER = buildTinker,
 	RIVET = buildRivet,
 	BULWARK = buildBulwark,

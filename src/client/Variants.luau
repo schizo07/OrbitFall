@@ -328,6 +328,17 @@ local GROUPS = {
 			{ name = "C debris every 30-45 s (testing)", set = { Feel_Hazard = "debris_fast" } },
 		},
 	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/Enemies/LootRunner: a courier runs from the squad, kill it for a resupply (server = mirrored)
+		name = "LOOT RUNNER",
+		keys = { "Feel_LootRunner" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B on (every 3-5 min)", set = { Feel_LootRunner = "on" } },
+			{ name = "C on, every 40-60 s (testing)", set = { Feel_LootRunner = "fast" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough
