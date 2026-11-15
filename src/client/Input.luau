@@ -116,11 +116,48 @@ function Input.dialPointer(): Vector2?
 	return dialPtr
 end
 
+-- Gamepad X is both Reload and the ProximityPrompt default key. Studio A/B "PAD INTERACT" (Feel_PadInteract):
+--   nil    = X interacts while a prompt is up (no reload then), reloads otherwise
+--   "dpad" = shown prompts move to D-pad Up (client-side), X always reloads
+local shownPrompts: { [ProximityPrompt]: boolean } = {}
+local function padInteractDpad(): boolean
+	return workspace:GetAttribute("Feel_PadInteract") == "dpad"
+end
+function Input.padInteractKey(): string -- ContextPrompt label for Interact on a gamepad
+	return if padInteractDpad() then "@up" else "X"
+end
+local function promptUp(): boolean
+	for pp in shownPrompts do
+		if pp.Parent and pp.Enabled then
+			return true
+		end
+		shownPrompts[pp] = nil
+	end
+	return false
+end
+local function hookPrompts()
+	local PPS = game:GetService("ProximityPromptService")
+	PPS.PromptShown:Connect(function(pp: ProximityPrompt)
+		shownPrompts[pp] = true
+		local want = if padInteractDpad() then Enum.KeyCode.DPadUp else Enum.KeyCode.ButtonX
+		if pp.GamepadKeyCode ~= want then
+			pp.GamepadKeyCode = want
+		end
+	end)
+	PPS.PromptHidden:Connect(function(pp: ProximityPrompt)
+		shownPrompts[pp] = nil
+	end)
+end
+
 function Input.init()
+	hookPrompts()
 	UserInputService.InputBegan:Connect(function(io, gp)
 		local a = MOUSE[io.UserInputType] or KEYS[io.KeyCode]
 		if not a then
 			return
+		end
+		if io.KeyCode == Enum.KeyCode.ButtonX and not padInteractDpad() and promptUp() then
+			return -- X goes to the prompt this time
 		end
 		if gp and io.UserInputType ~= Enum.UserInputType.Gamepad1 then
 			if not (PASS_GP[a] and UserInputService:GetFocusedTextBox() == nil) then

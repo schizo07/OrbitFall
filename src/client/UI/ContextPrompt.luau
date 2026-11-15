@@ -71,6 +71,9 @@ local function glyphFor(key: string): string
 	if not a then
 		return key
 	end
+	if key == "Interact" and mode == "pad" and workspace:GetAttribute("Feel_PadInteract") == "dpad" then
+		return "@up" -- client/Input "PAD INTERACT" B: prompts on D-pad Up
+	end
 	return (a :: any)[mode] or a.kb
 end
 
