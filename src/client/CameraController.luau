@@ -69,6 +69,8 @@ local HEAD_ACCESSORIES: { [Enum.AccessoryType]: boolean } = {
 }
 local lowBlend = 0 -- prone / dive framing
 local side = 1 -- 1 = right shoulder, -1 = left (V / R3)
+local SHOULDER_LEAN = math.rad(4) -- held camera roll toward the shoulder side (x1.6 extra at the middle of a swap)
+local SHOULDER_DIP = 0.55 -- studs the lens drops while crossing behind the head
 local sideBlend = 1
 local rollCur = 0
 local focusXZ: Vector3? = nil
@@ -312,7 +314,17 @@ function CameraController.init()
 			rollT = -math.clamp(vx / 16, -1, 1) * STRAFE_ROLL * (1 - aimBlend * 0.6)
 		end
 		rollCur += (rollT - rollCur) * (1 - math.exp(-dt * 6))
-		bob = bob * CFrame.Angles(0, 0, rollCur)
+		-- shoulder lean (V, 2026-11-15 ask): the camera leans toward the shoulder it sits over and dips while it crosses.
+		-- sideBlend is last frame's (eases -1..1); swapK = 1 mid-swap. Studio A/B Feel_ShoulderLean: nil = held lean + dip,
+		-- "swap" = lean + dip only during the swap, "off".
+		local leanMode = workspace:GetAttribute("Feel_ShoulderLean")
+		local swapK = 1 - math.abs(sideBlend)
+		local lean = 0
+		if leanMode ~= "off" then
+			local held = if leanMode == "swap" then 0 else -SHOULDER_LEAN * sideBlend * (1 - aimBlend * 0.5)
+			lean = held - SHOULDER_LEAN * 1.6 * side * swapK
+		end
+		bob = bob * CFrame.Angles(0, 0, rollCur + lean)
 
 		local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
 		dist += (distTarget - dist) * math.min(1, dt * 8)
@@ -335,7 +347,8 @@ function CameraController.init()
 			local extra = tune("LeftAdsExtra", LEFT_ADS_EXTRA) :: Vector3
 			shoulder += extra * leftAds
 		end
-		shoulder = Vector3.new(shoulder.X * sideBlend, shoulder.Y, shoulder.Z)
+		local dip = if leanMode == "off" then 0 else SHOULDER_DIP * swapK
+		shoulder = Vector3.new(shoulder.X * sideBlend, shoulder.Y - dip, shoulder.Z)
 		local desired = CFrame.new(focus) * rot * CFrame.new(shoulder + Vector3.new(0, 0, wantDist))
 		-- collision: pull in toward focus
 		rayParams.FilterDescendantsInstances = camExclude()

@@ -33,6 +33,16 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/CameraController: camera lean on the shoulder swap (V / R3)
+		name = "SHOULDER LEAN",
+		keys = { "Feel_ShoulderLean" },
+		presets = {
+			{ name = "A lean held + dip on swap", set = {} },
+			{ name = "B lean + dip only during the swap", set = { Feel_ShoulderLean = "swap" } },
+			{ name = "C off", set = { Feel_ShoulderLean = "off" } },
+		},
+	},
+	{
 		-- client/Fx/Blast.luau: mushroom cloud (stem + cap + rolling ring) on fire blasts from a Huge frag up
 		name = "MUSHROOM",
 		keys = { "Feel_Mushroom" },

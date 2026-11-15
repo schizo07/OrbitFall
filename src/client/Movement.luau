@@ -1044,10 +1044,10 @@ local function lyingLeg(name: string, ph: number, k: number): CFrame
 	local s = math.sin(ph + (if left then 0 else math.pi))
 	if string.find(name, "Hip", 1, true) then
 		-- thigh swings out sideways and back (frog crawl); the pulling leg is the one swung out
-		local out = math.max(0, s) * 0.32 * k
+		local out = math.max(0, s) * 0.2 * k -- 2026-11-15: was 0.32, "legs move a bit too much"
 		return CFrame.Angles(-0.06 * k, 0, if left then -out else out)
 	elseif string.find(name, "Knee", 1, true) then
-		return CFrame.Angles(-(0.15 + 0.55 * math.max(0, s)) * k, 0, 0) -- shin lifts off the floor behind
+		return CFrame.Angles(-(0.15 + 0.35 * math.max(0, s)) * k, 0, 0) -- shin lifts off the floor behind (was 0.55)
 	end
 	return CFrame.Angles(-0.25 * k, 0, 0) -- toes pointed back
 end
