@@ -1,6 +1,6 @@
 -- Client renderers for the call-in system (server: src/server/CallIns/*).
 -- Fx kinds: Beacon, BeaconEnd, LanceStart/Move/End, Bomb, Jet, Shell, Gas, Smoke, Dome, DropPod, Crater,
--- GravWell, CryoFreeze, Shatter, Railshot, Firestorm, OverwatchSkiff, OverwatchEnd.
+-- GravWell, FireVortex, CryoFreeze, Shatter, Railshot, Firestorm, OverwatchSkiff, OverwatchEnd.
 -- Everything lives in workspace.CurrentCamera.CallInFx (local only, no collisions, auto-cleaned).
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1029,6 +1029,16 @@ end
 local function quality(): number
 	return FxRef and FxRef.quality or 1
 end
+local touchCached: boolean? = nil
+local function lowEnd(): boolean
+	if touchCached == nil then
+		local ok, Theme = pcall(function()
+			return require((script.Parent.Parent :: any).UI.Theme)
+		end)
+		touchCached = ok and Theme.isTouch() == true
+	end
+	return touchCached == true or quality() < 1
+end
 local function qn(n: number): number
 	return math.max(1, math.floor(n * quality() + 0.5))
 end
@@ -1144,6 +1154,104 @@ local function registerNew(Fx: any)
 			orbitalMini(p, 1.1, VOID)
 			punch(VOID, 0.9, 0.7, -0.3, p)
 			flashAt(Color3.fromRGB(235, 210, 255), 0.45, 0.3, p)
+		end)
+	end)
+
+	-- Fire vortex (call-in combo, server/CallIns/Combos): a Gravity Well that caught fire. Spinning ring of flame motes round a
+	-- tall flame column for the rest of the pull; the server's (bigger) blast ends it. Fewer motes / particles on touch and low quality.
+	Fx.register("FireVortex", function(d)
+		local p: Vector3, r: number, dur: number = d.p, d.r or 18, math.max(d.t or 2, 0.4)
+		local lite = lowEnd()
+		local height = 26
+		local base = p + Vector3.new(0, 0.5, 0)
+		local anchor = mkPart({ Size = Vector3.new(r * 0.5, height, r * 0.5), Transparency = 1, CFrame = CFrame.new(base + Vector3.new(0, height / 2, 0)) })
+		local column = emitter(anchor, {
+			Texture = TEX_FIRE,
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 220, 120)),
+				ColorSequenceKeypoint.new(0.5, FIRE),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 40, 20)),
+			}),
+			Size = seq(4.5, 7, 2),
+			Transparency = seq(0.1, 0.3, 1),
+			Lifetime = NumberRange.new(0.9, 1.3),
+			Speed = NumberRange.new(14, 20),
+			SpreadAngle = Vector2.new(8, 8),
+			Rate = (if lite then 28 else 55) * quality(),
+			LightEmission = 1,
+			Rotation = NumberRange.new(0, 360),
+			RotSpeed = NumberRange.new(-60, 60),
+			EmissionDirection = Enum.NormalId.Top,
+			Shape = Enum.ParticleEmitterShape.Cylinder,
+			ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
+		})
+		local smoke = emitter(anchor, {
+			Texture = TEX_SMOKE,
+			Color = ColorSequence.new(Color3.fromRGB(70, 55, 50)),
+			Size = seq(4, 9),
+			Transparency = seq(0.55, 0.8, 1),
+			Lifetime = NumberRange.new(1.4, 2),
+			Speed = NumberRange.new(10, 16),
+			Rate = (if lite then 6 else 14) * quality(),
+			EmissionDirection = Enum.NormalId.Top,
+			Shape = Enum.ParticleEmitterShape.Cylinder,
+		})
+		local core = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(height, 3, 3),
+			Color = FIRE,
+			Transparency = 0.6,
+			CFrame = CFrame.new(base + Vector3.new(0, height / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		local l = light(core, FIRE, r * 1.2, 4)
+		-- ring of flame motes spiralling round the column; each carries a small fire trail emitter
+		local motes = {}
+		for i = 1, qn(if lite then 5 else 9) do
+			local m = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.one * 1.1, Color = Color3.fromRGB(255, 170, 70), CFrame = CFrame.new(base) })
+			emitter(m, {
+				Texture = TEX_FIRE,
+				Color = ColorSequence.new(Color3.fromRGB(255, 200, 100), Color3.fromRGB(200, 60, 20)),
+				Size = seq(2.2, 0.3),
+				Transparency = seq(0.2, 1),
+				Lifetime = NumberRange.new(0.4, 0.6),
+				Speed = NumberRange.new(0, 2),
+				Rate = if lite then 10 else 20,
+				LightEmission = 1,
+			})
+			motes[i] = m
+		end
+		-- ignition thump: the existing Explosion sound, pitched down so the combo is audibly its own thing
+		if not Audio or not pcall(Audio.play, "Explosion", p, { pitch = 0.7 }) then
+			snd("Explosion", p)
+		end
+		trauma(0.5, dur, p, 60)
+		flashAt(FIRE, 0.25, 0.25, p)
+		punch(FIRE, 0.5, 0.5, 0.1, p)
+		animate(dur, function(a)
+			local t = os.clock()
+			local grow = math.min(a * 8, 1) -- the column rises over the first ~1/8 of the pull
+			core.Size = Vector3.new(height * grow, 2.5 + 2 * a, 2.5 + 2 * a)
+			core.CFrame = CFrame.new(base + Vector3.new(0, height * grow / 2, 0)) * CFrame.Angles(t * 5, 0, math.pi / 2)
+			l.Brightness = 4 + 3 * a
+			for i, m in motes do
+				local ang = t * (4 + 3 * a) + i * (math.pi * 2 / #motes)
+				local rad = r * (0.8 - 0.55 * a) * (0.7 + 0.3 * ((i % 3) / 2))
+				local rise = (((t * 6 + i * 3) % height) / height) * height * 0.9
+				m.CFrame = CFrame.new(base + Vector3.new(math.cos(ang) * rad, 1 + rise, math.sin(ang) * rad))
+			end
+		end, function()
+			column.Enabled = false
+			smoke.Enabled = false
+			for _, m in motes do
+				for _, c in m:GetChildren() do
+					if c:IsA("ParticleEmitter") then
+						c.Enabled = false
+					end
+				end
+				m:Destroy()
+			end
+			core:Destroy()
+			Debris:AddItem(anchor, 2.2)
 		end)
 	end)
 

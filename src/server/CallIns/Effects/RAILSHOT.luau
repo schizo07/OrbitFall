@@ -3,6 +3,8 @@
 -- through S.Explosions.blast (Data/Blasts.luau RAILSHOT row: radius / core / knock / effect size).
 local Blasts = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Blasts"))
 
+local Combos = require(script.Parent.Parent:WaitForChild("Combos"))
+
 return function(ctx)
 	local S = ctx.S
 	local prm = Blasts.merge("RAILSHOT", ctx.params)
@@ -46,6 +48,7 @@ return function(ctx)
 	S.Fx.play("Firestorm", { a = pos - Vector3.new(1.5, 0, 0), b = pos + Vector3.new(1.5, 0, 0), w = HOT_R * 2, t = HOT_T, n = 3, s = 0.05 })
 	local startT = os.clock()
 	local last = startT
+	Combos.addZone("railhot", pos, HOT_R, startT + HOT_T)
 	while os.clock() - startT < HOT_T and ctx.alive() do
 		task.wait(0.25)
 		local t = os.clock()

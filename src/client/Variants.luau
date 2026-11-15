@@ -331,6 +331,16 @@ local GROUPS = {
 		},
 	},
 	{
+		-- IDEA (night/2026-11-14-ideas): server/CallIns/Combos, overlapping call-ins combine (server = mirrored)
+		name = "CALL-IN COMBOS",
+		keys = { "Feel_Combos" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B fire vortex (Gravity Well + fire)", set = { Feel_Combos = "on" } },
+		},
+	},
+	{
 		-- IDEA (night/2026-11-14-ideas): server/Hazards debris showers during the mission (server = mirrored)
 		name = "PLANET HAZARD",
 		keys = { "Feel_Hazard" },

@@ -23,6 +23,8 @@
 --   Elites.onDeath(e, source) called by EnemyService.kill: volatile blast + killer bonus
 --   Elites.AFFIXES            list of affix names
 
+local Combos = require(script.Parent.Parent:WaitForChild("CallIns"):WaitForChild("Combos"))
+
 local Elites = {}
 local S: any = nil
 
@@ -136,6 +138,7 @@ local function volatileBlast(pos: Vector3)
 				end
 			end
 		end
+		Combos.addZone("volatile", pos, VOL_RADIUS, os.clock() + 1) -- fire for the Gravity Well combo
 		S.Explosions.blast(pos, {
 			radius = VOL_RADIUS,
 			core = VOL_CORE,
