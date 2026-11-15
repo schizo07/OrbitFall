@@ -69,7 +69,7 @@ local function tuneNum(name: string, default: number): number
 	return default
 end
 local function twistLimit(): number
-	return rad(math.clamp(tuneNum("ProneTwistLimit", 75), 0, 170))
+	return rad(math.clamp(tuneNum("ProneTwistLimit", 50), 0, 170))
 end
 
 local function wrapAngle(a: number): number

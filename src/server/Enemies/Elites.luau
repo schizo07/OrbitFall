@@ -31,7 +31,7 @@ local S: any = nil
 local rng = Random.new()
 
 -- tuning
-local CHANCE = { on = 0.06, fast = 0.4 }
+local CHANCE = { on = 0.15, fast = 0.4 } -- 2026-11-15 pick: on by default at 15 % ("off" turns them off)
 local MAX_ALIVE = 3
 local MIN_MISSION_TIME = 60 -- s
 local PLATED_HP, PLATED_ARMOR_CAP = 1.5, 4
@@ -51,7 +51,10 @@ end
 
 local function chance(): number
 	local v = workspace:GetAttribute("Feel_Elites")
-	return if v == "on" or v == "fast" then CHANCE[v] else 0
+	if v == "off" then
+		return 0
+	end
+	return if v == "fast" then CHANCE.fast else CHANCE.on
 end
 
 local function missionLive(): boolean

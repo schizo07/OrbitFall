@@ -1176,12 +1176,10 @@ local function step(_dt: number)
 	local camLook = cam.CFrame.LookVector
 	local now = os.clock()
 	local maxDist = if quality < 0.5 then 100 else 160
-	-- perf saver (Studio A/B): read once per frame
-	local saver = false
-	if RunService:IsStudio() then
-		local mode = Workspace:GetAttribute("Feel_PerfSaver")
-		saver = mode == "all" or (mode == "touch" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
-	end
+	-- perf saver: on by default for phones / tablets (2026-11-15). Studio A/B Feel_PerfSaver "off" / "all" override it.
+	local mode = if RunService:IsStudio() then Workspace:GetAttribute("Feel_PerfSaver") else nil
+	local saver = mode == "all"
+		or (mode ~= "off" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
 	for model, e in entries do
 		if not model.Parent then
 			for _, c in e.conns do

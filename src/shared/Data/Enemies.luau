@@ -124,7 +124,7 @@ local E: { [string]: Enemy } = {
 		zones = {
 			body = { armor = 5, mult = 1 },
 			eye = { armor = 4, mult = 1.5 },
-			vent = { armor = 2, mult = 2.5 },
+			vent = { armor = 1, mult = 2.5 }, -- armour 1: a Light-AP (AP 2) weapon fully pens it, so flanking pays off
 		},
 		attacks = { { kind = "cannon", damage = 65, range = 120, cooldown = 3.4, speed = 80, radius = 6, windup = 0.8 } },
 		keepDistance = 120, salvage = 30, xp = 30,

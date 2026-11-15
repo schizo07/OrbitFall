@@ -18,101 +18,30 @@ local Variants = {}
 -- nil-valued keys are written as "clear" (attribute removed -> the code's default is used).
 -- A preset may also carry `sounds = { SoundKey = { [layerIndex] = "rbxassetid://..." } }` to swap sound layers.
 local GROUPS = {
+	-- 2026-11-15 playtest: framing, prone twist, explosions, UI scale, regen, damage fx, uplink arm, call-in cards, enemy aim,
+	-- carry, squad tags, pop sound, shot sound path, prone legs, stim sprint, pad interact, grenade throw, call-in punch,
+	-- armour tag, skiff, player splash, mission time, left shoulder, stim pose, perf saver, ammo pack, colour grade picked
+	-- and baked into the code defaults (list: docs/playtest-verdicts-2026-11-15.md).
 	{
-		name = "FRAMING",
-		keys = { "CamTune_Shoulder", "CamTune_PivotUp", "CamTune_Fov", "CamTune_DistAdd", "PoseTune_Pocket", "PoseTune_Blade" },
-		-- A = the 2026-11-14 pick baked into the code (camera "high + back" + rifle at the cheek); B-D are small
-		-- variations around it, since the pick was a hybrid of two presets.
-		presets = {
-			{ name = "A picked (C camera + D gun)", set = {} },
-			{ name = "B a bit lower", set = { CamTune_Shoulder = Vector3.new(2.0, 1.35, 0), CamTune_PivotUp = 1.75 } },
-			{ name = "C a bit closer", set = { CamTune_DistAdd = 1.8 } },
-			{ name = "D wider shoulder", set = { CamTune_Shoulder = Vector3.new(2.5, 1.8, 0) } },
-		},
-	},
-	{
-		-- client/Movement.luau: while prone / diving the upper body turns with the camera, the legs stay put
-		name = "PRONE TWIST",
-		keys = { "ProneTwist", "ProneTwistLimit", "ProneTurnRate" },
-		presets = {
-			{ name = "A new (75 deg limit, legs turn 5/s)", set = {} },
-			{ name = "B tighter (50 deg)", set = { ProneTwistLimit = 50 } },
-			{ name = "C wider (100 deg), legs slow", set = { ProneTwistLimit = 100, ProneTurnRate = 3 } },
-			{ name = "D old (whole body turns)", set = { ProneTwist = false } },
-		},
-	},
-	{
-		-- client/Fx/Blast.luau: the shared explosion effect (visual size only; gameplay radius is Data/Blasts.luau)
-		name = "EXPLOSIONS",
-		keys = { "Feel_BlastScale" },
-		presets = {
-			{ name = "A Big (new effect)", set = {} },
-			{ name = "B Huge (new effect x1.4)", set = { Feel_BlastScale = 1.4 } },
-			{ name = "C Current (old effect)", set = { Feel_BlastScale = 0 } },
-		},
-	},
-	{
-		-- client/Fx/Blast.luau: camera shake + FOV punch of the new explosion effect
+		-- client/Fx/Blast.luau + Fx/CallInFx: camera shake of explosions (2026-11-15: "much stronger than x1.6")
 		name = "BLAST SHAKE",
 		keys = { "Feel_BlastShake" },
 		presets = {
-			{ name = "A normal (x1)", set = {} },
-			{ name = "B soft (x0.5)", set = { Feel_BlastShake = 0.5 } },
-			{ name = "C strong (x1.6)", set = { Feel_BlastShake = 1.6 } },
-			{ name = "D off", set = { Feel_BlastShake = 0 } },
+			{ name = "A strong (x2.6)", set = {} },
+			{ name = "B x2", set = { Feel_BlastShake = 2 } },
+			{ name = "C brutal (x3.4)", set = { Feel_BlastShake = 3.4 } },
 		},
 	},
 	{
-		-- client/UI/Theme: global HUD / menu scale (short side of the viewport) + text floor (12 px phone, 14 px 1080p)
-		name = "UI SCALE",
-		keys = { "Feel_UiScale" },
+		-- client/UI/Theme.applyFont: swaps the face of every HUD / menu text live (sizes stay)
+		name = "UI FONT",
+		keys = { "Feel_Font" },
 		presets = {
-			{ name = "A new (short-side scale + text floor)", set = {} },
-			{ name = "B new x0.9", set = { Feel_UiScale = 0.9 } },
-			{ name = "C new x1.15", set = { Feel_UiScale = 1.15 } },
-			{ name = "D old (x1, no floor)", set = { Feel_UiScale = "old" } },
-		},
-	},
-	{
-		-- server/PlayerService passive regen (mirrored to the server by client/Fx/VitalsFx, Action "studioFeel")
-		name = "REGEN",
-		keys = { "Feel_Regen" },
-		presets = {
-			{ name = "A slow (above 50 %, after 6 s)", set = {} },
-			{ name = "B off (stims only)", set = { Feel_Regen = "off" } },
-			{ name = "C old (up to 60 %, after 5 s)", set = { Feel_Regen = "current" } },
-		},
-	},
-	{
-		-- client/Fx/VitalsFx: red edge + desaturation + heartbeat strength, big-hit visor overlay
-		name = "DAMAGE FX",
-		keys = { "Feel_DmgFx", "Feel_DmgOverlay" },
-		presets = {
-			{ name = "A default (static >= 15 %, cracks >= 28 %)", set = {} },
-			{ name = "B subtle (x0.6)", set = { Feel_DmgFx = 0.6 } },
-			{ name = "C strong (x1.4)", set = { Feel_DmgFx = 1.4 } },
-			{ name = "D cracks only", set = { Feel_DmgOverlay = "crack" } },
-			{ name = "E no visor overlay", set = { Feel_DmgOverlay = "none" } },
-		},
-	},
-	{
-		-- client/CallInController + UI/UplinkCodes: how a call-in gets armed on PC / gamepad (touch always uses the dial)
-		name = "UPLINK ARM",
-		keys = { "Feel_UplinkArm", "Feel_UplinkListPos" },
-		presets = {
-			{ name = "A codes, list left of crosshair", set = {} },
-			{ name = "B codes, list far left", set = { Feel_UplinkListPos = "left" } },
-			{ name = "C old Slot + Sync dial", set = { Feel_UplinkArm = "slot" } },
-		},
-	},
-	{
-		-- UI/CallInCards: squad call-in cards mid-left
-		name = "CALL-IN CARDS",
-		keys = { "Feel_CallInCardLife", "Feel_CallInCardOwn" },
-		presets = {
-			{ name = "A 4 s, own call-ins shown", set = {} },
-			{ name = "B 6 s", set = { Feel_CallInCardLife = 6 } },
-			{ name = "C 4 s, squadmates only", set = { Feel_CallInCardOwn = false } },
+			{ name = "A Oswald + Gotham (current)", set = {} },
+			{ name = "B Builder Sans (Roblox)", set = { Feel_Font = "BuilderSans" } },
+			{ name = "C Titillium Web (techy)", set = { Feel_Font = "TitilliumWeb" } },
+			{ name = "D Sarpanch (sci-fi square)", set = { Feel_Font = "Sarpanch" } },
+			{ name = "E Fredoka One (round cartoon)", set = { Feel_Font = "FredokaOne" } },
 		},
 	},
 	{
@@ -127,86 +56,6 @@ local GROUPS = {
 		},
 	},
 	{
-		-- server/Enemies/EnemyAI shootBolt (mirrored to the server by client/Fx/EnemyFx, Action "studioFeel"); numbers in
-		-- shared/Data/Enemies.luau (per-unit `aim`, Enemies.Aim)
-		name = "ENEMY AIM",
-		keys = { "Feel_EnemyAim" },
-		presets = {
-			{ name = "A new (wide -> tight, warning shots)", set = {} },
-			{ name = "B harsh (tighter, faster, 1 fewer warning)", set = { Feel_EnemyAim = "harsh" } },
-			{ name = "C old (fixed cone, no warnings)", set = { Feel_EnemyAim = "old" } },
-		},
-	},
-	{
-		-- haul objective (client/CellCarry forwards it to the server, shared/Carry.luau): what a core-cell carrier may use
-		name = "CARRY RULES",
-		keys = { "CarryTune_Rule" },
-		presets = {
-			{ name = "A strict (no shooting while carrying)", set = {} },
-			{ name = "B sidearm (secondary can fire)", set = { CarryTune_Rule = "SIDEARM" } },
-		},
-	},
-	{
-		-- UI/SquadTags: floating teammate tags (S-tag + name) shown through walls
-		name = "SQUAD TAGS",
-		keys = { "TagTune_Mode" },
-		presets = {
-			{ name = "A fade when close / at screen centre", set = {} },
-			{ name = "B always solid", set = { TagTune_Mode = "solid" } },
-			{ name = "C off", set = { TagTune_Mode = "off" } },
-		},
-	},
-	{
-		-- client/Audio: Kill / KillWeak / DeathScrap swap to the `_PopB/C/D` entries in shared/Sounds
-		name = "POP SOUND",
-		keys = { "Feel_PopSound" },
-		presets = {
-			{ name = "A current (bright pop)", set = {} },
-			{ name = "B heavier (pop pitched down + low thump)", set = { Feel_PopSound = "B" } },
-			{ name = "C heaviest (no pop: deep thump + thud)", set = { Feel_PopSound = "C" } },
-			{ name = "D thump only", set = { Feel_PopSound = "D" } },
-		},
-	},
-	{
-		-- client/WeaponController.shoot: when the own shot sound starts within the shot frame
-		name = "SHOT SOUND PATH",
-		keys = { "Feel_ShotSoundPath" },
-		presets = {
-			{ name = "A new (sound before traces + effects)", set = {} },
-			{ name = "B old (sound after traces + effects)", set = { Feel_ShotSoundPath = "old" } },
-		},
-	},
-	{
-		-- client/Movement.twistStep: leg joints while lying prone (one owner, blended in / out)
-		name = "PRONE LEGS",
-		keys = { "Feel_ProneLegs" },
-		presets = {
-			{ name = "A lying pose + crawl flutter", set = {} },
-			{ name = "B lying pose, legs still", set = { Feel_ProneLegs = "still" } },
-			{ name = "C old (Animator drives the legs)", set = { Feel_ProneLegs = "anim" } },
-		},
-	},
-	{
-		-- server/MovementService.boost (mirrored by client/Movement): full stamina for N s after a stim
-		name = "STIM SPRINT",
-		keys = { "Feel_StimSprint" },
-		presets = {
-			{ name = "A 5 s", set = {} },
-			{ name = "B 4 s", set = { Feel_StimSprint = 4 } },
-			{ name = "C 6 s", set = { Feel_StimSprint = 6 } },
-			{ name = "D off", set = { Feel_StimSprint = 0 } },
-		},
-	},
-	{
-		-- client/Input + UI/ContextPrompt: gamepad X was both Reload and the ProximityPrompt key (needs a pad to test)
-		name = "PAD INTERACT",
-		keys = { "Feel_PadInteract" },
-		presets = {
-			{ name = "A X interacts near a prompt, reloads otherwise", set = {} },
-			{ name = "B prompts on D-pad Up, X always reloads", set = { Feel_PadInteract = "dpad" } },
-		},
-	},
-	{
 		-- client/ThrowArc: predicted path + landing ring while a beacon is armed or the grenade button is held
 		name = "THROW ARC",
 		keys = { "Feel_ThrowArc" },
@@ -217,101 +66,6 @@ local GROUPS = {
 		},
 	},
 	{
-		-- client/ThrowArc.grenadeEdge (called from WeaponController's Grenade handler)
-		name = "GRENADE THROW",
-		keys = { "Feel_GrenadeThrow" },
-		presets = {
-			{ name = "A hold to aim, throw on release", set = {} },
-			{ name = "B old (throw on press, no arc)", set = { Feel_GrenadeThrow = "press" } },
-		},
-	},
-	{
-		-- client/Fx/CallInFx: flash + colour punch of Gravity Well / Cryo / Railshot / Firestorm (shake = BLAST SHAKE)
-		name = "CALL-IN PUNCH",
-		keys = { "Feel_CallInPunch" },
-		presets = {
-			{ name = "A normal (x1)", set = {} },
-			{ name = "B soft (x0.5)", set = { Feel_CallInPunch = 0.5 } },
-			{ name = "C strong (x1.5)", set = { Feel_CallInPunch = 1.5 } },
-			{ name = "D off (no flash / colour punch)", set = { Feel_CallInPunch = 0 } },
-		},
-	},
-	{
-		-- client/UI/HUD.showTierTag: armour tier of the zone you hit, as a small tag under the crosshair
-		name = "ARMOUR TAG",
-		keys = { "Feel_ArmourTag" },
-		presets = {
-			{ name = "A deflect + partial hits", set = {} },
-			{ name = "B every hit", set = { Feel_ArmourTag = "all" } },
-			{ name = "C off", set = { Feel_ArmourTag = "off" } },
-		},
-	},
-	{
-		-- server/Objectives/Extraction (mirrored to the server by client/Fx/SkiffFx, Action "studioFeel"); takes effect on
-		-- the next Skiff descent. Numbers: SK table at the top of Extraction.luau
-		name = "SKIFF",
-		keys = { "Feel_SkiffMode" },
-		presets = {
-			{ name = "A hover until clear + door gun", set = {} },
-			{ name = "B hover until clear, no gun", set = { Feel_SkiffMode = "nogun" } },
-			{ name = "C old (lands on time)", set = { Feel_SkiffMode = "old" } },
-		},
-	},
-	{
-		-- server/Explosions.playerFalloff: splash share troopers take from mortars / cannons / acid (server = mirrored)
-		name = "PLAYER SPLASH",
-		keys = { "Feel_PlayerSplash" },
-		server = true,
-		presets = {
-			{ name = "A steep (linear, 25 % at the edge)", set = {} },
-			{ name = "B same as enemies (45 % at the edge, soft)", set = { Feel_PlayerSplash = "enemy" } },
-		},
-	},
-	{
-		-- server/Mission.luau mission clock, minutes; applies from the next drop (server = mirrored)
-		name = "MISSION TIME",
-		keys = { "Feel_MissionTime" },
-		server = true,
-		presets = {
-			{ name = "A 18 min", set = {} },
-			{ name = "B 14 min", set = { Feel_MissionTime = 14 } },
-			{ name = "C 25 min (old)", set = { Feel_MissionTime = 25 } },
-		},
-	},
-	{
-		-- client/CombatPose (mirrored hold) + client/CameraController (camera fix); press V / R3 to swap shoulders
-		name = "LEFT SHOULDER",
-		keys = { "Feel_LeftShoulder" },
-		presets = {
-			{ name = "A gun to the left hand (mirrored aim)", set = {} },
-			{ name = "B camera fix only (lens left + up, head fades)", set = { Feel_LeftShoulder = "camera" } },
-			{ name = "C old (gun stays right)", set = { Feel_LeftShoulder = "old" } },
-		},
-	},
-	{
-		-- client/CombatPose.luau stimPose: free hand injector pose when a stim is used (any player's stim)
-		name = "STIM POSE",
-		keys = { "Feel_StimPose" },
-		presets = {
-			{ name = "A neck jab (0.55 s)", set = {} },
-			{ name = "B thigh jab, faster (0.4 s)", set = { Feel_StimPose = "thigh" } },
-			{ name = "C off", set = { Feel_StimPose = "off" } },
-		},
-	},
-	{
-		-- client/Fx/EnemyAnim (far enemies posed every 2nd / 4th frame), client/Fx/EnemyFx (far bolts raycast every
-		-- 2nd frame), server/Enemies/EnemyAI (enemies > 120 studs from all players moved at 30 Hz).
-		-- The server can't tell who is on touch, so its part is on for both B and C (server = mirrored).
-		name = "PERF SAVER",
-		keys = { "Feel_PerfSaver" },
-		server = true,
-		presets = {
-			{ name = "A current (off)", set = {} },
-			{ name = "B saver on touch devices only", set = { Feel_PerfSaver = "touch" } },
-			{ name = "C saver everywhere (judge on PC)", set = { Feel_PerfSaver = "all" } },
-		},
-	},
-	{
 		-- client/CameraController + client/UI/ScopeOverlay: aiming a zoom >= 2 weapon (MR-9 Longwatch)
 		name = "SCOPE",
 		keys = { "Feel_Scope" },
@@ -319,29 +73,6 @@ local GROUPS = {
 			{ name = "A first-person scope", set = {} },
 			{ name = "B old third-person zoom", set = { Feel_Scope = "old" } },
 			{ name = "C scope, 0.15 s fade-in from black", set = { Feel_Scope = "fade" } },
-		},
-	},
-	{
-		-- server/WeaponService: reloads in a supply-drop ammo backpack (ROCKET 6 / GATLING 2 / RAIL 8 at x1); applies to
-		-- the next pack picked up (server = mirrored)
-		name = "AMMO PACK",
-		keys = { "Feel_AmmoPack" },
-		server = true,
-		presets = {
-			{ name = "A full (x1)", set = {} },
-			{ name = "B half (x0.5)", set = { Feel_AmmoPack = 0.5 } },
-			{ name = "C double (x2)", set = { Feel_AmmoPack = 2 } },
-		},
-	},
-	{
-		-- client/Fx/Weather: extra per-biome ColorCorrection on top of the map's own (desert warm, ash grey-red, swamp
-		-- green, ice cool)
-		name = "COLOUR GRADE",
-		keys = { "Feel_Grade" },
-		presets = {
-			{ name = "A new per biome", set = {} },
-			{ name = "B stronger (x1.9)", set = { Feel_Grade = "strong" } },
-			{ name = "C off (map grade only)", set = { Feel_Grade = "off" } },
 		},
 	},
 	{
@@ -489,8 +220,8 @@ local GROUPS = {
 		keys = { "Feel_Elites" },
 		server = true,
 		presets = {
-			{ name = "A off", set = {} },
-			{ name = "B on (6 % of spawns)", set = { Feel_Elites = "on" } },
+			{ name = "A on (15 % of spawns)", set = {} },
+			{ name = "B off", set = { Feel_Elites = "off" } },
 			{ name = "C on, 40 % (testing)", set = { Feel_Elites = "fast" } },
 		},
 	},

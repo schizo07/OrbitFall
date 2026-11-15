@@ -238,14 +238,13 @@ local function step(dt: number)
 	if next(bolts) then
 		refreshBoltRay()
 		local now = os.clock()
-		-- perf saver (Studio A/B): far bolts raycast every 2nd frame; camPos stays nil when the saver is off
+		-- perf saver (on for phones / tablets; Studio A/B Feel_PerfSaver "off" / "all"): far bolts raycast every 2nd
+		-- frame; camPos stays nil when the saver is off
 		local camPos: Vector3? = nil
-		if RunService:IsStudio() then
-			local mode = workspace:GetAttribute("Feel_PerfSaver")
-			if mode == "all" or (mode == "touch" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) then
-				local cam = workspace.CurrentCamera
-				camPos = if cam then cam.CFrame.Position else nil
-			end
+		local mode = if RunService:IsStudio() then workspace:GetAttribute("Feel_PerfSaver") else nil
+		if mode == "all" or (mode ~= "off" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) then
+			local cam = workspace.CurrentCamera
+			camPos = if cam then cam.CFrame.Position else nil
 		end
 		-- one bad bolt must never abort the loop (that would freeze every bolt after it in place, forever)
 		for id, b in bolts do

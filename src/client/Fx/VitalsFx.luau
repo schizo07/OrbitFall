@@ -90,7 +90,7 @@ local function intensity(): number
 	if type(v) == "number" then
 		return math.clamp(v, 0, 3)
 	end
-	return 1
+	return 1.2 -- 2026-11-15 pick: above x1, below x1.4
 end
 
 local function overlayMode(): string

@@ -1024,7 +1024,7 @@ local function punchMult(): number
 	return attrNum("Feel_CallInPunch", 1)
 end
 local function shakeMult(): number
-	return attrNum("Feel_BlastShake", 1)
+	return attrNum("Feel_BlastShake", 2.6)
 end
 local function quality(): number
 	return FxRef and FxRef.quality or 1

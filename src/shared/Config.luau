@@ -15,7 +15,7 @@ Config.DropHeight = 600 -- drop capsule start Y
 Config.MapSize = 640 -- studs, square, centred at origin
 
 -- Mission tuning
-Config.MissionTime = 18 * 60 -- was 25 min; Studio A/B Feel_MissionTime (minutes) overrides it in server/Mission.luau
+Config.MissionTime = 14 * 60 -- 2026-11-15 pick (was 18, before that 25); Studio A/B Feel_MissionTime (minutes) overrides it in server/Mission.luau
 Config.StartCountdown = 10
 Config.ResultsTime = 12
 Config.FailedTime = 8

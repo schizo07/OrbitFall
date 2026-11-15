@@ -75,7 +75,7 @@ local function attrNum(name: string, default: number): number
 end
 
 function Blast.scale(): number
-	return attrNum("Feel_BlastScale", 1)
+	return attrNum("Feel_BlastScale", 1.4) -- 2026-11-15 pick: "Huge"
 end
 
 function Blast.isNew(): boolean
@@ -519,7 +519,7 @@ local function camera(p: Vector3, K: number, R: number, st: any, opts: any)
 	if opts.noShake then
 		return
 	end
-	local mult = attrNum("Feel_BlastShake", 1) * (opts.sh or 1)
+	local mult = attrNum("Feel_BlastShake", 2.6) * (opts.sh or 1) -- 2026-11-15: "much stronger than x1.6"
 	if mult <= 0 then
 		return
 	end
