@@ -634,9 +634,26 @@ local function buildMain()
 		if k <= 0 or not ui.ownCard then
 			return
 		end
-		SquadCards.setBottom(Style.MARGIN + ui.ownCard.AbsoluteSize.Y / k + 40)
+		local bottom = Style.MARGIN + ui.ownCard.AbsoluteSize.Y / k + 40
+		SquadCards.setBottom(bottom)
+		-- free height above the stack's bottom edge, under the objective column (A) and under the uplink column (B):
+		-- phones with a full squad go compact, then slide under the uplink column, instead of covering the objective list
+		local stackBottom = root.AbsoluteSize.Y / k - bottom
+		local function colBottom(f: Frame): number
+			return (f.AbsolutePosition.Y + f.AbsoluteSize.Y - root.AbsolutePosition.Y) / k
+		end
+		local roomB, xB = 0, 0
+		if col2 then
+			roomB = stackBottom - colBottom(col2) - 4
+			xB = (col2.AbsolutePosition.X - root.AbsolutePosition.X) / k
+		end
+		SquadCards.setRoom(stackBottom - colBottom(col1) - 4, roomB, xB)
 	end
 	ui.ownCard:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSquad)
+	col1:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSquad)
+	if col2 then
+		col2:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSquad)
+	end
 	ui.screenScale:GetPropertyChangedSignal("Scale"):Connect(placeSquad)
 	task.defer(placeSquad)
 	EventFeed.build(root, touch)
@@ -1225,11 +1242,40 @@ end
 
 -- Squad -------------------------------------------------------------------------------------------------------------------
 -- Squad cards (UI/SquadCards, left edge y 58-78 %) + callsign colours + squad chatter edges
+-- Studio-only layout aid: workspace attribute DebugFakeSquad (1-3) pads the squad the cards draw with fake teammates.
+-- Client-side only, nothing is sent to the server.
+local FAKE_SQUAD = {
+	{ userId = -101, name = "Rook", hp = 100, maxHp = 100, alive = true },
+	{ userId = -102, name = "Vesper", hp = 40, maxHp = 100, alive = true },
+	{ userId = -103, name = "Tallow", hp = 0, maxHp = 100, alive = false },
+}
+
+local function withFakeSquad(squad: any): any
+	if not RunService:IsStudio() then
+		return squad
+	end
+	local n = workspace:GetAttribute("DebugFakeSquad")
+	if type(n) ~= "number" or n < 1 then
+		return squad
+	end
+	local out = {}
+	if type(squad) == "table" then
+		for _, m in squad do
+			table.insert(out, m)
+		end
+	end
+	for i = 1, math.min(math.floor(n), #FAKE_SQUAD) do
+		table.insert(out, FAKE_SQUAD[i])
+	end
+	return out
+end
+
 local function updateSquad()
 	if not ui.root then
 		return
 	end
-	local squad = Store.get("squad")
+	local realSquad = Store.get("squad")
+	local squad = withFakeSquad(realSquad)
 	Style.setSquad(squad, player.UserId)
 	if ui.callsign then
 		local me = Style.callsign(player.UserId)
@@ -1238,7 +1284,7 @@ local function updateSquad()
 	end
 	SquadCards.update(squad, Store.get("me"), Store.get("mission"), player.UserId, now())
 	SquadCards.setVisible(COMBAT[state] == true or state == "Drop")
-	SquadComms.onSquad(squad)
+	SquadComms.onSquad(realSquad)
 end
 
 -- Call-in bar -------------------------------------------------------------------------------------------------------------
@@ -2018,6 +2064,9 @@ function HUD.init()
 	Store.on("objectives", updateObjectives)
 	Store.on("objectives", updateArea)
 	Store.on("squad", updateSquad)
+	if RunService:IsStudio() then
+		workspace:GetAttributeChangedSignal("DebugFakeSquad"):Connect(updateSquad)
+	end
 	Store.on("profile", updateShip)
 	Store.on("menuOpen", applyVisibility)
 

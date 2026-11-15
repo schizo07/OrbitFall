@@ -1,5 +1,5 @@
 -- Client-side procedural animation for the mesh enemies (model attribute MeshRig = true, built by server/Enemies/EnemyModels).
--- The server only moves the invisible Root. Everything else here is local: no remotes, no server cost.
+-- The server only moves the invisible Root. Everything else here is local: no remotes, no server cost (PERF SAVER A/B below).
 --
 -- Rigged models (model attribute Rigged = true): every limb is a Motor6D named like the manifest part, parented inside the
 -- child part, with the joint exactly at the manifest pivot (see EnemyModels.buildRigged). With Transform = identity the
@@ -16,8 +16,11 @@
 --     HitSeq (+ HitMag HitDir HitWeak HitStagger)  damage taken: spring jolt along HitDir, stagger pose on heavy hits
 -- Budget: only enemies within 160 studs of the camera (100 on low quality) are looked at; beyond 70 studs they update at
 -- 15 Hz; enemies outside the view cone only track motion, their joints are not touched.
+-- Studio A/B Feel_PerfSaver ("touch" = phones only, "all" = everywhere): beyond 35 studs enemies are posed every 2nd frame,
+-- beyond 70 every 4th (staggered per enemy; dt accumulates so the gait phase stays right).
 
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -159,6 +162,7 @@ type Entry = {
 	phase: number,
 	seed: number,
 	nextT: number,
+	slot: number, -- frame offset for the perf saver's skip pattern
 	-- events
 	atk: { kind: string, windup: number, t0: number }?,
 	hitT: number,
@@ -187,6 +191,7 @@ type Entry = {
 
 local entries: { [Model]: Entry } = {}
 local frame = 0
+local slotCounter = 0
 local conn: RBXScriptConnection? = nil
 local quality = 1
 local FxRef: any = nil
@@ -717,6 +722,7 @@ local function track(model: Instance)
 	local rigged = model:GetAttribute("Rigged") == true
 	local rig = if rigged then rigOf(kind) else nil
 	local now = os.clock()
+	slotCounter += 1
 	local look = root.CFrame.LookVector
 	local size = if def then def.size else 2
 	local e: Entry = {
@@ -749,6 +755,7 @@ local function track(model: Instance)
 		phase = math.random() * 2 * PI,
 		seed = math.random() * 100,
 		nextT = 0,
+		slot = slotCounter,
 		atk = nil,
 		hitT = -10,
 		hitDir = 1,
@@ -1169,6 +1176,12 @@ local function step(_dt: number)
 	local camLook = cam.CFrame.LookVector
 	local now = os.clock()
 	local maxDist = if quality < 0.5 then 100 else 160
+	-- perf saver (Studio A/B): read once per frame
+	local saver = false
+	if RunService:IsStudio() then
+		local mode = Workspace:GetAttribute("Feel_PerfSaver")
+		saver = mode == "all" or (mode == "touch" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
+	end
 	for model, e in entries do
 		if not model.Parent then
 			for _, c in e.conns do
@@ -1195,11 +1208,19 @@ local function step(_dt: number)
 			e.velTarget = Vector3.zero
 			continue
 		end
-		-- far ones update at 15 Hz
-		if d > 70 and now < e.nextT then
-			continue
+		if saver then
+			-- every 2nd frame beyond 35 studs, every 4th beyond 70, staggered by enemy slot (lastUpd is only set when
+			-- posed, so dt covers the skipped frames)
+			if d > 35 and (frame + e.slot) % (if d > 70 then 4 else 2) ~= 0 then
+				continue
+			end
+		else
+			-- far ones update at 15 Hz
+			if d > 70 and now < e.nextT then
+				continue
+			end
+			e.nextT = now + (if d > 70 then 1 / 15 else 0)
 		end
-		e.nextT = now + (if d > 70 then 1 / 15 else 0)
 
 		-- rigged but motors not all there yet (streaming): keep looking for a while
 		if (e.rigged and (e.motorCount < e.expected) or (not e.rigged and not e.welds)) and e.tries < 10 and now >= e.nextTry then

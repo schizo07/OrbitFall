@@ -16,6 +16,7 @@ local Audio = require(script.Parent.Audio)
 local Juice = require(script.Parent.Juice)
 local Cam = require(script.Parent.CameraController)
 local GunFeel = require(script.Parent.Fx.GunFeel)
+local CombatPose = require(script.Parent.CombatPose)
 
 local WeaponController = {}
 local player = Players.LocalPlayer
@@ -159,7 +160,7 @@ local function muzzle(): (Vector3, Attachment?)
 	return head and head.Position or Cam.aimRay(), nil
 end
 
--- Two-reticle aim. The server traces every bullet from shared/Aim.origin (root + stance height + right shoulder)
+-- Two-reticle aim. The server traces every bullet from shared/Aim.origin (root + stance height + the gun's shoulder)
 -- along (crosshair point - origin) for the weapon's range, so cover between the gun and the crosshair target takes
 -- the shot. barrelTrace repeats exactly that trace so tracers / impacts / the barrel reticle show where the bullet
 -- really goes. Keep in sync with WeaponService.traceShot (same origin, same range, same exclusions).
@@ -167,7 +168,7 @@ local BLOCK_MARGIN = 1.5 -- studs short of the crosshair point before we call th
 
 -- crosshair point -> (where the bullet lands, its RaycastResult, blocked by something before the crosshair point)
 local function barrelTrace(p: Vector3, res: RaycastResult?, range: number): (Vector3, RaycastResult?, boolean)
-	local o = Aim.origin(player.Character)
+	local o = Aim.origin(player.Character, CombatPose.handSign())
 	if not o then
 		return p, res, false
 	end

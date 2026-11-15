@@ -299,6 +299,19 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/Fx/EnemyAnim (far enemies posed every 2nd / 4th frame), client/Fx/EnemyFx (far bolts raycast every
+		-- 2nd frame), server/Enemies/EnemyAI (enemies > 120 studs from all players moved at 30 Hz).
+		-- The server can't tell who is on touch, so its part is on for both B and C (server = mirrored).
+		name = "PERF SAVER",
+		keys = { "Feel_PerfSaver" },
+		server = true,
+		presets = {
+			{ name = "A current (off)", set = {} },
+			{ name = "B saver on touch devices only", set = { Feel_PerfSaver = "touch" } },
+			{ name = "C saver everywhere (judge on PC)", set = { Feel_PerfSaver = "all" } },
+		},
+	},
+	{
 		-- client/UI/Pings + server/PingService: look + middle mouse / D-pad Right / touch long press = squad ping marker
 		name = "SQUAD PING",
 		keys = { "Feel_Ping" },

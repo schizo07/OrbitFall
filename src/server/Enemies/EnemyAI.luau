@@ -54,6 +54,8 @@ local tmap: { [Player]: Target } = {}
 local snapshot: { any } = {}
 local lastFilter = 0
 local lastScreech = 0
+local beat = 0 -- Heartbeat counter for the perf saver's 30 Hz far-enemy moves
+local SAVER_FAR = 120 -- studs from every alive player
 
 local envParams = RaycastParams.new() -- world only (no enemies, no characters)
 envParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -1616,11 +1618,14 @@ local function update(e: any, dt: number, now: number)
 	end
 	local last = e.lastCF
 	if not last or moving or e.windupV > 0.01 or e.air > 0 or e.tumble ~= nil or (last.Position - pos).Magnitude > 0.01 or math.abs(wrapPi(e.lastYaw - e.yaw)) > 0.002 then
-		e.model:PivotTo(cf)
-		e.lastCF = cf
-		e.lastYaw = e.yaw
-		if (moving or e.windupV > 0.01) and e.near then
-			EnemyModels.animate(e.rig, cf, e.animT, move, e.windupV)
+		-- perf saver: far enemies skip the model write every 2nd frame (lastCF / lastYaw stay stale, so the next frame writes)
+		if not e.skipMove then
+			e.model:PivotTo(cf)
+			e.lastCF = cf
+			e.lastYaw = e.yaw
+			if (moving or e.windupV > 0.01) and e.near then
+				EnemyModels.animate(e.rig, cf, e.animT, move, e.windupV)
+			end
 		end
 		-- footsteps for the big ones
 		if moving and (e.class == "heavy" or e.class == "behemoth") and e.near then
@@ -1686,18 +1691,35 @@ function EnemyAI.step(dt: number, enemies: { [number]: any })
 		end
 	end
 
+	-- perf saver (Studio A/B Feel_PerfSaver, "touch" or "all"; the server can't tell who is on touch, so both count):
+	-- enemies more than SAVER_FAR studs from every player are moved (PivotTo + leg parts) on every 2nd Heartbeat only
+	local saver = false
+	if IS_STUDIO then
+		local mode = workspace:GetAttribute("Feel_PerfSaver")
+		saver = mode == "touch" or mode == "all"
+	end
+	beat += 1
+
 	for _, e in snapshot do
 		if e.alive then
 			-- only animate things anywhere near a player
 			local near = false
+			local far = saver
 			for _, t in targets do
 				local d = t.pos - e.pos
-				if d.X * d.X + d.Z * d.Z < 230 * 230 then
+				local dsq = d.X * d.X + d.Z * d.Z
+				if dsq < 230 * 230 then
 					near = true
+				end
+				if far and dsq < SAVER_FAR * SAVER_FAR then
+					far = false
+				end
+				if near and not far then
 					break
 				end
 			end
 			e.near = near
+			e.skipMove = far and (beat + (tonumber(e.id) or 0)) % 2 == 1
 			update(e, dt, now)
 		end
 	end
