@@ -278,6 +278,16 @@ local GROUPS = {
 			{ name = "C 25 min (old)", set = { Feel_MissionTime = 25 } },
 		},
 	},
+	{
+		-- IDEA (night/2026-11-14-ideas): server/CallIns/Effects/RAILSHOT molten pool after the slug (server = mirrored)
+		name = "RAILSHOT HOT GROUND",
+		keys = { "Feel_RailHot" },
+		server = true,
+		presets = {
+			{ name = "A off", set = {} },
+			{ name = "B molten pool 6 s", set = { Feel_RailHot = "on" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough
