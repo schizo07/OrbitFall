@@ -142,7 +142,15 @@ return function(ctx)
 		local b = res and res.Position or origin + d * prm.range
 		S.Fx.playU("Tracer", { a = origin, b = b, c = tracerColor, w = "GATLING", u = 0 })
 		if res and res.Instance:GetAttribute("EnemyId") then
-			S.Enemies.hit(res.Instance, prm.damage, prm.ap, ctx.source, res.Position)
+			local hr = S.Enemies.hit(res.Instance, prm.damage, prm.ap, ctx.source, res.Position)
+			-- Cryo shatter: frozen enemies take the extra share of what got through (as WeaponService bullets)
+			if hr and hr.dealt > 0 and not hr.killed then
+				local fe = S.Enemies.getById(res.Instance:GetAttribute("EnemyId"))
+				local mult = if fe then S.Explosions.frozenMult(fe) else 1
+				if mult > 1 then
+					S.Enemies.damage(fe, hr.dealt * (mult - 1), 6, ctx.source, "body")
+				end
+			end
 		end
 		muzzles[i].Transparency = 0
 		task.delay(0.05, function()

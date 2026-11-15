@@ -24,7 +24,7 @@ return function(ctx)
 		for _, e in S.Enemies.getInRadius(pos, prm.radius) do
 			if e.alive then
 				local mult = if e.faction == "BROOD" then prm.bugMult else prm.robotMult
-				S.Enemies.damage(e, prm.dps * mult * dt, 6, ctx.source, "body")
+				S.Enemies.damage(e, prm.dps * mult * dt * S.Explosions.frozenMult(e), 6, ctx.source, "body") -- x Cryo shatter
 				S.Enemies.applyStatus(e, "confuse", 1.2)
 			end
 		end

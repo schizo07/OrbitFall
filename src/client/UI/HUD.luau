@@ -4,7 +4,7 @@
 --   top-left   UI/CallInList (UPLINK list, icons only on touch) (+ ship info on the ship)  reads me.callins, me.reinforceReadyAt
 --   top-centre UI/Compass tape (+ markers) and UI/AlertBar stack (breach / notices)    reads camera, objectives, beacons, intensity
 --   top-right  UI/TopRight timer + reinforce tokens + resource chips                   reads mission.endsAt / lives, objectives, kills
---   right      UI/ObjectiveList checklist (y 16 %), UI/PickupToast (y 55 %)            reads objectives; Notify pickup texts
+--   right      UI/ObjectiveList checklist (y 16 %), UI/PickupToast (y 55 %; touch: centre y 30 %) reads objectives; Notify pickup texts
 --   left       UI/SquadCards (y 58-78 %), one card per other squad member              reads squad, me.reinforceReadyAt, mission.lives
 --   bottom-left own card built here (weapon, mag segments, stim/grenade/mag counts, callsign + health)   reads me
 --                health bar: long, ghost chunk for recent damage, red + pulsing under Config.Stims.Critical, green tint

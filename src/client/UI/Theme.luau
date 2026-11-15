@@ -528,7 +528,12 @@ function Theme.scaleFor(kind: string?): number
 	else
 		s = Theme.clamp((short / 1080) ^ 0.6, 0.7, 1.5)
 	end
-	return s * Theme.uiMul()
+	local mul = Theme.uiMul()
+	-- phones: the left column already ends just above the FEED button at x1, so a bigger A/B multiplier would overlap it
+	if Theme.isTouch() and short < 500 then
+		mul = math.min(mul, 1)
+	end
+	return s * mul
 end
 
 -- Smallest text size in final screen pixels: 12 on a phone (short side 390), 14 at 1080 and above. 0 = no floor.

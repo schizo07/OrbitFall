@@ -16,7 +16,11 @@ return function(ctx)
 			local rp = e.root.Position
 			local flat = math.sqrt((rp.X - pos.X) ^ 2 + (rp.Z - pos.Z) ^ 2)
 			if flat <= prm.hitRadius + (e.def.size or 2) * 0.6 and math.abs(rp.Y - pos.Y) < 30 then
-				S.Enemies.damage(e, prm.damage, prm.ap, ctx.source, "body")
+				local mult = S.Explosions.frozenMult(e) -- Cryo shatter on the direct hit
+				S.Enemies.damage(e, prm.damage * mult, prm.ap, ctx.source, "body")
+				if mult > 1 then
+					S.Fx.play("Shatter", { p = rp })
+				end
 			end
 		end
 	end

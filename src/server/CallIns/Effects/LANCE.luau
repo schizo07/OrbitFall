@@ -51,7 +51,7 @@ return function(ctx)
 				local rp = e.root.Position
 				local flat = math.sqrt((rp.X - pos.X) ^ 2 + (rp.Z - pos.Z) ^ 2)
 				if flat <= radius + (e.def.size or 2) * 0.6 and math.abs(rp.Y - pos.Y) < 40 then
-					S.Enemies.damage(e, prm.dps * dt, prm.ap, ctx.source, "body")
+					S.Enemies.damage(e, prm.dps * dt * S.Explosions.frozenMult(e), prm.ap, ctx.source, "body") -- x Cryo shatter
 				end
 			end
 		end

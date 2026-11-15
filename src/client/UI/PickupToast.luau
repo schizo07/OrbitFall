@@ -23,12 +23,19 @@ function PickupToast.build(parent: Instance, isTouch: boolean)
 	local holder = Instance.new("Frame")
 	holder.Name = "PickupToasts"
 	holder.BackgroundTransparency = 1
-	holder.AnchorPoint = Vector2.new(1, 0.5)
-	holder.Position = UDim2.new(1, -Style.MARGIN, 0.55, 0)
+	-- touch: the right edge below ~25 % is the button cluster (JUMP / SWAP / STIM), so the toast goes centre, upper third
+	holder.AnchorPoint = if touch then Vector2.new(0.5, 0.5) else Vector2.new(1, 0.5)
+	holder.Position = if touch then UDim2.fromScale(0.5, 0.3) else UDim2.new(1, -Style.MARGIN, 0.55, 0)
 	holder.Size = UDim2.fromOffset(if touch then 190 else 230, if touch then 90 else 110)
 	holder.Visible = false
 	holder.Parent = parent
-	Theme.list(holder, Enum.FillDirection.Vertical, 4, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+	Theme.list(
+		holder,
+		Enum.FillDirection.Vertical,
+		4,
+		if touch then Enum.HorizontalAlignment.Center else Enum.HorizontalAlignment.Right,
+		Enum.VerticalAlignment.Center
+	)
 	ui.holder = holder
 end
 
