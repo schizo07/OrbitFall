@@ -1002,6 +1002,9 @@ local LEG_JOINTS = {
 	RightKnee = "RightLowerLeg",
 	LeftAnkle = "LeftFoot",
 	RightAnkle = "RightFoot",
+	-- 2026-11-15: the head shook ~20 degrees frame to frame while crawling (walk / fall tracks cross-fading on the Neck);
+	-- its Transform is owned too and held still (identity), the aim pitch stays on Neck.C0 (CombatPose / poseStep)
+	Neck = "Head",
 }
 
 -- this frame's Animator value of a joint (our own write from last frame, if still there, does not count as theirs)
@@ -1034,7 +1037,7 @@ end
 
 -- lying leg pose (Transform, joint space; X = bend forward / back, Z = sideways) at crawl phase `ph`, strength `k` 0..1
 local function lyingLeg(name: string, ph: number, k: number): CFrame
-	if k <= 0 then
+	if k <= 0 or name == "Neck" then
 		return CFrame.identity
 	end
 	local left = string.sub(name, 1, 4) == "Left"

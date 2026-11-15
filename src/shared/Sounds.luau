@@ -83,7 +83,7 @@ local S: { [string]: Entry } = {
 	-- WEAPONS ----------------------------------------------------------------------
 	ShotRifle = K(W, 2, {
 		-- start: these two files open with ~0.12 s / ~0.10 s of silence (measured 2026-11-14), heard as a delayed shot
-		{ id = "rbxassetid://18835647605", desc = "sharp rifle crack, short transient, dry", vol = 0.9, pitch = { 0.96, 1.04 }, start = 0.12 },
+		{ id = "rbxassetid://18835647605", desc = "sharp rifle crack, short transient, dry", vol = 0.9, pitch = { 0.96, 1.04 }, start = 0.14 }, -- onset re-measured 2026-11-15 (AudioAnalyzer): 0.15 s
 		{ id = "rbxassetid://88162798516964", desc = "rifle shot low body thump, punchy", vol = 0.7, pitch = { 0.9, 1.0 } },
 		{ id = "rbxassetid://134975275558568", desc = "mechanical bolt/action click", vol = 0.3, near = true, pitch = { 0.95, 1.1 }, maxDist = 60, start = 0.1 },
 		{ id = "rbxassetid://88162798516964", desc = "felt sub-bass punch (shooter only)", vol = 0.5, near = true, felt = true, pitch = { 0.55, 0.62 }, maxDist = 40 },
@@ -91,21 +91,21 @@ local S: { [string]: Entry } = {
 	}, { limit = GUN, perSource = true, nearDist = 30, farDist = 130 }),
 
 	ShotShotgun = K(W, 3, {
-		{ id = "rbxassetid://5651137842", desc = "shotgun blast crack, loud and snappy", vol = 1.0, pitch = { 0.95, 1.03 } },
+		{ id = "rbxassetid://5651137842", desc = "shotgun blast crack, loud and snappy", vol = 1.0, pitch = { 0.95, 1.03 }, start = 0.05 },
 		{ id = "rbxassetid://18878161489", desc = "shotgun boom low body thump", vol = 0.85, pitch = { 0.85, 0.95 }, start = 0.58 }, -- start: onset 616 -> 16 ms
 		{ id = "rbxassetid://113837896417526", desc = "shotgun pump action rack click", vol = 0.5, near = true, delay = 0.38, maxDist = 60 },
-		{ id = "rbxassetid://5651137842", desc = "distant muffled shotgun boom echo", vol = 0.6, far = true, delay = 0.12, maxDist = 900 },
+		{ id = "rbxassetid://5651137842", desc = "distant muffled shotgun boom echo", vol = 0.6, far = true, delay = 0.12, maxDist = 900, start = 0.05 },
 	}, { limit = { count = 3, window = 0.25 }, perSource = true, nearDist = 30, farDist = 130 }),
 
 	ShotSMG = K(W, 2, {
 		{ id = "rbxassetid://79266532175234", desc = "light submachine gun shot, short snappy burst crack", vol = 0.8, pitch = { 0.95, 1.08 } },
-		{ id = "rbxassetid://77130830495173", desc = "small gun low thump body", vol = 0.5, pitch = { 1.0, 1.1 } },
-		{ id = "rbxassetid://77130830495173", desc = "felt sub-bass punch (shooter only)", vol = 0.35, near = true, felt = true, pitch = { 0.6, 0.66 }, maxDist = 40 },
+		{ id = "rbxassetid://77130830495173", desc = "small gun low thump body", vol = 0.5, pitch = { 1.0, 1.1 }, start = 0.04 },
+		{ id = "rbxassetid://77130830495173", desc = "felt sub-bass punch (shooter only)", vol = 0.35, near = true, felt = true, pitch = { 0.6, 0.66 }, maxDist = 40, start = 0.04 },
 		{ id = "rbxassetid://79266532175234", desc = "distant muffled smg shot", vol = 0.5, far = true, delay = 0.1, maxDist = 800 },
 	}, { limit = { count = 6, window = 0.25 }, perSource = true, farDist = 120 }),
 
 	ShotMarksman = K(W, 3, {
-		{ id = "rbxassetid://98063753863205", desc = "sniper rifle supersonic crack, sharp and loud", vol = 1.0, pitch = { 0.97, 1.03 } },
+		{ id = "rbxassetid://98063753863205", desc = "sniper rifle supersonic crack, sharp and loud", vol = 1.0, pitch = { 0.97, 1.03 }, start = 0.03 },
 		{ id = "rbxassetid://133904008738767", desc = "heavy rifle boom body, deep", vol = 0.85, pitch = { 0.8, 0.9 } },
 		{ id = "rbxassetid://98063753863205", desc = "rifle bolt action cycle clack", vol = 0.45, near = true, delay = 0.3, maxDist = 60 },
 		{ id = "rbxassetid://133904008738767", desc = "long outdoor sniper shot echo/reverb tail", vol = 0.7, far = true, delay = 0.2, maxDist = 1000 },
@@ -119,16 +119,16 @@ local S: { [string]: Entry } = {
 
 	ShotPistolHeavy = K(W, 3, {
 		{ id = "rbxassetid://18918494387", desc = "magnum revolver blast crack, big", vol = 0.95, pitch = { 0.9, 1.0 } },
-		{ id = "rbxassetid://3292839892", desc = "explosive round pop plus small boom", vol = 0.8, pitch = { 0.85, 0.95 }, delay = 0.02 },
+		{ id = "rbxassetid://3292839892", desc = "explosive round pop plus small boom", vol = 0.8, pitch = { 0.85, 0.95 }, start = 0.15 },
 		{ id = "rbxassetid://18918494387", desc = "heavy low thump", vol = 0.7, near = true, pitch = { 0.55, 0.65 } },
-		{ id = "rbxassetid://3292839892", desc = "distant muffled magnum shot echo", vol = 0.5, far = true, delay = 0.12, maxDist = 800 },
+		{ id = "rbxassetid://3292839892", desc = "distant muffled magnum shot echo", vol = 0.5, far = true, delay = 0.12, maxDist = 800, start = 0.15 },
 	}, { limit = { count = 3, window = 0.25 }, perSource = true }),
 
 	ShotRocket = K(W, 4, {
 		{ id = "rbxassetid://12222065", desc = "rocket launcher fire whoomp, thick", vol = 1.0, pitch = { 0.95, 1.03 } },
-		{ id = "rbxassetid://140307246312623", desc = "rocket whoosh/exhaust trail hiss", vol = 0.7, delay = 0.05, pitch = { 0.9, 1.05 } },
+		{ id = "rbxassetid://140307246312623", desc = "rocket whoosh/exhaust trail hiss", vol = 0.7, delay = 0.05, pitch = { 0.9, 1.05 }, start = 0.05 },
 		{ id = "rbxassetid://12222065", desc = "launcher sub thump", vol = 0.7, near = true, pitch = { 0.55, 0.65 } },
-		{ id = "rbxassetid://140307246312623", desc = "distant muffled rocket launch", vol = 0.55, far = true, delay = 0.15, maxDist = 900 },
+		{ id = "rbxassetid://140307246312623", desc = "distant muffled rocket launch", vol = 0.55, far = true, delay = 0.15, maxDist = 900, start = 0.05 },
 	}, { limit = { count = 2, window = 0.4 }, perSource = true, nearDist = 40, farDist = 140 }),
 
 	ShotGatling = K(W, 2, {
@@ -140,14 +140,14 @@ local S: { [string]: Entry } = {
 
 	ShotRail = K(W, 4, {
 		{ id = "rbxassetid://77016949836420", desc = "sci-fi railgun discharge, sharp electric crack", vol = 1.0, pitch = { 0.97, 1.03 } },
-		{ id = "rbxassetid://104211574669495", desc = "sci-fi heavy energy boom low", vol = 0.8, pitch = { 0.7, 0.85 }, start = 0.06 }, -- start: onset 83 -> 17 ms
+		{ id = "rbxassetid://104211574669495", desc = "sci-fi heavy energy boom low", vol = 0.8, pitch = { 0.7, 0.85 }, start = 0.07 }, -- start: onset 75-85 ms
 		{ id = "rbxassetid://77016949836420", desc = "electric crackle zap decay", vol = 0.5, delay = 0.08, pitch = { 1.0, 1.2 } },
-		{ id = "rbxassetid://104211574669495", desc = "distant sci-fi cannon boom", vol = 0.6, far = true, delay = 0.15, maxDist = 1000 },
+		{ id = "rbxassetid://104211574669495", desc = "distant sci-fi cannon boom", vol = 0.6, far = true, delay = 0.15, maxDist = 1000, start = 0.07 },
 	}, { limit = { count = 2, window = 0.4 }, perSource = true }),
 
 	ShotVolt = K(W, 2, {
 		{ id = "rbxassetid://92090867642655", desc = "sci-fi laser pulse zap, electric", vol = 0.85, pitch = { 0.95, 1.1 }, start = 0.43 }, -- start: onset 449 -> 16 ms
-		{ id = "rbxassetid://97096310054904", desc = "electric arc crackle short", vol = 0.5, delay = 0.02, pitch = { 1.0, 1.25 } },
+		{ id = "rbxassetid://97096310054904", desc = "electric arc crackle short", vol = 0.5, pitch = { 1.0, 1.25 }, start = 0.09 },
 		{ id = "rbxassetid://92090867642655", desc = "distant electric zap", vol = 0.5, far = true, delay = 0.1, maxDist = 700 },
 	}, { limit = { count = 5, window = 0.25 }, perSource = true }),
 

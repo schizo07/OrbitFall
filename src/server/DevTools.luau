@@ -92,6 +92,9 @@ local OPS: { [string]: (Player) -> any } = {
 	faction = function()
 		return S.TestArena.toggleFaction()
 	end,
+	longwatch = function(p) -- MR-9 Longwatch in the support slot: the only scoped weapon (SCOPE A/B test)
+		return S.Players.giveSupport(p, "MR9")
+	end,
 }
 
 function DevTools.run(p: Player?, op: any): any

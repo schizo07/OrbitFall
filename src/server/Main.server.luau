@@ -195,6 +195,15 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 			end
 		end
 		return n
+	elseif cmd == "hurt" then -- hurt(frac): every enemy loses frac (default 0.25) of its max HP, AP 10 (damage stage tests)
+		local out = {}
+		for _, e in S.Enemies.getAll() do
+			if e.alive then
+				S.Enemies.damage(e, e.maxHp * (a or 0.25), 10, { player = first })
+				table.insert(out, string.format("%s %d/%d st%s", e.def.id, e.hp, e.maxHp, tostring(e.dmgStage)))
+			end
+		end
+		return table.concat(out, ", ")
 	elseif cmd == "tp" then -- teleport next to a map site (or the extraction pad)
 		local m = S.Map.current
 		local c = first and first.Character
