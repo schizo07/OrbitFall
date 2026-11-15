@@ -60,9 +60,9 @@ local GROUPS = {
 		name = "THROW ARC",
 		keys = { "Feel_ThrowArc" },
 		presets = {
-			{ name = "A dots + ring", set = {} },
-			{ name = "B ring only", set = { Feel_ThrowArc = "ring" } },
-			{ name = "C off", set = { Feel_ThrowArc = "off" } },
+			{ name = "A arrow + ghost + ring", set = {} },
+			{ name = "B old dots + ring", set = { Feel_ThrowArc = "dots" } },
+			{ name = "C ring only", set = { Feel_ThrowArc = "ring" } },
 		},
 	},
 	{

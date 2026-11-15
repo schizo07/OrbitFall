@@ -6,8 +6,11 @@
 -- Grenades: by default the grenade is thrown on RELEASE (hold to aim with the arc, a quick tap still throws at once).
 -- WeaponController calls ThrowArc.grenadeEdge(down) from its Grenade handler to get "throw now".
 --
+-- 2026-11-15 playtest: the path is a solid line ending in an arrowhead, with a see-through "ghost" grenade / beacon where
+-- it lands. The ring always lies flat on the ground: a hit on a wall or ledge side drops to the ground below it (it used
+-- to stand up along the wall: "weird areas" at edges, grenades and 500KG alike).
 -- Studio A/B (client/Variants):
---   Feel_ThrowArc     nil = dots + ring, "ring" = ring only, "off" = nothing   (group THROW ARC)
+--   Feel_ThrowArc     nil = arrow + ghost + ring, "dots" = old dots + ring, "ring" = ring only, "off" = nothing
 --   Feel_GrenadeThrow nil = hold to aim, throw on release; "press" = throw on press (old)   (group GRENADE THROW)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -47,6 +50,9 @@ local folder: Folder? = nil
 local dots: { BasePart } = {}
 local ringSegs: { BasePart } = {}
 local disc: BasePart? = nil
+local lines: { BasePart } = {}
+local LINE_W = 0.13
+local HEAD_LEN, HEAD_ANGLE = 0.9, math.rad(32)
 local allParts: { BasePart } = {}
 local parkCFs: { CFrame } = {}
 local shown = false
@@ -92,6 +98,14 @@ local function build()
 		ringSegs[i] = mkPart(Enum.PartType.Block, Vector3.new(1, 0.12, 0.22), 0.1)
 	end
 	disc = mkPart(Enum.PartType.Cylinder, Vector3.new(0.06, 2, 2), 0.75)
+	-- arrow: line segments, two arrowhead arms, the ghost at the landing point (order = the cfs order in step)
+	for i = 1, MAX_DOTS do
+		lines[i] = mkPart(Enum.PartType.Block, Vector3.new(LINE_W, LINE_W, 1), 0.2)
+	end
+	mkPart(Enum.PartType.Block, Vector3.new(LINE_W * 1.6, LINE_W * 1.6, HEAD_LEN), 0.05)
+	mkPart(Enum.PartType.Block, Vector3.new(LINE_W * 1.6, LINE_W * 1.6, HEAD_LEN), 0.05)
+	local ghost = mkPart(Enum.PartType.Ball, Vector3.new(0.75, 0.75, 0.75), 0.55)
+	ghost.Material = Enum.Material.ForceField
 end
 
 local function hide()
@@ -167,7 +181,7 @@ end
 
 local function feel(): string
 	local v = workspace:GetAttribute("Feel_ThrowArc")
-	return if type(v) == "string" then v else "dots"
+	return if type(v) == "string" then v else "arrow"
 end
 
 local function grenadeOnRelease(): boolean
@@ -265,9 +279,19 @@ local function step()
 			table.insert(cfs, PARK)
 		end
 	end
-	-- landing ring
-	if hitPos and hitN then
-		local base = surfaceCF(hitPos, hitN)
+	-- landing ring: flat on the ground. A hit on a wall / ledge side looks for the ground below it; a steep slope or no
+	-- ground found keeps a level ring at the hit point.
+	local ringPos, ringN = hitPos, hitN
+	if hitPos and hitN and hitN.Y < 0.7 then
+		local down = workspace:Raycast(hitPos + hitN * 0.6 + Vector3.new(0, 0.3, 0), Vector3.new(0, -80, 0), rp)
+		if down and down.Normal.Y >= 0.7 then
+			ringPos, ringN = down.Position, down.Normal
+		else
+			ringN = Vector3.yAxis
+		end
+	end
+	if ringPos and ringN then
+		local base = surfaceCF(ringPos, ringN)
 		for i = 1, RING_SEGS do
 			local a = (i - 0.5) / RING_SEGS * math.pi * 2
 			local off = Vector3.new(math.cos(a) * radius, 0, math.sin(a) * radius)
@@ -277,6 +301,40 @@ local function step()
 		table.insert(cfs, base * CFrame.Angles(0, 0, math.pi / 2))
 	else
 		for _ = 1, RING_SEGS + 1 do
+			table.insert(cfs, PARK)
+		end
+	end
+	-- arrow: a solid line along the path to the hit, an arrowhead (V facing the camera) at its end, the ghost on the spot
+	if look == "arrow" then
+		local tEnd = tHit
+		local segT = tEnd / MAX_DOTS
+		local a = Throw.at(launch, 0.04)
+		local lastDir = Vector3.zAxis
+		for i = 1, MAX_DOTS do
+			local b = Throw.at(launch, math.max(0.04, i * segT))
+			local d = b - a
+			local len = d.Magnitude
+			if len > 0.02 then
+				lastDir = d.Unit
+				lines[i].Size = Vector3.new(LINE_W, LINE_W, len + LINE_W)
+				table.insert(cfs, CFrame.lookAt((a + b) / 2, b))
+			else
+				table.insert(cfs, PARK)
+			end
+			a = b
+		end
+		local tip = Throw.at(launch, tEnd)
+		local cam = workspace.CurrentCamera
+		local side = lastDir:Cross(if cam then cam.CFrame.LookVector else Vector3.yAxis)
+		side = if side.Magnitude > 1e-3 then side.Unit else Vector3.xAxis
+		for _, sgn in { 1, -1 } do
+			local armDir = -lastDir * math.cos(HEAD_ANGLE) + side * sgn * math.sin(HEAD_ANGLE)
+			local c = tip + armDir * HEAD_LEN / 2
+			table.insert(cfs, CFrame.lookAt(c, c + armDir))
+		end
+		table.insert(cfs, if hitPos and hitN then CFrame.new(hitPos + hitN * 0.38) else PARK)
+	else
+		for _ = 1, MAX_DOTS + 3 do
 			table.insert(cfs, PARK)
 		end
 	end

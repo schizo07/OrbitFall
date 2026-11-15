@@ -912,17 +912,17 @@ end
 -- welded glowing crack on a side face of the body part, lower half ("breach in its base"); same spot every rebuild (seeded)
 local function crack(s: StageEntry, body: BasePart, color: Color3, I: number, r: Random): CFrame
 	local S = body.Size
-	local faces = { Vector3.xAxis, -Vector3.xAxis, Vector3.zAxis, -Vector3.zAxis }
-	local n = faces[r:NextInteger(1, 4)]
+	-- side faces only (2026-11-15: a crack on the back was never seen; the front is often a shield)
+	local n = if r:NextNumber() < 0.5 then Vector3.xAxis else -Vector3.xAxis
 	local w = if n.X ~= 0 then S.Z else S.X
-	local L = math.clamp(math.min(w, S.Y) * 0.5, 0.8, 7)
+	local L = math.clamp(math.min(w, S.Y) * 0.8, 1.2, 9)
 	local u = r:NextNumber(-0.2, 0.2) * w
 	local v = r:NextNumber(-0.25, 0.1) * S.Y
 	local depth = if n.X ~= 0 then S.X / 2 else S.Z / 2
 	local pos = n * depth + Vector3.new(if n.X ~= 0 then 0 else u, v, if n.X ~= 0 then u else 0)
 	local faceCF = CFrame.lookAt(pos, pos + n) -- local -Z = outward normal; the crack lies in local XY
 	local base = body.CFrame * faceCF
-	local thick = math.clamp(L * 0.07, 0.14, 0.5) * math.clamp(I, 0.6, 1.4)
+	local thick = math.clamp(L * 0.1, 0.25, 0.7) * math.clamp(I, 0.6, 1.4)
 	local function slab(size: Vector3, cf: CFrame, transp: number): Part
 		local p = Instance.new("Part")
 		p.Anchored = false
@@ -983,20 +983,29 @@ local function buildStage(s: StageEntry)
 	if not s.brood then
 		-- smoke wisps: grey at 1, darker and thicker at 2, black at 3
 		local col = if stage >= 3 then { C3(52, 48, 46), C3(18, 18, 18) } elseif stage == 2 then { C3(84, 80, 76), C3(36, 34, 32) } else { C3(118, 114, 108), C3(60, 58, 56) }
+		-- 2026-11-15 playtest: "no effects at all" -> thicker, darker, bigger plume (lit less by the sun so it reads dark)
 		emitter(addAtt(s, body, topAt()), {
 			Texture = SMOKE_TEX,
 			Color = ColorSequence.new(col[1], col[2]),
-			Size = NumberSequence.new({ kp(0, 0.8 * k), kp(1, (2.6 + stage * 0.5) * k) }),
-			Transparency = NumberSequence.new({ kp(0, 0.4), kp(1, 1) }),
-			Lifetime = NumberRange.new(1.4, 2.2 + stage * 0.3),
-			Rate = (3 + stage * 3) * I * q,
-			Speed = NumberRange.new(3, 5),
-			SpreadAngle = Vector2.new(14, 14),
-			Acceleration = Vector3.new(0.8, 1.6, 0),
+			LightInfluence = 0.4,
+			Size = NumberSequence.new({ kp(0, (1.2 + stage * 0.3) * k), kp(1, (4 + stage * 1.5) * k) }),
+			Transparency = NumberSequence.new({ kp(0, 0.15), kp(0.6, 0.45), kp(1, 1) }),
+			Lifetime = NumberRange.new(1.8, 2.6 + stage * 0.4),
+			Rate = (6 + stage * 6) * I * q,
+			Speed = NumberRange.new(4, 7),
+			SpreadAngle = Vector2.new(12, 12),
+			Acceleration = Vector3.new(0.8, 2, 0),
 			EmissionDirection = Enum.NormalId.Top,
 		})
+		-- stage 1 already shows a small crack; 2 a big one; 3 one on each side
+		if stage == 1 then
+			crack(s, body, BREACH_ORANGE, I * 0.7, r)
+		end
 		if stage >= 2 then
 			local faceCF = crack(s, body, BREACH_ORANGE, I, r)
+			if stage >= 3 then
+				crack(s, body, BREACH_ORANGE, I, r)
+			end
 			s.burstEm = emitter(addAtt(s, body, faceCF * CFrame.new(0, 0, -0.3)), {
 				Texture = SPARK_TEX,
 				Color = ColorSequence.new(C3(255, 236, 160), C3(255, 120, 40)),
@@ -1020,10 +1029,10 @@ local function buildStage(s: StageEntry)
 					Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, C3(255, 230, 140)), ColorSequenceKeypoint.new(0.5, C3(255, 130, 40)), ColorSequenceKeypoint.new(1, C3(200, 50, 20)) }),
 					LightEmission = 0.9,
 					LightInfluence = 0,
-					Size = NumberSequence.new({ kp(0, 1.4 * k), kp(1, 0.2 * k) }),
-					Transparency = NumberSequence.new({ kp(0, 0.15), kp(1, 1) }),
-					Lifetime = NumberRange.new(0.5, 0.9),
-					Rate = 16 * I * q,
+					Size = NumberSequence.new({ kp(0, 2.2 * k), kp(1, 0.3 * k) }),
+					Transparency = NumberSequence.new({ kp(0, 0.05), kp(1, 1) }),
+					Lifetime = NumberRange.new(0.6, 1.0),
+					Rate = 24 * I * q,
 					Speed = NumberRange.new(2, 4),
 					SpreadAngle = Vector2.new(10, 10),
 					Acceleration = Vector3.new(0, 4, 0),
