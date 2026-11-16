@@ -2,7 +2,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
-local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 local Weapons = require(Shared.Data.Weapons)
 local Enemies = require(Shared.Data.Enemies)
@@ -425,17 +424,8 @@ function WeaponController.init()
 
 	RunService.RenderStepped:Connect(function(dt)
 		bloom = math.max(0, bloom - dt * 2.2)
-		local c = player.Character
-		local hum = c and c:FindFirstChildOfClass("Humanoid")
-		if hum then
-			local speed = Config.WalkSpeed
-			if Input.isDown("Aim") then
-				speed = Config.AimSpeed
-			elseif sprinting and not Input.isDown("Fire") then
-				speed = Config.SprintSpeed
-			end
-			hum.WalkSpeed = speed
-		end
+		-- (WalkSpeed is owned by client/Movement.luau: stance, aim, sprint, limp, carry. Writing it here too made the
+		-- prone crawl jump to 16 on some frames, 2026-11-16)
 		local w, ws, slot = current()
 		local m = me()
 		if HUD and HUD.setReload then

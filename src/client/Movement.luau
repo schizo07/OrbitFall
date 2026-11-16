@@ -580,6 +580,43 @@ local function bodyFacing(dt: number, hum: Humanoid, root: BasePart)
 	end
 end
 
+-- ── walk / run animation speed ─────────────────────────────────────────────────────────────────────────────────
+-- Roblox's Animate script scales the walk / run track speed by HipHeight / starting HipHeight, but only re-evaluates
+-- when the Humanoid's Running speed changes. Lying prone (HipHeight ~0.2 of 2) set the run track to ~10x; standing up
+-- while still moving at the same speed never re-fired Running, so the legs kept cycling at 10x ("flicker after the
+-- crawl until you stop and walk again", 2026-11-16). Re-apply Animate's own formula every frame with the current
+-- HipHeight (same numbers it would pick, just not stale).
+local animDamp: NumberValue? = nil
+local function syncRunAnim(hum: Humanoid, root: BasePart, base: number)
+	local animator = hum:FindFirstChildOfClass("Animator")
+	if not animator or base <= 0 then
+		return
+	end
+	local scale = hum.HipHeight / base
+	local animate = hum.Parent and hum.Parent:FindFirstChild("Animate")
+	if animate then
+		animDamp = animDamp or animate:FindFirstChild("ScaleDampeningPercent") :: NumberValue?
+		if animDamp then
+			scale = 1 + (hum.HipHeight - base) * animDamp.Value / base
+		end
+	end
+	if scale <= 0.01 then
+		return
+	end
+	local speed = flat(root.AssemblyLinearVelocity).Magnitude
+	if speed <= 0.75 * scale then
+		return -- Animate plays idle here
+	end
+	local runSpeed = speed / 16 * 1.25 / scale -- onRunning: setAnimationSpeed(speed / 16) -> setRunSpeed -> x1.25 / scale
+	local timeWarp = if runSpeed <= 0.5 then runSpeed / 0.5 elseif runSpeed < 1 then 1 else runSpeed
+	for _, tr in animator:GetPlayingAnimationTracks() do
+		local n = tr.Name
+		if (n == "WalkAnim" or n == "RunAnim") and math.abs(tr.Speed - timeWarp) > 0.05 * timeWarp then
+			tr:AdjustSpeed(timeWarp)
+		end
+	end
+end
+
 -- ── per-frame simulation ───────────────────────────────────────────────────────────────────────────────────────
 -- Runs on PreSimulation: after WeaponController's RenderStepped WalkSpeed write, right before physics, so ours wins.
 local function step(dt: number)
@@ -775,6 +812,7 @@ local function step(dt: number)
 			hipCur = cur
 		end
 	end
+	syncRunAnim(hum, root, base)
 	if jumpLock and not Input.isDown("Jump") then
 		jumpLock = false
 	end
