@@ -223,9 +223,14 @@ local function refreshCard(c: any, m: any, t: number)
 		c.status.TextColor3 = Style.Grey
 		c.status.TextTransparency = 0
 	elseif alive then
-		c.bar.set(frac, if frac > 0.35 then Style.White else Style.Red)
-		c.status.Visible = deploy == "dropping"
-		if deploy == "dropping" then
+		local downed = m.downed == true -- server/Downed.luau: on the ground, bleeding out (dead troopers read "DOWN")
+		c.bar.set(frac, if frac > 0.35 and not downed then Style.White else Style.Red)
+		c.status.Visible = deploy == "dropping" or downed
+		if downed then
+			c.status.Text = "BLEEDING OUT"
+			c.status.TextColor3 = Style.Red
+			c.status.TextTransparency = 0.1 + 0.4 * math.abs(math.sin(t * 5))
+		elseif deploy == "dropping" then
 			c.status.Text = "DROPPING IN"
 			c.status.TextColor3 = Style.Amber
 			c.status.TextTransparency = 0.1 + 0.3 * math.abs(math.sin(t * 4))
@@ -253,7 +258,7 @@ local function refreshCard(c: any, m: any, t: number)
 		c.name.Visible = alive and not c.status.Visible -- one text row: the state text takes the name's place
 	end
 	c.alive = alive
-	c.special = deploy ~= nil or carrying
+	c.special = deploy ~= nil or carrying or m.downed == true -- (pulsing states refresh every frame)
 end
 
 local function applyPosition()
