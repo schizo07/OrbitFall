@@ -361,7 +361,7 @@ function WeaponController.init()
 	for i = 1, 3 do
 		Input.on("Swap" .. i, function(d)
 			local m = me()
-			if d and m and m.weapons and m.weapons[i] and m.weapon ~= i then
+			if d and m and m.weapons and m.weapons[i] and m.weapon ~= i and not (m.downed and i ~= 2) then -- downed: sidearm only
 				actionEv:FireServer("swap", i)
 				Audio.play2D("Swap")
 				charge, spin = 0, 0
@@ -370,7 +370,7 @@ function WeaponController.init()
 	end
 	Input.on("SwapNext", function(d)
 		local m = me()
-		if not d or not m or not m.weapons then
+		if not d or not m or not m.weapons or m.downed then
 			return
 		end
 		local cur = m.weapon or 1

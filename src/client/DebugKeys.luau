@@ -33,6 +33,7 @@ local KEYMAP: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.I] = "bulwark",
 	[Enum.KeyCode.O] = "charger",
 	[Enum.KeyCode.P] = "longwatch", -- scoped MR-9 for the SCOPE A/B
+	[Enum.KeyCode.M] = "selfhit", -- downed test: god off + a 60 hp hit
 }
 
 local function onOff(v: any): string
@@ -54,6 +55,7 @@ local function helpText(): string
 		"B Faction: " .. (if type(fac) == "string" then fac else "COG"),
 		"U Bastion  I Bulwark  O Charger",
 		"P MR-9 Longwatch (scope)",
+		"M Take a 60 hp hit (downed test)",
 		"N Body readout",
 	}, "\n")
 end

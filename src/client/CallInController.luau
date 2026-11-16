@@ -65,7 +65,7 @@ end
 
 local function canUse(): boolean
 	local m = me()
-	return m ~= nil and m.alive and not m.dropping and not Store.get("menuOpen")
+	return m ~= nil and m.alive and not m.dropping and not m.downed and not Store.get("menuOpen")
 end
 
 -- Arm method for the next dial press. Touch always uses the radial dial.

@@ -245,6 +245,18 @@ local GROUPS = {
 			{ name = "C on, 40 % (testing)", set = { Feel_Elites = "fast" } },
 		},
 	},
+	{
+		-- server/Downed.luau: a killing hit puts you down (crawl, sidearm, bleed-out); stim or a squadmate gets you up.
+		-- Test: press M in the arena (takes a 60 hp hit, god mode off); 3 hits = down
+		name = "DOWNED",
+		keys = { "Feel_Downed" },
+		server = true,
+		presets = {
+			{ name = "A on, 12 s bleed-out", set = {} },
+			{ name = "B on, 20 s bleed-out", set = { Feel_Downed = "long" } },
+			{ name = "C off (instant death, old)", set = { Feel_Downed = "off" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough

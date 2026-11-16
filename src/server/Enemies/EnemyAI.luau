@@ -52,7 +52,7 @@ local ROBOT_BOLT = Color3.fromRGB(255, 84, 58)
 -- A Holo Decoy is a Target with `decoy` set and no `p`. It is NOT in `targets` (those stay players only); it lives in
 -- `decoyEntries` and in tmap keyed by the decoy table, so e.target (Player for players, the decoy table for a decoy) resolves
 -- through targetEntry like always. Anything that needs a Player must go through damageTarget / t.p ~= nil.
-type Target = { p: Player?, decoy: any?, root: BasePart, pos: Vector3, vel: Vector3 }
+type Target = { p: Player?, decoy: any?, root: BasePart, pos: Vector3, vel: Vector3, downed: boolean? }
 local targets: { Target } = {}
 local decoyEntries: { Target } = {}
 local tmap: { [any]: Target } = {}
@@ -1066,9 +1066,13 @@ local function pickTarget(e: any): (Target?, number)
 	end
 	local best: Target? = nil
 	local bestD = math.huge
+	local bestEff = math.huge
 	for _, t in targets do
 		local d = flat(t.pos - e.pos).Magnitude
-		if d < bestD then
+		-- downed troopers (server/Downed.luau) count as further away: a standing squadmate nearby is picked first
+		local eff = if t.downed then d * 2 + 15 else d
+		if eff < bestEff then
+			bestEff = eff
 			bestD = d
 			best = t
 		end
@@ -1105,7 +1109,8 @@ local function pickTarget(e: any): (Target?, number)
 	local cur = targetEntry(e)
 	if cur then
 		local cd = flat(cur.pos - e.pos).Magnitude
-		if cd <= bestD * 1.4 + 6 and cd <= range then
+		-- (no sticking to a downed trooper while a standing one is the better pick)
+		if cd <= bestD * 1.4 + 6 and cd <= range and not (cur.downed and best and not best.downed) then
 			return cur, cd
 		end
 	end
@@ -1739,7 +1744,7 @@ function EnemyAI.step(dt: number, enemies: { [number]: any })
 	for _, p in plist do
 		local root = S.Players.getRoot(p)
 		if root then
-			local t = { p = p, root = root, pos = root.Position, vel = root.AssemblyLinearVelocity }
+			local t = { p = p, root = root, pos = root.Position, vel = root.AssemblyLinearVelocity, downed = p:GetAttribute("Downed") == true }
 			table.insert(targets, t)
 			tmap[p] = t
 		end

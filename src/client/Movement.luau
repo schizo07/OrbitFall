@@ -461,9 +461,14 @@ function Movement.knockdown(v: Vector3, t: number?)
 end
 
 -- ── input ──────────────────────────────────────────────────────────────────────────────────────────────────────
+-- downed (server/Downed.luau, Player attribute Downed): forced prone, slow crawl, no stance / jump / sprint input
+local function isDowned(): boolean
+	return player:GetAttribute("Downed") == true
+end
+
 local function blockedInput(): boolean
 	local _, hum = chr()
-	return Store.get("menuOpen") == true or not hum or hum.Health <= 0
+	return Store.get("menuOpen") == true or not hum or hum.Health <= 0 or isDowned()
 end
 
 local function onCrouch(down: boolean)
@@ -644,6 +649,13 @@ local function step(dt: number)
 	local aiming = Input.isDown("Aim")
 	local firing = Input.isDown("Fire")
 
+	-- downed: on the ground (after any tumble / dive finishes)
+	if isDowned() then
+		crouchDownAt = nil
+		if mode == "none" and stance ~= "prone" then
+			setStance("prone")
+		end
+	end
 	-- crouch held long enough -> prone
 	if crouchDownAt and mode == "none" and t - crouchDownAt >= M.ProneHoldTime then
 		crouchDownAt = nil
@@ -795,6 +807,9 @@ local function step(dt: number)
 	end
 	if carrying then
 		speed *= CARRY_SPEED
+	end
+	if isDowned() and mode == "none" then
+		speed = Config.Downed.CrawlSpeed
 	end
 	hum.WalkSpeed = speed
 	speedWanted = speed
@@ -1380,6 +1395,12 @@ function Movement.init()
 		end
 	end
 	player.CharacterAdded:Connect(resetLocal)
+	-- revived (squadmate / stim): get up on your own (canStand falls back to crouch under a low ceiling)
+	player:GetAttributeChangedSignal("Downed"):Connect(function()
+		if not isDowned() and stance == "prone" and mode == "none" then
+			standUp()
+		end
+	end)
 	RunService.PreSimulation:Connect(step)
 	-- PreSimulation handlers run last-connected-first: connect this one after every module has finished init
 	-- (CombatPose, FootPlant, ...) so it runs ahead of CombatPose and the arm solver sees this frame's twisted chest

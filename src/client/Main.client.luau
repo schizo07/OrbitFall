@@ -104,6 +104,11 @@ do -- haul objective carry (input gates, drop key) + floating squad tags (client
 	if Tags then
 		safeCall("SquadTags", Tags.init)
 	end
+	-- downed state: DOWNED panel, stim-up prompt, own revive prompt hidden (client/DownedFx.luau)
+	local DownedFx = safeRequire(root:FindFirstChild("DownedFx"))
+	if DownedFx then
+		safeCall("DownedFx", DownedFx.init, Audio)
+	end
 end
 if Weapon then
 	Weapon.setHUD(HUD)

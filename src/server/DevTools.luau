@@ -95,6 +95,13 @@ local OPS: { [string]: (Player) -> any } = {
 	longwatch = function(p) -- MR-9 Longwatch in the support slot: the only scoped weapon (SCOPE A/B test)
 		return S.Players.giveSupport(p, "MR9")
 	end,
+	selfhit = function(p) -- downed test: god mode off, then a 60 hp hit through the normal damage path (3 hits = down)
+		if godOn[p] then
+			DevTools.setGod(p, false)
+		end
+		S.Players.damage(p, 60, nil, { kind = "debug" })
+		return true
+	end,
 }
 
 function DevTools.run(p: Player?, op: any): any

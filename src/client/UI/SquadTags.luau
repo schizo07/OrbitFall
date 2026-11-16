@@ -129,14 +129,17 @@ local function step()
 		-- text (only rewritten when it changes)
 		local cs = Style.callsign(p.UserId)
 		local carrying = p:GetAttribute("CarryCell") == true
-		local key = cs.tag .. "|" .. p.DisplayName .. "|" .. tostring(carrying)
+		local downed = p:GetAttribute("Downed") == true -- server/Downed.luau: red DOWNED, never faded out
+		local key = cs.tag .. "|" .. p.DisplayName .. "|" .. tostring(carrying) .. "|" .. tostring(downed)
 		if key ~= t.key then
 			t.key = key
 			t.tag.Text = cs.tag
 			t.tag.TextColor3 = cs.color
 			Style.tint(t.pointer, cs.color)
-			t.name.Text = if carrying then (Style.up(p.DisplayName) .. "  CELL") else Style.up(p.DisplayName)
-			t.name.TextColor3 = if carrying then CELL else Style.White
+			t.name.Text = if downed then (Style.up(p.DisplayName) .. "  DOWNED")
+				elseif carrying then (Style.up(p.DisplayName) .. "  CELL")
+				else Style.up(p.DisplayName)
+			t.name.TextColor3 = if downed then Style.Red elseif carrying then CELL else Style.White
 			t.cell.Visible = carrying
 			t.cell.Position = UDim2.new(0.5, 24, 0, 8)
 		end
@@ -161,7 +164,7 @@ local function step()
 		t.pointer.Visible = not clamped
 		-- fade
 		local vis = 1
-		if md == "fade" and not clamped then
+		if md == "fade" and not clamped and not downed then
 			local d = (root.Position - camPos).Magnitude
 			vis = math.clamp((d - FADE_NEAR) / (FADE_FULL - FADE_NEAR), 0, 1)
 			local r = math.sqrt((x - cx) ^ 2 + (y - cy) ^ 2)
