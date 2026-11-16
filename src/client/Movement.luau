@@ -421,6 +421,11 @@ local function tryMantle(): boolean
 	return true
 end
 
+-- downed (server/Downed.luau, Player attribute Downed): forced prone, slow crawl, no stance / jump / sprint input
+local function isDowned(): boolean
+	return player:GetAttribute("Downed") == true
+end
+
 local function standUp()
 	if stance == "stand" then
 		return
@@ -439,6 +444,11 @@ function Movement.knockdown(v: Vector3, t: number?)
 		return
 	end
 	local dur = math.clamp(t or M.KnockdownTime, 0.4, 2.5)
+	if isDowned() then
+		-- already on the ground: a shove along the floor, no tumble / get-up (that would stand the body up)
+		root.AssemblyLinearVelocity += flat(v) * 0.4
+		return
+	end
 	if mode == "down" and getupFrom == nil then
 		-- already tumbling (cluster bomblets, two blasts at once): extra push, a little longer on the ground, capped
 		root.AssemblyLinearVelocity += v * 0.5
@@ -461,11 +471,6 @@ function Movement.knockdown(v: Vector3, t: number?)
 end
 
 -- ── input ──────────────────────────────────────────────────────────────────────────────────────────────────────
--- downed (server/Downed.luau, Player attribute Downed): forced prone, slow crawl, no stance / jump / sprint input
-local function isDowned(): boolean
-	return player:GetAttribute("Downed") == true
-end
-
 local function blockedInput(): boolean
 	local _, hum = chr()
 	return Store.get("menuOpen") == true or not hum or hum.Health <= 0 or isDowned()
