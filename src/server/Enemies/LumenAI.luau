@@ -176,6 +176,13 @@ local function installAttacks()
 				end
 			end
 		end
+		for _, t in H.decoyEntries do -- Holo Decoys (empty unless one is alive)
+			local rel = flat(t.pos - e.pos)
+			local along = rel:Dot(dir)
+			if along > 0 and along < len and (rel - dir * along).Magnitude <= r + t.decoy.hitRadius and math.abs(t.pos.Y - e.pos.Y) < 11 then
+				H.damageTarget(t, atk.damage, e.pos, 0, "laser")
+			end
+		end
 		S.Fx.play("LumenBeam", { a = origin, b = b, w = (atk.radius or 2.6) * 0.8, t = 0.5 })
 		S.Fx.playU("Shake", { p = b, mag = 0.6, r = 50 })
 		-- brief recoil: holds still for a moment (the opening to shoot the lens)
@@ -199,6 +206,11 @@ local function installAttacks()
 		for _, t in H.targets do
 			if flat(t.pos - e.pos).Magnitude <= r and math.abs(t.pos.Y - e.pos.Y) < 12 then
 				H.damagePlayer(t.p, atk.damage, e.pos, 55, "pulse")
+			end
+		end
+		for _, t in H.decoyEntries do
+			if flat(t.pos - e.pos).Magnitude <= r + t.decoy.hitRadius and math.abs(t.pos.Y - e.pos.Y) < 14 then
+				H.damageTarget(t, atk.damage, e.pos, 0, "pulse")
 			end
 		end
 		S.Fx.play("LumenPulse", { p = e.pos + Vector3.new(0, 0.6, 0), r = r })

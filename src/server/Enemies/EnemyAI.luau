@@ -22,6 +22,7 @@ local Config = require(Shared.Config)
 
 local EnemyModels = require(script.Parent.EnemyModels)
 local LumenAI = require(script.Parent.LumenAI) -- LUMEN hook: Lumen Concord attack kinds + blink / nodes
+local Decoys = require(script.Parent.Parent.Decoys) -- Holo Decoy call-in: extra targets (empty list = nothing below runs)
 local EnemyData = require(Shared.Data.Enemies)
 local AIM = EnemyData.Aim
 local AimDefault = EnemyData.AimDefault
@@ -48,9 +49,13 @@ local MAP_HALF = Config.MapSize / 2 - 6
 local ROBOT_BOLT = Color3.fromRGB(255, 84, 58)
 
 -- Per-frame caches ------------------------------------------------------------------
-type Target = { p: Player, root: BasePart, pos: Vector3, vel: Vector3 }
+-- A Holo Decoy is a Target with `decoy` set and no `p`. It is NOT in `targets` (those stay players only); it lives in
+-- `decoyEntries` and in tmap keyed by the decoy table, so e.target (Player for players, the decoy table for a decoy) resolves
+-- through targetEntry like always. Anything that needs a Player must go through damageTarget / t.p ~= nil.
+type Target = { p: Player?, decoy: any?, root: BasePart, pos: Vector3, vel: Vector3 }
 local targets: { Target } = {}
-local tmap: { [Player]: Target } = {}
+local decoyEntries: { Target } = {}
+local tmap: { [any]: Target } = {}
 local snapshot: { any } = {}
 local lastFilter = 0
 local lastScreech = 0
@@ -192,6 +197,15 @@ local function damagePlayer(p: Player, amount: number, from: Vector3, knock: num
 	S.Players.damage(p, amount, from, { knockback = knock, kind = kind or "enemy" })
 end
 
+-- Damage whatever the target entry is: a player, or a Holo Decoy (hp only, no knockback).
+local function damageTarget(t: Target, amount: number, from: Vector3, knock: number?, kind: string?)
+	if t.decoy then
+		Decoys.damage(t.decoy, amount)
+	elseif t.p then
+		damagePlayer(t.p, amount, from, knock, kind)
+	end
+end
+
 -- Registration -----------------------------------------------------------------------
 function EnemyAI.register(e: any, cf: CFrame, opts: any)
 	local look = cf.LookVector
@@ -264,6 +278,7 @@ end
 
 function EnemyAI.clear()
 	table.clear(targets)
+	table.clear(decoyEntries)
 	table.clear(tmap)
 	table.clear(snapshot)
 end
@@ -371,6 +386,9 @@ local function aimSpread(e: any, t: Target, from: Vector3, oldSpread: number, no
 	local mode = aimMode()
 	if mode == "old" then
 		return oldSpread, false
+	end
+	if t.decoy then
+		return oldSpread, false -- a hologram gets no warning shots and no aim build-up
 	end
 	local aim = e.def.aim or AimDefault
 	local harsh = mode == "harsh"
@@ -622,6 +640,16 @@ ACTIVE.sweep = function(e, a, atk, dt, now)
 			end
 		end
 	end
+	for _, t in decoyEntries do -- Holo Decoys (empty unless one is alive)
+		if not a.hit[t.decoy] then
+			local rel = flat(t.pos - o)
+			local along = rel:Dot(d)
+			if along > 0 and along < len and (rel - d * along).Magnitude < 2.6 + t.decoy.hitRadius and math.abs(t.pos.Y - o.Y) < 8 then
+				a.hit[t.decoy] = true
+				damageTarget(t, atk.damage, o, 0, "laser")
+			end
+		end
+	end
 	return false
 end
 
@@ -637,6 +665,11 @@ FIRE.stomp = function(e, a, atk, now)
 			damagePlayer(t.p, atk.damage, e.pos, 60, "stomp")
 		end
 	end
+	for _, t in decoyEntries do
+		if flat(t.pos - e.pos).Magnitude <= r + t.decoy.hitRadius and t.pos.Y - e.pos.Y < 10 then
+			damageTarget(t, atk.damage, e.pos, 0, "stomp")
+		end
+	end
 	S.Fx.play("Shockwave", { p = e.pos, r = r })
 	S.Fx.playU("Shake", { p = e.pos, mag = if e.class == "behemoth" then 2.2 else 1.2, r = 90 })
 	e.act = nil
@@ -648,7 +681,7 @@ FIRE.melee = function(e, a, atk, now)
 	if t then
 		local d = flat(t.pos - e.pos).Magnitude - e.def.size * 0.6
 		if d <= atk.range * 1.4 + 1.5 then
-			damagePlayer(t.p, atk.damage, e.pos, 22, "melee")
+			damageTarget(t, atk.damage, e.pos, 22, "melee")
 		end
 	end
 	e.act = nil
@@ -670,7 +703,7 @@ FIRE.bite = function(e, a, atk, now)
 		local dist = to.Magnitude
 		gap = dist - e.def.size * 0.6
 		if gap <= atk.range * BITE_REACH and math.abs(t.pos.Y - e.pos.Y) < 6 and (dist < 0.5 or to.Unit:Dot(fwd) >= BITE_CONE) then
-			damagePlayer(t.p, atk.damage, e.pos, 14, "bite")
+			damageTarget(t, atk.damage, e.pos, 14, "bite")
 		end
 	end
 	a.phase = "active"
@@ -728,7 +761,7 @@ ACTIVE.leap = function(e, a, atk, dt, now)
 		e.vel = Vector3.zero
 		local t = targetEntry(e)
 		if t and flat(t.pos - e.pos).Magnitude <= 5 and math.abs(t.pos.Y - e.pos.Y) < 7 then
-			damagePlayer(t.p, atk.damage, e.pos, 18, "bite")
+			damageTarget(t, atk.damage, e.pos, 18, "bite")
 		end
 		e.act = nil
 		e.gcd = now + 0.35
@@ -842,6 +875,12 @@ ACTIVE.charge = function(e, a, atk, dt, now)
 			S.Fx.playU("Shake", { p = e.pos, mag = 1.2, r = 40 })
 		end
 	end
+	for _, t in decoyEntries do
+		if not a.hit[t.decoy] and flat(t.pos - e.pos).Magnitude <= hitR + t.decoy.hitRadius and math.abs(t.pos.Y - e.pos.Y) < 9 then
+			a.hit[t.decoy] = true
+			damageTarget(t, atk.damage, e.pos - a.dir * 3, 0, "charge")
+		end
+	end
 	if crashed or a.travelled >= a.len then
 		e.vel = Vector3.zero
 		S.Fx.playU("Shake", { p = e.pos, mag = if crashed then 1.6 else 0.6, r = 60 })
@@ -907,7 +946,7 @@ local DEFAULT_WINDUP = { bolt = 0.3, burst = 0.25, melee = 0.3, summon = 1.0, le
 -- LUMEN hook: LumenAI adds needle / beam / pulse / rift to PREP/FIRE/ACTIVE using these helpers
 LumenAI.install({
 	PREP = PREP, FIRE = FIRE, ACTIVE = ACTIVE, NOMOVE = NOMOVE, DEFAULT_WINDUP = DEFAULT_WINDUP,
-	targets = targets, targetEntry = targetEntry, muzzleWorld = muzzleWorld, aimPoint = aimPoint,
+	targets = targets, decoyEntries = decoyEntries, damageTarget = damageTarget, targetEntry = targetEntry, muzzleWorld = muzzleWorld, aimPoint = aimPoint,
 	spreadDir = spreadDir, heading = heading, envParams = envParams, groundAt = groundAt, clampMap = clampMap,
 	telegraphLine = telegraphLine, telegraphCircle = telegraphCircle, damagePlayer = damagePlayer, liveCap = liveCap,
 	aimSpread = aimSpread, -- ENEMY AIM for needle volleys
@@ -1035,6 +1074,33 @@ local function pickTarget(e: any): (Target?, number)
 		end
 	end
 	local range = AGGRO[e.class] * (if e.aggro then 2.4 else 1)
+	-- Holo Decoy: inside its radius it counts as closer (distance x preference) than any trooper, so it steals the target
+	-- (aggro range does not apply: it taunts). Only runs while a decoy is alive.
+	if #decoyEntries > 0 then
+		local pick: Target? = nil
+		local pickD = math.huge -- real distance of the pick
+		local pickEff = bestD -- compared distance (trooper = real distance, decoy = real x preference)
+		for _, dt in decoyEntries do
+			local d = flat(dt.pos - e.pos).Magnitude
+			if d <= dt.decoy.radius then
+				local eff = d * dt.decoy.preference
+				if eff < pickEff then
+					pickEff = eff
+					pick = dt
+					pickD = d
+				end
+			end
+		end
+		if pick then
+			return pick, pickD
+		end
+		local own = targetEntry(e)
+		if own and own.decoy then
+			-- its decoy is out of reach / gone from the radius: back to the troopers (fall through; `cur` below is a decoy entry
+			-- only while it is alive, and a decoy outside its radius must not stay sticky)
+			e.target = nil
+		end
+	end
 	-- sticky target
 	local cur = targetEntry(e)
 	if cur then
@@ -1321,7 +1387,11 @@ local function think(e: any, now: number)
 		e.aggro = true
 		alertNearby(e)
 	end
-	e.target = if t then t.p else nil
+	e.target = if t then (t.p or t.decoy) else nil -- decoy: the decoy table (see Target); players: the Player as always
+	if t and t.decoy then
+		e.slot = nil -- decoys have no melee slots: the whole swarm piles on
+		e.circling = nil
+	end
 
 	if not t then
 		e.seenT = 0
@@ -1394,7 +1464,7 @@ local function think(e: any, now: number)
 	e.faceDir = dir
 
 	-- reinforcement call after seeing a player for a few seconds (static emplacements never call)
-	if e.class ~= "regular" and not def.static then
+	if e.class ~= "regular" and not def.static and not t.decoy then
 		e.seenT += THINK
 		if e.seenT >= 3 and not e.called then
 			e.called = true
@@ -1419,8 +1489,9 @@ local function think(e: any, now: number)
 
 	-- aim state for shootBolt: a new target starts wide with fresh warning shots; out of sight restarts the tighten clock,
 	-- and a long time out of sight (EnemyData.Aim.reacquire) re-arms the warning shots
-	if e.aimAt ~= t.p then
-		e.aimAt = t.p
+	local aimKey = t.p or t.decoy
+	if e.aimAt ~= aimKey then
+		e.aimAt = aimKey
 		e.aimT0 = now
 		e.aimShots = 0
 		e.aimHidden = nil
@@ -1455,7 +1526,7 @@ local function think(e: any, now: number)
 			moveDir = Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir
 			moveSpeed = 0.75
 		end
-	elseif e.meleeGate then
+	elseif e.meleeGate and not t.decoy then
 		moveDir, moveSpeed = meleeMove(e, t, dist, dir, e.stopDist or 4, now)
 	else
 		local stop = e.stopDist or 4
@@ -1504,7 +1575,7 @@ local function think(e: any, now: number)
 	local close: { { idx: number, atk: any } } = {}
 	local far: { { idx: number, atk: any } } = {}
 	for i, atk in def.attacks do
-		local gated = e.meleeGate and not e.slot and MELEE_KINDS[atk.kind] -- no slot on this player: no melee / leap
+		local gated = e.meleeGate and not e.slot and not t.decoy and MELEE_KINDS[atk.kind] -- no slot on this player: no melee / leap
 		if not gated and now >= e.cd[i] and eligible(e, atk, dist, aimErr, e.los, now) then
 			if MELEE_KINDS[atk.kind] and atk.kind ~= "charge" then
 				table.insert(close, { idx = i, atk = atk })
@@ -1671,6 +1742,17 @@ function EnemyAI.step(dt: number, enemies: { [number]: any })
 			local t = { p = p, root = root, pos = root.Position, vel = root.AssemblyLinearVelocity }
 			table.insert(targets, t)
 			tmap[p] = t
+		end
+	end
+	-- Holo Decoys: separate entries (never in `targets`)
+	table.clear(decoyEntries)
+	if Decoys.count() > 0 then
+		for _, d in Decoys.list do
+			if d.alive and d.part.Parent then
+				local t = { decoy = d, root = d.part, pos = d.pos, vel = Vector3.zero }
+				table.insert(decoyEntries, t)
+				tmap[d] = t
+			end
 		end
 	end
 

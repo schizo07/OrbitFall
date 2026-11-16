@@ -145,6 +145,12 @@ local C: { [string]: CallIn } = {
 		params = { duration = 20, radius = 28, altitude = 40, rpm = 300, damage = 55, ap = 3, acquire = 45 },
 		desc = "The Skiff circles the beacon for 20 s and shoots enemies near it with its door gun.",
 	},
+	DECOY = {
+		id = "DECOY", name = "Holo Decoy", category = "defense", beacon = "defense",
+		delay = 1.5, cooldown = 90, icon = "☺", unlock = "debug",
+		params = { duration = 12, radius = 40, hp = 600, preference = 0.4 },
+		desc = "A hologram trooper taunts for 12 s. Enemies within 40 studs go for it first, then it bursts in harmless light.",
+	},
 	REINFORCE = {
 		id = "REINFORCE", name = "Reinforce", category = "mission", beacon = "supply",
 		delay = 2, cooldown = 10, icon = "✚", unlock = "mission",
@@ -171,6 +177,7 @@ local CODES: { [string]: string } = {
 	SMOKE = "ULRU",
 	CLUSTER = "ULRDR",
 	OVERWATCH = "ULUU",
+	DECOY = "ULUL",
 	-- defense: R L ...
 	SENTRY = "RLUU",
 	MINES = "RLDR",
@@ -201,6 +208,7 @@ local CALLOUT_OVERRIDES: { [string]: string } = {
 	RAILSHOT = "Railshot inbound. One shot, make it count.",
 	FIRESTORM = "Firestorm line. Don't stand in it.",
 	OVERWATCH = "Skiff on overwatch. Keep it in sight.",
+	DECOY = "Decoy out. They're looking at the wrong trooper.",
 }
 for id, line in CALLOUT_OVERRIDES do
 	local def = C[id]

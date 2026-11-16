@@ -426,7 +426,7 @@ end
 local CALLIN_CODE = {
 	LANCE = "LNC", HALFTON = "BMB", STRAFE = "STR", TOXIN = "TOX", EMP = "EMP", MINES = "MIN", SUPPLY = "SUP", BARRAGE = "BRG",
 	SENTRY = "SEN", ROCKETDROP = "RKT", GATLINGDROP = "GAT", SHIELD = "SHD", SMOKE = "SMK", CLUSTER = "CLU", RAILDROP = "RAL",
-	REINFORCE = "REIN", OVERWATCH = "OVR",
+	REINFORCE = "REIN", OVERWATCH = "OVR", DECOY = "DCY",
 }
 function Style.callinCode(def: any): string
 	if not def then
