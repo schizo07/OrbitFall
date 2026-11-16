@@ -14,6 +14,8 @@ Config.ShipHeight = 900 -- lobby deck Y
 Config.DropHeight = 600 -- drop capsule start Y
 Config.MapSize = 640 -- studs, square, centred at origin
 
+Config.Music = false -- ship / combat music tracks (client/Main.client); off since 2026-11-16
+
 -- Mission tuning
 Config.MissionTime = 14 * 60 -- 2026-11-15 pick (was 18, before that 25); Studio A/B Feel_MissionTime (minutes) overrides it in server/Mission.luau
 Config.StartCountdown = 10

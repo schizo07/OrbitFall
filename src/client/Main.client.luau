@@ -176,8 +176,8 @@ Input.on("Jump", function(d)
 	end
 end)
 
--- Music by mission state
-if Audio and Audio.setMusic then
+-- Music by mission state (off: Config.Music = false, 2026-11-16)
+if Audio and Audio.setMusic and Config.Music then
 	Store.on("mission", function(m)
 		if not m then
 			return
