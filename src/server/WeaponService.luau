@@ -8,6 +8,7 @@ local EnemiesData = require(Shared.Data.Enemies)
 local Aim = require(Shared.Aim)
 local Blasts = require(Shared.Data.Blasts)
 local Throw = require(Shared.Throw)
+local DownedRules = require(Shared.Downed)
 
 local WeaponService = {}
 local S
@@ -594,6 +595,9 @@ local function onFire(p: Player, slot: any, aimPoint: any, _seq: any)
 	if S.Objectives and S.Objectives.blocksFire and S.Objectives.blocksFire(p, "fire", slot) then -- haul: core-cell carrier
 		return
 	end
+	if DownedRules.blocks(p, "fire", slot) then -- downed: sidearm only
+		return
+	end
 	local ws = r.weapons[r.slot]
 	if not ws or ws.mag <= 0 then
 		return
@@ -725,6 +729,9 @@ local function onSwap(p: Player, slot: any)
 	if not r or typeof(slot) ~= "number" or not r.weapons[slot] or r.slot == slot then
 		return
 	end
+	if DownedRules.blocks(p, "swap", slot) then -- downed: sidearm only
+		return
+	end
 	r.slot = slot
 	r.reloadUntil = 0
 	WeaponService.equipModel(p)
@@ -741,6 +748,9 @@ local function onGrenade(p: Player, aimPoint: any)
 		return
 	end
 	if S.Objectives and S.Objectives.blocksFire and S.Objectives.blocksFire(p, "grenade") then -- haul: core-cell carrier
+		return
+	end
+	if DownedRules.blocks(p, "grenade") then
 		return
 	end
 	local origin = muzzleOrigin(p)

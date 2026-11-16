@@ -9,6 +9,7 @@ local Config = require(Shared.Config)
 local Weapons = require(Shared.Data.Weapons)
 local TrooperArmor = require(script.Parent.TrooperArmor)
 local Movement = require(script.Parent.MovementService) -- stamina + stance (does not require us back)
+local Downed = require(script.Parent.Downed) -- downed / bleed-out / revive (does not require us back)
 
 local PlayerService = {}
 local S
@@ -278,14 +279,18 @@ function PlayerService.useStim(p: Player): (boolean, string?)
 		return false, "dead"
 	end
 	local t = now()
-	if t < (r.stimEnd or 0) then
+	local wasDown = Downed.isDowned(p)
+	if t < (r.stimEnd or 0) and not wasDown then
 		return false, "busy"
 	end
 	if (r.stims or 0) <= 0 then
 		return false, "empty"
 	end
-	if h.Health >= h.MaxHealth - 0.5 then
+	if h.Health >= h.MaxHealth - 0.5 and not wasDown then
 		return false, "full"
+	end
+	if wasDown then
+		Downed.revive(p, "stim") -- self-revive: up at once, the stim heal below ramps from the downed pool
 	end
 	local cfg = Config.Stims
 	r.stims -= 1
@@ -328,7 +333,16 @@ function PlayerService.damage(p: Player, amount: number, fromPos: Vector3?, opts
 	end
 	local r = recs[p] :: Rec
 	r.lastDamage = now()
+	amount *= Downed.hitMult(p)
+	-- a killing hit puts the trooper down instead (server/Downed.luau); a ForceField (aboard the Skiff) still protects
+	local body = h.Parent
+	if not (body and body:FindFirstChildOfClass("ForceField")) and Downed.tryDown(p, h, amount) then
+		S.Fx.to(p, "Hurt", { amount = 60, from = fromPos })
+		dirty[p] = true
+		return
+	end
 	h:TakeDamage(amount)
+	Downed.onHit(p, h)
 	-- feedback scales with the share of health lost (100 hp baseline), so debug god mode stays quiet
 	S.Fx.to(p, "Hurt", { amount = amount * 100 / math.max(1, h.MaxHealth), from = fromPos })
 	if fromPos and opts and opts.knockback and opts.knockback > 0 then
@@ -348,7 +362,7 @@ function PlayerService.knock(p: Player, fromPos: Vector3, force: number)
 	if not root then
 		return
 	end
-	if PlayerService.isGod(p) then
+	if PlayerService.isGod(p) or Downed.isDowned(p) then
 		return
 	end
 	local d = root.Position - fromPos
@@ -494,6 +508,7 @@ local function buildMe(p: Player)
 		stance = stance, -- "stand"|"crouch"|"prone" (weapon spread reads this; client-local Store "stance" is faster)
 		alive = PlayerService.isAlive(p),
 		dropping = r.dropping,
+		downed = Downed.isDowned(p), -- server/Downed.luau (bleed-out end: Player attribute DownedEnd)
 		hp = h and h.Health or 0,
 		maxHp = h and h.MaxHealth or Config.PlayerHealth,
 		weapon = r.slot,
@@ -520,12 +535,14 @@ local function squadState()
 			hp = h and h.Health or 0,
 			maxHp = h and h.MaxHealth or Config.PlayerHealth,
 			alive = r.alive,
+			downed = Downed.isDowned(p),
 		})
 	end
 	return out
 end
 
 local function setupCharacter(p: Player, c: Model)
+	Downed.clear(p) -- a new body never starts down
 	local h = c:WaitForChild("Humanoid") :: Humanoid
 	h.MaxHealth = Config.PlayerHealth
 	h.Health = Config.PlayerHealth
@@ -546,6 +563,7 @@ local function setupCharacter(p: Player, c: Model)
 		r.alive = false
 		r.deaths += 1
 		clearStim(r)
+		Downed.clear(p)
 		local root = c:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
 			S.Fx.play("Explosion", { p = root.Position, r = 4, size = "S", style = "spark" })
@@ -573,6 +591,7 @@ function PlayerService.init(s)
 	Players.CharacterAutoLoads = false
 	Movement.init(s, PlayerService)
 	-- stim (client/Fx/VitalsFx: F, gamepad D-pad Left, touch STIM button). Denials go back so the client can say why.
+	Downed.init(S, PlayerService)
 	S.Actions.on("stim", function(p)
 		local r = recs[p]
 		if not r then
@@ -665,6 +684,7 @@ function PlayerService.start()
 	RunService.Heartbeat:Connect(function(dt)
 		acc += dt
 		squadAcc += dt
+		Downed.step(dt) -- bleed-out
 		-- stim heal runs every frame (smooth bar, starts at once); only players with a running stim do work
 		local tf = now()
 		for p, r in recs do
@@ -691,7 +711,7 @@ function PlayerService.start()
 		local regen = regenPreset()
 		for p, r in recs do
 			Movement.step(p, step)
-			if regen and PlayerService.isAlive(p) and t - r.lastDamage > regen.delay then
+			if regen and PlayerService.isAlive(p) and not Downed.isDowned(p) and t - r.lastDamage > regen.delay then
 				local h = PlayerService.getHumanoid(p)
 				if h and h.Health >= h.MaxHealth * regen.above and h.Health < h.MaxHealth * regen.cap then
 					h.Health = math.min(h.MaxHealth * regen.cap, h.Health + regen.rate * step)

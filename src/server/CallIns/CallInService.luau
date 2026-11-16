@@ -707,6 +707,9 @@ local function throwBeacon(player: Player, aim: any)
 	end
 	st.lastThrow = os.clock()
 	local holding = st.holding
+	if player:GetAttribute("Downed") == true then
+		return
+	end
 	if not holding then
 		return
 	end
@@ -871,7 +874,7 @@ local function onReady(player: Player, slotIndex: any, perfect: any)
 		return
 	end
 	st.lastReady = clock
-	if not S.Players.isAlive(player) then
+	if not S.Players.isAlive(player) or player:GetAttribute("Downed") == true then -- no call-ins while down (shared/Downed)
 		return
 	end
 	if jammed(player) then
@@ -920,6 +923,7 @@ local function onCancel(player: Player)
 		publish(player)
 	end
 end
+CallIns.cancelHolding = onCancel -- server/Downed: going down drops an armed beacon
 
 -- ---------------------------------------------------------------------------------------------
 -- Lifecycle

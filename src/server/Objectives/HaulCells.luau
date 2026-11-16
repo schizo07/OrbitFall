@@ -603,7 +603,8 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 				local r = ctx.getRoot(p)
 				local w = cell.weld
 				local stance = if S and S.Players and S.Players.getStance then S.Players.getStance(p) else "stand"
-				if not ctx.isAlive(p) or not r or not w or not w.Parent or not w.Part0 or not w.Part0:IsDescendantOf(Workspace) or stance == "down" then
+				if not ctx.isAlive(p) or not r or not w or not w.Parent or not w.Part0 or not w.Part0:IsDescendantOf(Workspace) or stance == "down"
+					or p:GetAttribute("Downed") == true then
 					drop(p, "down")
 					continue
 				end

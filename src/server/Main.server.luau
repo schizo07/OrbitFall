@@ -195,6 +195,14 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 			end
 		end
 		return n
+	elseif cmd == "selfhurt" then -- selfhurt(amount): damage the first player through the normal path (downed tests)
+		if not first then
+			return "no player"
+		end
+		S.Players.damage(first, a or 50, nil, { kind = "debug" })
+		local h = S.Players.getHumanoid(first)
+		return string.format("hp %.1f downed %s end %s", h and h.Health or -1, tostring(first:GetAttribute("Downed")),
+			tostring(first:GetAttribute("DownedEnd")))
 	elseif cmd == "hurt" then -- hurt(frac): every enemy loses frac (default 0.25) of its max HP, AP 10 (damage stage tests)
 		local out = {}
 		for _, e in S.Enemies.getAll() do

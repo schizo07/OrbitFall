@@ -40,6 +40,21 @@ Config.Stims = {
 	Critical = 0.3, -- health share below which the HUD bar turns red and the "use stim" prompt shows
 	Sprint = 5, -- seconds of unlimited stamina after a stim (server/MovementService.boost; Studio A/B Feel_StimSprint, 0 = off)
 }
+-- Downed state (server/Downed.luau, client/DownedFx.luau, rules in shared/Downed.luau). A hit that would kill you puts
+-- you on the ground instead: a small health pool that bleeds out; at 0 you die as before (a life, reinforce).
+-- Get up: a squadmate holds Interact on you, or you use a stim (costs one). Sidearm only while down.
+-- Studio A/B: workspace attribute Feel_Downed = "long" (20 s bleed) | "off" (instant death, the old rule).
+Config.Downed = {
+	Enabled = true,
+	BleedTime = 12, -- seconds from going down to bleeding out, if nobody shoots you
+	BleedTimeLong = 20, -- Feel_Downed = "long"
+	Pool = 0.3, -- share of max health the downed body has (drains over BleedTime)
+	HitMult = 0.5, -- damage taken while down (enemies still finish you, slower)
+	ReviveHold = 2.5, -- seconds a squadmate holds Interact
+	ReviveRange = 9,
+	ReviveHealth = 0.35, -- share of max health after a squadmate revive (a stim revive heals like a stim on top)
+	CrawlSpeed = 2.5,
+}
 -- Passive regen (server/PlayerService). Studio A/B: workspace attribute Feel_Regen = "off" | "slow" | "current".
 Config.Regen = {
 	Mode = "slow",
