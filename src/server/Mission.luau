@@ -41,7 +41,7 @@ local OBJECTIVE_NAMES = { MISSILE = "Missile Launch", UPLINK = "Uplink Relay", H
 
 -- Side objectives: NEST + SAMPLES plus one random extra. Studio: workspace attribute QuickStartSides (comma list, e.g.
 -- "RADAR,FOUNDRY,WRECK") replaces the list. ObjectiveService ignores kinds it doesn't know.
-local EXTRA_SIDES = { "RADAR", "FOUNDRY", "WRECK", "JAMMER", "CONVOY" }
+local EXTRA_SIDES = { "RADAR", "FOUNDRY", "WRECK", "JAMMER", "CONVOY", "AIRDEF" }
 local function pickSides(): { string }
 	if RunService:IsStudio() then
 		local q = workspace:GetAttribute("QuickStartSides")

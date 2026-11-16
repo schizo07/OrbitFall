@@ -25,6 +25,7 @@ local SideWreck = require(script.Parent.SideWreck)
 local SideConvoy = require(script.Parent.SideConvoy)
 local SideRadar = require(script.Parent.SideRadar)
 local SideJammer = require(script.Parent.SideJammer)
+local SideAirDefence = require(script.Parent.SideAirDefence)
 local SideFoundry = require(script.Parent.SideFoundry)
 
 local ObjectiveService = {}
@@ -624,6 +625,17 @@ function ObjectiveService.start(map: any, cfg: any)
 			local site, scf = ctx.takeSite()
 			if site and scf then
 				c = SideFoundry.start(ctx, scf, counts[kind])
+			end
+		elseif kind == "AIRDEF" then
+			-- shoots down COG dropships; Brood planets have none, so they get a crashed-ship data site instead
+			local site, scf = ctx.takeSite()
+			if site and scf then
+				if faction == "COG" then
+					c = SideAirDefence.start(ctx, scf, counts[kind])
+				else
+					counts.WRECK = (counts.WRECK or 0) + 1
+					c = SideWreck.start(ctx, scf, counts.WRECK)
+				end
 			end
 		end
 		if c then

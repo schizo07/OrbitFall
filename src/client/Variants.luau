@@ -257,6 +257,17 @@ local GROUPS = {
 			{ name = "C off (instant death, old)", set = { Feel_Downed = "off" } },
 		},
 	},
+	{
+		-- server/Objectives/SideAirDefence + server/AirDefence: once the AA battery is online, enemy dropships are shot down
+		-- (Studio quick mission: QuickStartSides = "AIRDEF")
+		name = "AIR DEFENCE",
+		keys = { "Feel_AirDefence" },
+		server = true,
+		presets = {
+			{ name = "A every dropship shot down", set = {} },
+			{ name = "B every second dropship", set = { Feel_AirDefence = "half" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough

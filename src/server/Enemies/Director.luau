@@ -47,6 +47,7 @@ local Config = require(Shared.Config)
 local EnemyData = require(Shared.Data.Enemies)
 local IT = require(Shared.Data.Intensity)
 local BreachSources = require(script.Parent.BreachSources)
+local AirDefence = require(script.Parent.Parent.AirDefence)
 
 local Director = {}
 
@@ -62,6 +63,7 @@ local pressure = 1
 local startedAt = 0
 local nextPatrol = 0
 local lastReinforce = -1e9
+local lastAANotify = -1e9
 local chainCalls = 0 -- spotted calls made by units that were themselves delivered by a call, since the last breach started
 local pending = { regular = 0, medium = 0, heavy = 0, behemoth = 0, fodder = 0 }
 
@@ -486,10 +488,17 @@ local function deliver(kinds: { string }, base: Vector3, method: string, opts: a
 	local H = IT.Heavy
 	local delayT = 0
 	local bigDelay = 0
+	local shotDown = false -- an AA battery (server/AirDefence.luau) downed the carrier: its squad never lands
 	if method == "drop" then
 		local ang = rng:NextNumber(0, math.pi * 2)
 		local from = base + Vector3.new(math.cos(ang) * 260, 130, math.sin(ang) * 260)
-		S.Fx.play("DropShip", { a = from, b = base + Vector3.new(0, 0, 0), t = 2.4, hold = 1.4 })
+		local aa = AirDefence.intercept(base)
+		shotDown = aa ~= nil
+		S.Fx.play("DropShip", { a = from, b = base + Vector3.new(0, 0, 0), t = 2.4, hold = 1.4, kill = if aa then 1.9 else nil, aa = aa })
+		if aa and S.State and S.State.notify and os.clock() - lastAANotify > 20 then
+			lastAANotify = os.clock()
+			task.delay(1.9, S.State.notify, nil, "AA battery: enemy dropship shot down!", Config.Colors.Friendly)
+		end
 		delayT = 3.2
 		bigDelay = if anyBig then H.podFall + 0.15 else delayT -- robots fall from the sky ahead of the carrier
 	elseif method == "breach" then
@@ -521,7 +530,7 @@ local function deliver(kinds: { string }, base: Vector3, method: string, opts: a
 				local key = pendKey(k)
 				pending[key] = math.max(pending[key] - 1, 0)
 				-- heavies may exceed the cap by a little: compose() already reserved their slot
-				if running and gen == myGen and loadNow() < liveCap() + (if big then 2 else 0) then
+				if running and gen == myGen and not (shotDown and not big) and loadNow() < liveCap() + (if big then 2 else 0) then
 					spawnUnit(k, spots[i], spawnOpts)
 					if big then
 						heavyArrival(k, spots[i])

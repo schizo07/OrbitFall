@@ -654,17 +654,117 @@ local function onDropShip(d: any)
 		Audio.play("DropShip", hover)
 	end
 
+	local function posAt(t: number): Vector3
+		if t < tIn then
+			return a:Lerp(hover, easeOut(t / tIn))
+		elseif t < tIn + hold then
+			return hover + Vector3.new(0, math.sin((t - tIn) * 3) * 0.4, 0)
+		end
+		local u = t - tIn - hold
+		return hover + leaveDir * (u * u * 28 + u * 6)
+	end
+
+	-- Air Defence side objective (server/Objectives/SideAirDefence.luau): d.kill = seconds after the start when an AA
+	-- missile from d.aa hits the ship; the hull breaks up and falls, the cargo pod never drops.
+	local killT = tonumber(d.kill)
+	local aa: Vector3? = if typeof(d.aa) == "Vector3" then d.aa else nil
+	local MISSILE_T = 1.1
+	local missile: Part? = nil
+	local shotDown = false
+	if killT then
+		dropT = math.huge
+		local launchIn = math.max(0, killT - MISSILE_T)
+		task.delay(launchIn, function()
+			if not model.Parent or not aa then
+				return
+			end
+			local m = mk(Vector3.new(0.7, 0.7, 2.6), C3(255, 170, 70), CFrame.new(aa), nil, Enum.Material.Neon, 0, MISSILE_T + 1)
+			local a0 = Instance.new("Attachment")
+			a0.Position = Vector3.new(0, 0, 1.2)
+			a0.Parent = m
+			local a1 = Instance.new("Attachment")
+			a1.Position = Vector3.new(0, 0, 0.6)
+			a1.Parent = m
+			local tr = Instance.new("Trail")
+			tr.Attachment0, tr.Attachment1 = a0, a1
+			tr.Lifetime = 0.9
+			tr.WidthScale = NumberSequence.new(1, 3.5)
+			tr.Color = ColorSequence.new(C3(235, 225, 210))
+			tr.Transparency = NumberSequence.new(0.2, 1)
+			tr.FaceCamera = true
+			tr.Parent = m
+			missile = m
+			if Audio then
+				Audio.play("MissileLaunch", aa)
+			end
+			if Fx and Fx.burst then
+				Fx.burst("dust", aa, 10, { scale = 1.2 })
+			end
+		end)
+	end
+
 	addActor(function()
 		local t = os.clock() - startT
-		local pos: Vector3
-		if t < tIn then
-			pos = a:Lerp(hover, easeOut(t / tIn))
-		elseif t < tIn + hold then
-			pos = hover + Vector3.new(0, math.sin((t - tIn) * 3) * 0.4, 0)
-		else
-			local u = t - tIn - hold
-			pos = hover + leaveDir * (u * u * 28 + u * 6)
+		-- AA missile homing on the ship (arcs up first)
+		local m = missile
+		if m and m.Parent and killT and aa then
+			local u = math.clamp((t - (killT - MISSILE_T)) / MISSILE_T, 0, 1)
+			local tgt = posAt(math.min(t, killT))
+			local p = aa:Lerp(tgt, u ^ 1.3) + Vector3.new(0, math.sin(u * math.pi) * 18, 0)
+			local ahead = aa:Lerp(tgt, math.min(1, u + 0.05) ^ 1.3) + Vector3.new(0, math.sin(math.min(1, u + 0.05) * math.pi) * 18, 0)
+			if (ahead - p).Magnitude > 0.01 then
+				m.CFrame = CFrame.lookAt(p, ahead)
+			end
 		end
+		if killT and t >= killT and not shotDown then
+			shotDown = true
+			if m then
+				m:Destroy()
+			end
+			local at = lastCF.Position
+			if Fx then
+				if Fx.explosion then
+					Fx.explosion(at, { size = "L", style = "fire" })
+				end
+				if Fx.debris then
+					Fx.debris(at, { n = 16, style = "scrap", speed = 1.3, up = 0.6, scale = 1.3 })
+				end
+			end
+			-- the hull breaks apart and tumbles to the ground, a last small blast where the big piece lands
+			for i, r in rel do
+				local piece = r.part
+				if piece.Parent then
+					local off = Vector3.new(math.random(-14, 14), 0, math.random(-14, 14))
+					local gp = at + off
+					local hit = if Fx and Fx.groundAt then Fx.groundAt(gp, 0, 400) else nil
+					local land = if hit then hit else Vector3.new(gp.X, b.Y, gp.Z)
+					local fall = 1.3 + math.random() * 0.6
+					tween(piece, fall, {
+						CFrame = CFrame.new(land + Vector3.new(0, 0.6, 0))
+							* CFrame.Angles(math.random() * 6, math.random() * 6, math.random() * 6),
+					}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+					if i == 1 then
+						task.delay(fall, function()
+							if Fx and Fx.explosion then
+								Fx.explosion(land, { size = "M", style = "fire" })
+							end
+						end)
+					end
+					task.delay(fall + 1.5, function()
+						tween(piece, 1, { Transparency = 1 }, Linear)
+					end)
+				end
+			end
+			total = math.min(total, t + 4.5)
+		end
+		if shotDown then
+			if t > total then
+				model:Destroy()
+				return true
+			end
+			return false
+		end
+		local pos = posAt(t)
 		local cf = CFrame.lookAt(pos, pos + flatDir) * CFrame.Angles(0, 0, 0)
 		lastCF = cf
 		for _, r in rel do

@@ -195,6 +195,12 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 			end
 		end
 		return n
+	elseif cmd == "wave" then -- wave(budget, method): a Director wave around the first player ("drop" = COG dropship; AA tests)
+		local root = first and S.Players.getRoot(first)
+		if not root or not S.Director then
+			return "no player / director"
+		end
+		return S.Director.spawnWave(root.Position, a or 4, { method = b, ignorePressure = true })
 	elseif cmd == "selfhurt" then -- selfhurt(amount): damage the first player through the normal path (downed tests)
 		if not first then
 			return "no player"
