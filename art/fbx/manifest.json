@@ -2617,124 +2617,73 @@
     "rigAssetId": "112677500199427"
   },
   "env_rock_a": {
-    "fbx": "art/fbx/set1/env_rock_a.fbx",
-    "texture": null,
     "size_studs_roblox_xyz": [
-      14.351,
-      7.995,
-      10.769
+      12.97,
+      6.86,
+      10.23
     ],
-    "bbox_center_roblox": [
-      0.478,
-      3.998,
-      0.166
-    ],
-    "palette": "terrain",
+    "weak_spots": [],
+    "triangles_total": 352,
     "parts": [
       {
         "name": "Rock",
-        "role": "body",
-        "parent": null,
-        "pivot": [
-          0.961,
-          1.656,
-          0.248
+        "rgb": [
+          200,
+          200,
+          200
         ],
         "material": "Slate",
-        "textured": false,
-        "triangles": 186,
-        "rgb": [
-          160,
-          150,
-          140
-        ]
+        "role": "body",
+        "triangles": 352
       }
     ],
-    "weak_spots": [],
-    "attachments": [],
-    "assetId": "115901004762188",
-    "triangles_total": 186,
-    "source": "art/blender/env_set1.py"
+    "assetId": "116802756173826"
   },
   "env_rock_b": {
-    "fbx": "art/fbx/set1/env_rock_b.fbx",
-    "texture": null,
     "size_studs_roblox_xyz": [
-      12.949,
-      15.825,
-      11.247
+      13.13,
+      14.22,
+      10.35
     ],
-    "bbox_center_roblox": [
-      0.346,
-      7.913,
-      0.065
-    ],
-    "palette": "terrain",
+    "weak_spots": [],
+    "triangles_total": 384,
     "parts": [
       {
         "name": "Rock",
-        "role": "body",
-        "parent": null,
-        "pivot": [
-          0.418,
-          1.466,
-          -0.876
+        "rgb": [
+          200,
+          200,
+          200
         ],
         "material": "Slate",
-        "textured": false,
-        "triangles": 230,
-        "rgb": [
-          160,
-          150,
-          140
-        ]
+        "role": "body",
+        "triangles": 384
       }
     ],
-    "weak_spots": [],
-    "attachments": [],
-    "assetId": "107390461264137",
-    "triangles_total": 230,
-    "source": "art/blender/env_set1.py"
+    "assetId": "124802072047906"
   },
   "env_rock_c": {
-    "fbx": "art/fbx/set1/env_rock_c.fbx",
-    "texture": null,
     "size_studs_roblox_xyz": [
-      16.9,
-      6.819,
-      11.584
+      16.49,
+      7.23,
+      11.78
     ],
-    "bbox_center_roblox": [
-      -0.095,
-      3.409,
-      -0.127
-    ],
-    "palette": "terrain",
+    "weak_spots": [],
+    "triangles_total": 404,
     "parts": [
       {
         "name": "Rock",
-        "role": "body",
-        "parent": null,
-        "pivot": [
-          0.23,
-          1.297,
-          -0.043
+        "rgb": [
+          200,
+          200,
+          200
         ],
         "material": "Slate",
-        "textured": false,
-        "triangles": 196,
-        "rgb": [
-          160,
-          150,
-          140
-        ]
+        "role": "body",
+        "triangles": 404
       }
     ],
-    "weak_spots": [],
-    "attachments": [],
-    "assetId": "89077031132255",
-    "triangles_total": 196,
-    "source": "art/blender/env_set1.py"
+    "assetId": "107062841093560"
   },
   "env_spire_a": {
     "size_studs_roblox_xyz": [
@@ -2760,44 +2709,27 @@
     "assetId": "72616549175323"
   },
   "env_spire_b": {
-    "fbx": "art/fbx/set1/env_spire_b.fbx",
-    "texture": null,
     "size_studs_roblox_xyz": [
-      33.47,
-      48.122,
-      26.763
+      30.99,
+      48.5,
+      25.34
     ],
-    "bbox_center_roblox": [
-      -0.142,
-      24.061,
-      0.154
-    ],
-    "palette": "terrain",
+    "weak_spots": [],
+    "triangles_total": 880,
     "parts": [
       {
         "name": "Rock",
-        "role": "body",
-        "parent": null,
-        "pivot": [
-          -0.82,
-          1.637,
-          0.933
+        "rgb": [
+          200,
+          200,
+          200
         ],
         "material": "Slate",
-        "textured": false,
-        "triangles": 946,
-        "rgb": [
-          160,
-          150,
-          140
-        ]
+        "role": "body",
+        "triangles": 880
       }
     ],
-    "weak_spots": [],
-    "attachments": [],
-    "assetId": "125769686206936",
-    "triangles_total": 946,
-    "source": "art/blender/env_set1.py"
+    "assetId": "87844329539373"
   },
   "env_crystal_cluster": {
     "size_studs_roblox_xyz": [

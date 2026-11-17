@@ -384,24 +384,24 @@ local Meshes: { [string]: MeshInfo } = {
 		},
 	},
 	env_rock_a = {
-		assetId = 115901004762188,
-		size = Vector3.new(14.351, 7.995, 10.769),
+		assetId = 116802756173826,
+		size = Vector3.new(12.97, 6.86, 10.23),
 		parts = {
-			Rock = { color = Color3.fromRGB(160, 150, 140), material = Enum.Material.Slate, role = "body" },
+			Rock = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Slate, role = "body" },
 		},
 	},
 	env_rock_b = {
-		assetId = 107390461264137,
-		size = Vector3.new(12.949, 15.825, 11.247),
+		assetId = 124802072047906,
+		size = Vector3.new(13.13, 14.22, 10.35),
 		parts = {
-			Rock = { color = Color3.fromRGB(160, 150, 140), material = Enum.Material.Slate, role = "body" },
+			Rock = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Slate, role = "body" },
 		},
 	},
 	env_rock_c = {
-		assetId = 89077031132255,
-		size = Vector3.new(16.9, 6.819, 11.584),
+		assetId = 107062841093560,
+		size = Vector3.new(16.49, 7.23, 11.78),
 		parts = {
-			Rock = { color = Color3.fromRGB(160, 150, 140), material = Enum.Material.Slate, role = "body" },
+			Rock = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Slate, role = "body" },
 		},
 	},
 	env_spire_a = {
@@ -412,10 +412,10 @@ local Meshes: { [string]: MeshInfo } = {
 		},
 	},
 	env_spire_b = {
-		assetId = 125769686206936,
-		size = Vector3.new(33.47, 48.122, 26.763),
+		assetId = 87844329539373,
+		size = Vector3.new(30.99, 48.5, 25.34),
 		parts = {
-			Rock = { color = Color3.fromRGB(160, 150, 140), material = Enum.Material.Slate, role = "body" },
+			Rock = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Slate, role = "body" },
 		},
 	},
 	env_crystal_cluster = {

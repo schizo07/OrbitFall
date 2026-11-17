@@ -3017,12 +3017,13 @@ local function clearClouds()
 	end
 end
 
--- Park the sun low and in front of the default camera direction (players drop in facing +X/+Z), so the
--- landmarks and ridges read as backlit silhouettes. Searches latitude/clock for the best match.
--- Sun BEHIND-LEFT of the drop-in view (players land facing +X/+Z) and ~30 degrees up: the scene is front/side lit, rocks
+-- Searches latitude/clock for the sun direction below.
+-- Sun BEHIND-RIGHT of the drop-in view (players land facing +X/+Z) and ~45 degrees up: the scene is front/side lit, rocks
 -- and cliffs get a lit side and a shadow side, and nobody stares into a low sun (the old low backlit sun was all glare).
-local SUN_DIR = Vector3.new(-0.966, 0, -0.259)
-local SUN_ELEV = 0.5
+-- Not lower or further left: the insertion corner then sits in the edge cliffs' shadow (sun-ray sweep: 4% of the landing
+-- zone lit at -X / 30 degrees, ~91% at this angle, ~85% of the whole map).
+local SUN_DIR = Vector3.new(0.259, 0, -0.966)
+local SUN_ELEV = 0.707
 
 local function alignSun(m: { [string]: any })
 	local target = SUN_DIR
