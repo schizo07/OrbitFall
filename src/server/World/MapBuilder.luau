@@ -1648,11 +1648,21 @@ local function campSite(parent: Instance, name: string)
 		return onGround(w.X, w.Z, dy or 0)
 	end
 
-	-- ---- sandbag wall: 2 full staggered rows + a shorter top row on an arc around the objective, behind the tent
+	-- ---- sandbag wall on an arc around the objective, behind the tent: three env_sandbags segments (each a curved
+	-- 3-row wall, convex side = model -Z), back (+Z) turned to the objective so the bulge faces OUT
 	local bagCol = RGB(168, 146, 112):Lerp(B.rocks[1], 0.3)
 	local Rw = R + 15.5 -- clear of the tent (local z 2..9) and the crates stacked against its back (z 9..13.5)
 	local halfSpan = 12.5 / Rw -- ~25 studs of wall
-	for row = 0, 2 do
+	local meshWall = 0
+	for k = -1, 1 do
+		local th = bestA + k * 8.8 / Rw
+		local bx, bz = c.X + math.cos(th) * Rw, c.Y + math.sin(th) * Rw
+		local m = placeMesh(parent, "env_sandbags", bx, bz, { yaw = math.atan2(c.X - bx, c.Y - bz), sink = 0.04, align = 0.6, collide = false, maxSlope = 40 })
+		if m then
+			meshWall += 1
+		end
+	end
+	for row = 0, if meshWall > 0 then -1 else 2 do -- part-built fallback when the mesh is not loaded
 		local span = if row == 2 then halfSpan * 0.55 else halfSpan
 		local n = math.floor(span * 2 * Rw / 2.1)
 		for i = 0, n - 1 do
