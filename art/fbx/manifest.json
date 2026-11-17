@@ -1132,132 +1132,54 @@
   },
   "skitter": {
     "rigVersion": 2,
-    "fbx": "fbx/skitter_rig.fbx",
-    "texture": "textures/brood_palette.png",
+    "fbx": "art/fbx/skitter_brood.fbx",
+    "texture": "art/fbx/palette_brood.png",
     "size_studs_roblox_xyz": [
-      5.48,
-      2.8,
-      5.53
+      5.419,
+      2.793,
+      5.555
     ],
     "bbox_center_roblox": [
-      -0.0,
-      1.4,
-      -0.526
+      0.0,
+      1.397,
+      -0.424
     ],
     "weak_spots": [
       "Eye"
     ],
-    "triangles_total": 9564,
-    "palette": [
-      {
-        "index": 0,
-        "name": "CARAPACE",
-        "rgb": [
-          88,
-          52,
-          120
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "CARAPACE_DK",
-        "rgb": [
-          62,
-          36,
-          92
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "CARAPACE_LT",
-        "rgb": [
-          112,
-          70,
-          150
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "LILAC",
-        "rgb": [
-          170,
-          130,
-          200
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "BONE",
-        "rgb": [
-          235,
-          220,
-          190
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "DARK_BROOD",
-        "rgb": [
-          34,
-          20,
-          48
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      }
-    ],
+    "triangles_total": 2754,
+    "palette": "brood",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           1.05,
           0.2
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 3884
+        "triangles": 1382,
+        "rgb": null
       },
       {
         "name": "Eye",
         "role": "weak",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           1.643,
           -1.98
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 1040,
+        "triangles": 120,
         "rgb": [
-          140,
+          125,
           255,
-          60
+          58
         ]
       },
       {
@@ -1271,7 +1193,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 1148
+        "triangles": 128,
+        "rgb": null
       },
       {
         "name": "Mandible_R",
@@ -1284,7 +1207,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 1148
+        "triangles": 128,
+        "rgb": null
       },
       {
         "name": "Leg_1",
@@ -1297,7 +1221,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 172,
+        "rgb": null
       },
       {
         "name": "Leg_2",
@@ -1310,7 +1235,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 172,
+        "rgb": null
       },
       {
         "name": "Leg_3",
@@ -1323,7 +1249,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 172,
+        "rgb": null
       },
       {
         "name": "Leg_4",
@@ -1336,7 +1263,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 172,
+        "rgb": null
       },
       {
         "name": "Leg_5",
@@ -1349,7 +1277,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 372
+        "triangles": 154,
+        "rgb": null
       },
       {
         "name": "Leg_6",
@@ -1362,7 +1291,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 372
+        "triangles": 154,
+        "rgb": null
       }
     ],
     "assetId": "85046420294159",
@@ -1423,136 +1353,60 @@
         "triangles": 1040
       }
     ],
-    "rigAssetId": "114456623516922"
+    "rigAssetId": "106700783512063",
+    "attachments": [],
+    "source": "art/blender/brood_v2_small.py"
   },
   "spitter": {
     "rigVersion": 2,
-    "fbx": "fbx/spitter_rig.fbx",
-    "texture": "textures/brood_palette.png",
+    "fbx": "art/fbx/spitter_brood.fbx",
+    "texture": "art/fbx/palette_brood.png",
     "size_studs_roblox_xyz": [
-      5.1,
-      6.02,
-      7.41
+      4.787,
+      6.036,
+      7.77
     ],
     "bbox_center_roblox": [
-      -0.0,
-      3.011,
-      -0.674
+      0.003,
+      3.018,
+      -0.539
     ],
     "weak_spots": [
       "Sac"
     ],
-    "triangles_total": 9328,
-    "palette": [
-      {
-        "index": 0,
-        "name": "CARAPACE",
-        "rgb": [
-          88,
-          52,
-          120
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "CARAPACE_DK",
-        "rgb": [
-          62,
-          36,
-          92
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "CARAPACE_LT",
-        "rgb": [
-          112,
-          70,
-          150
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "LILAC",
-        "rgb": [
-          170,
-          130,
-          200
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "BONE",
-        "rgb": [
-          235,
-          220,
-          190
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "DARK_BROOD",
-        "rgb": [
-          34,
-          20,
-          48
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      }
-    ],
+    "triangles_total": 3016,
+    "palette": "brood",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           1.92,
           0.4
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 1880
+        "triangles": 1096,
+        "rgb": null
       },
       {
         "name": "Sac",
         "role": "weak",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           3.92,
           1.274
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 1020,
+        "triangles": 160,
         "rgb": [
-          140,
+          125,
           255,
-          60
+          58
         ]
       },
       {
@@ -1560,26 +1414,28 @@
         "role": "limb",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           2.56,
           -1.28
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 1560
+        "triangles": 276,
+        "rgb": null
       },
       {
         "name": "Head",
         "role": "limb",
         "parent": "Neck",
         "pivot": [
-          -0.0,
+          0.0,
           4.88,
           -2.12
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 2636
+        "triangles": 488,
+        "rgb": null
       },
       {
         "name": "Leg_1",
@@ -1592,7 +1448,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 372
+        "triangles": 154,
+        "rgb": null
       },
       {
         "name": "Leg_2",
@@ -1605,7 +1462,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 372
+        "triangles": 154,
+        "rgb": null
       },
       {
         "name": "Leg_3",
@@ -1618,7 +1476,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 372
+        "triangles": 172,
+        "rgb": null
       },
       {
         "name": "Leg_4",
@@ -1631,7 +1490,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 372
+        "triangles": 172,
+        "rgb": null
       },
       {
         "name": "Leg_5",
@@ -1644,7 +1504,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 372
+        "triangles": 172,
+        "rgb": null
       },
       {
         "name": "Leg_6",
@@ -1657,7 +1518,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 372
+        "triangles": 172,
+        "rgb": null
       }
     ],
     "assetId": "103230482198511",
@@ -1729,119 +1591,43 @@
         "triangles": 1020
       }
     ],
-    "rigAssetId": "138886118135859"
+    "rigAssetId": "99220283821891",
+    "attachments": [],
+    "source": "art/blender/brood_v2_small.py"
   },
   "charger": {
     "rigVersion": 2,
-    "fbx": "fbx/charger_rig.fbx",
-    "texture": "textures/brood_palette.png",
+    "fbx": "art/fbx/charger_brood.fbx",
+    "texture": "art/fbx/palette_brood.png",
     "size_studs_roblox_xyz": [
-      9.79,
-      8.44,
-      12.07
+      10.245,
+      8.045,
+      12.553
     ],
     "bbox_center_roblox": [
-      -0.0,
-      4.219,
-      0.214
+      0.0,
+      4.022,
+      0.023
     ],
     "weak_spots": [
       "Abdomen"
     ],
-    "triangles_total": 8960,
-    "palette": [
-      {
-        "index": 0,
-        "name": "CARAPACE",
-        "rgb": [
-          88,
-          52,
-          120
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "CARAPACE_DK",
-        "rgb": [
-          62,
-          36,
-          92
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "CARAPACE_LT",
-        "rgb": [
-          112,
-          70,
-          150
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "LILAC",
-        "rgb": [
-          170,
-          130,
-          200
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "BONE",
-        "rgb": [
-          235,
-          220,
-          190
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "DARK_BROOD",
-        "rgb": [
-          34,
-          20,
-          48
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      }
-    ],
+    "triangles_total": 4222,
+    "palette": "brood",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           3.0,
           0.0
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 3640
+        "triangles": 1696,
+        "rgb": null
       },
       {
         "name": "Abdomen",
@@ -1854,11 +1640,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 360,
+        "triangles": 60,
         "rgb": [
-          140,
+          125,
           255,
-          60
+          58
         ]
       },
       {
@@ -1866,13 +1652,14 @@
         "role": "armor",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           3.4,
           -2.584
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 2560
+        "triangles": 1170,
+        "rgb": null
       },
       {
         "name": "Leg_1",
@@ -1885,7 +1672,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 216,
+        "rgb": null
       },
       {
         "name": "Leg_2",
@@ -1898,7 +1686,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 216,
+        "rgb": null
       },
       {
         "name": "Leg_3",
@@ -1911,7 +1700,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 216,
+        "rgb": null
       },
       {
         "name": "Leg_4",
@@ -1924,7 +1714,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 216,
+        "rgb": null
       },
       {
         "name": "Leg_5",
@@ -1937,7 +1728,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 216,
+        "rgb": null
       },
       {
         "name": "Leg_6",
@@ -1950,7 +1742,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 400
+        "triangles": 216,
+        "rgb": null
       }
     ],
     "assetId": "80736585931411",
@@ -2022,21 +1815,23 @@
         "triangles": 360
       }
     ],
-    "rigAssetId": "99813280871128"
+    "rigAssetId": "125730122306897",
+    "attachments": [],
+    "source": "art/blender/brood_v2_small.py"
   },
   "titan": {
     "rigVersion": 2,
-    "fbx": "fbx/titan_rig.fbx",
-    "texture": "textures/brood_palette.png",
+    "fbx": "art/fbx/titan_brood.fbx",
+    "texture": "art/fbx/palette_brood.png",
     "size_studs_roblox_xyz": [
-      20.77,
-      20.74,
-      29.6
+      21.254,
+      20.233,
+      29.795
     ],
     "bbox_center_roblox": [
-      -0.0,
-      10.371,
-      -1.139
+      0.0,
+      10.116,
+      -1.204
     ],
     "weak_spots": [
       "Vent_1",
@@ -2044,104 +1839,25 @@
       "Vent_3",
       "Vent_4"
     ],
-    "triangles_total": 14328,
-    "palette": [
-      {
-        "index": 0,
-        "name": "CARAPACE",
-        "rgb": [
-          88,
-          52,
-          120
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "CARAPACE_DK",
-        "rgb": [
-          62,
-          36,
-          92
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "CARAPACE_LT",
-        "rgb": [
-          112,
-          70,
-          150
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "LILAC",
-        "rgb": [
-          170,
-          130,
-          200
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "BONE",
-        "rgb": [
-          235,
-          220,
-          190
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "DARK_BROOD",
-        "rgb": [
-          34,
-          20,
-          48
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      }
-    ],
+    "triangles_total": 8866,
+    "palette": "brood",
     "parts": [
       {
         "name": "Vent_1",
         "role": "weak",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           18.012,
           -3.79
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 704,
+        "triangles": 60,
         "rgb": [
-          140,
+          125,
           255,
-          60
+          58
         ]
       },
       {
@@ -2149,17 +1865,17 @@
         "role": "weak",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           17.161,
           0.518
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 1408,
+        "triangles": 120,
         "rgb": [
-          140,
+          125,
           255,
-          60
+          58
         ]
       },
       {
@@ -2167,17 +1883,17 @@
         "role": "weak",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           15.384,
           5.174
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 1408,
+        "triangles": 120,
         "rgb": [
-          140,
+          125,
           255,
-          60
+          58
         ]
       },
       {
@@ -2191,11 +1907,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 704,
+        "triangles": 60,
         "rgb": [
-          140,
+          125,
           255,
-          60
+          58
         ]
       },
       {
@@ -2203,39 +1919,42 @@
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           7.2,
           0.54
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 1816
+        "triangles": 3206,
+        "rgb": null
       },
       {
         "name": "Abdomen",
         "role": "limb",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           9.0,
           3.78
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 1812
+        "triangles": 1138,
+        "rgb": null
       },
       {
         "name": "Head",
         "role": "limb",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           7.74,
           -7.2
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 1580
+        "triangles": 1390,
+        "rgb": null
       },
       {
         "name": "Mandible_L",
@@ -2248,7 +1967,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 348
+        "triangles": 150,
+        "rgb": null
       },
       {
         "name": "Mandible_R",
@@ -2261,7 +1981,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 348
+        "triangles": 150,
+        "rgb": null
       },
       {
         "name": "Leg_1_Upper",
@@ -2274,7 +1995,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 432
+        "triangles": 194,
+        "rgb": null
       },
       {
         "name": "Leg_1_Lower",
@@ -2287,7 +2009,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 268
+        "triangles": 218,
+        "rgb": null
       },
       {
         "name": "Leg_2_Upper",
@@ -2300,7 +2023,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 432
+        "triangles": 194,
+        "rgb": null
       },
       {
         "name": "Leg_2_Lower",
@@ -2313,7 +2037,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 268
+        "triangles": 218,
+        "rgb": null
       },
       {
         "name": "Leg_3_Upper",
@@ -2326,7 +2051,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 432
+        "triangles": 194,
+        "rgb": null
       },
       {
         "name": "Leg_3_Lower",
@@ -2339,7 +2065,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 268
+        "triangles": 218,
+        "rgb": null
       },
       {
         "name": "Leg_4_Upper",
@@ -2352,7 +2079,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 432
+        "triangles": 194,
+        "rgb": null
       },
       {
         "name": "Leg_4_Lower",
@@ -2365,7 +2093,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 268
+        "triangles": 218,
+        "rgb": null
       },
       {
         "name": "Leg_5_Upper",
@@ -2378,7 +2107,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 432
+        "triangles": 194,
+        "rgb": null
       },
       {
         "name": "Leg_5_Lower",
@@ -2391,7 +2121,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 268
+        "triangles": 218,
+        "rgb": null
       },
       {
         "name": "Leg_6_Upper",
@@ -2404,7 +2135,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 432
+        "triangles": 194,
+        "rgb": null
       },
       {
         "name": "Leg_6_Lower",
@@ -2417,7 +2149,8 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 268
+        "triangles": 218,
+        "rgb": null
       }
     ],
     "assetId": "90092272292203",
@@ -2511,7 +2244,9 @@
         "triangles": 704
       }
     ],
-    "rigAssetId": "112677500199427"
+    "rigAssetId": "104564035387700",
+    "attachments": [],
+    "source": "art/blender/brood_v2_big.py"
   },
   "env_rock_a": {
     "size_studs_roblox_xyz": [
@@ -2776,68 +2511,93 @@
     "size_studs_roblox_xyz": [
       6.54,
       15.72,
-      7.47
+      7.46
     ],
     "weak_spots": [],
-    "triangles_total": 4472,
+    "triangles_total": 3268,
     "parts": [
       {
         "name": "Body",
-        "rgb": [
-          74,
-          85,
-          104
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
         ],
         "material": "Metal",
-        "role": "body",
-        "triangles": 908
+        "textured": true,
+        "triangles": 580
       },
       {
         "name": "Plates",
-        "rgb": [
-          217,
-          100,
-          43
+        "role": "trim",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
         ],
         "material": "SmoothPlastic",
-        "role": "trim",
-        "triangles": 1256
+        "textured": true,
+        "triangles": 852
       },
       {
         "name": "Dark",
-        "rgb": [
-          30,
-          34,
-          42
+        "role": "trim",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
         ],
         "material": "SmoothPlastic",
-        "role": "trim",
-        "triangles": 1432
+        "textured": true,
+        "triangles": 416
       },
       {
         "name": "Trim",
-        "rgb": [
-          240,
-          190,
-          40
+        "role": "trim",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
         ],
         "material": "SmoothPlastic",
-        "role": "trim",
-        "triangles": 572
+        "textured": true,
+        "triangles": 1340
       },
       {
         "name": "Beacon",
-        "rgb": [
-          255,
-          150,
-          25
+        "role": "glow",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
         ],
         "material": "Neon",
-        "role": "glow",
-        "triangles": 304
+        "textured": false,
+        "triangles": 80,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
       }
     ],
-    "assetId": "135484296109601"
+    "assetId": "123509427068146",
+    "fbx": "art/fbx/new/env_cog_pylon.fbx",
+    "texture": "art/fbx/new/palette_cogwork.png",
+    "palette": "cogwork",
+    "bbox_center_roblox": [
+      0.0,
+      7.86,
+      0.0
+    ],
+    "attachments": [],
+    "source": "art/blender/structures_v2.py"
   },
   "env_hive_mound": {
     "size_studs_roblox_xyz": [
@@ -2909,243 +2669,34 @@
   "courier_wreck": {
     "rigVersion": 2,
     "kind": "setpiece",
-    "fbx": "fbx/courier_wreck.fbx",
-    "texture": "textures/halcyon_palette.png",
+    "fbx": "art/fbx/new/courier_wreck.fbx",
+    "texture": "art/fbx/new/palette_human.png",
     "size_studs_roblox_xyz": [
-      17.45,
-      8.66,
-      23.61
+      17.349,
+      8.635,
+      24.083
     ],
     "bbox_center_roblox": [
-      1.877,
-      3.329,
-      0.406
+      1.817,
+      3.318,
+      0.881
     ],
     "weak_spots": [],
-    "triangles_total": 6000,
-    "palette": [
-      {
-        "index": 0,
-        "name": "WHITE",
-        "rgb": [
-          232,
-          228,
-          218
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "NAVY",
-        "rgb": [
-          44,
-          52,
-          70
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "ORANGE",
-        "rgb": [
-          240,
-          120,
-          40
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "METAL",
-        "rgb": [
-          40,
-          44,
-          52
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "WHITE_SH",
-        "rgb": [
-          188,
-          184,
-          176
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "NAVY_LT",
-        "rgb": [
-          74,
-          88,
-          116
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      },
-      {
-        "index": 6,
-        "name": "ORANGE_DK",
-        "rgb": [
-          186,
-          84,
-          30
-        ],
-        "uv": [
-          0.625,
-          0.625
-        ]
-      },
-      {
-        "index": 7,
-        "name": "SCORCH",
-        "rgb": [
-          26,
-          24,
-          26
-        ],
-        "uv": [
-          0.875,
-          0.625
-        ]
-      },
-      {
-        "index": 8,
-        "name": "STEEL",
-        "rgb": [
-          128,
-          136,
-          150
-        ],
-        "uv": [
-          0.125,
-          0.375
-        ]
-      },
-      {
-        "index": 9,
-        "name": "DIRT",
-        "rgb": [
-          112,
-          94,
-          78
-        ],
-        "uv": [
-          0.375,
-          0.375
-        ]
-      },
-      {
-        "index": 10,
-        "name": "SOOT",
-        "rgb": [
-          146,
-          138,
-          126
-        ],
-        "uv": [
-          0.625,
-          0.375
-        ]
-      },
-      {
-        "index": 11,
-        "name": "SAND",
-        "rgb": [
-          196,
-          176,
-          138
-        ],
-        "uv": [
-          0.875,
-          0.375
-        ]
-      },
-      {
-        "index": 12,
-        "name": "GLASS",
-        "rgb": [
-          26,
-          58,
-          80
-        ],
-        "uv": [
-          0.125,
-          0.125
-        ]
-      },
-      {
-        "index": 13,
-        "name": "NAVY_DK",
-        "rgb": [
-          26,
-          32,
-          46
-        ],
-        "uv": [
-          0.375,
-          0.125
-        ]
-      },
-      {
-        "index": 14,
-        "name": "SLATE",
-        "rgb": [
-          92,
-          100,
-          116
-        ],
-        "uv": [
-          0.625,
-          0.125
-        ]
-      },
-      {
-        "index": 15,
-        "name": "ASH",
-        "rgb": [
-          68,
-          66,
-          66
-        ],
-        "uv": [
-          0.875,
-          0.125
-        ]
-      }
-    ],
+    "triangles_total": 4096,
+    "palette": "human",
     "parts": [
       {
         "name": "Hull",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 4748
+        "triangles": 3248
       },
       {
         "name": "DataCase",
@@ -3158,27 +2709,27 @@
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 504
+        "triangles": 348
       },
       {
         "name": "Ground",
         "role": "decor",
         "parent": "Hull",
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 524
+        "triangles": 276
       },
       {
         "name": "Debris",
         "role": "decor",
         "parent": "Hull",
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
@@ -3188,7 +2739,14 @@
       }
     ],
     "notes": "Origin at ground centre, nose toward -Y. Interactable: DataCase. Decor parts (Ground, Debris) can be dropped.",
-    "assetId": "127486894262442"
+    "assetId": "85355253472195",
+    "attachments": [],
+    "origin": [
+      -1.817,
+      1.0,
+      -0.881
+    ],
+    "source": "art/blender/structures_v2.py"
   },
   "armor_kit": {
     "rigVersion": 2,
@@ -6915,256 +6473,49 @@
   "generator": {
     "rigVersion": 2,
     "kind": "setpiece",
-    "fbx": "fbx/generator.fbx",
-    "texture": "textures/halcyon_palette.png",
+    "fbx": "art/fbx/new/generator.fbx",
+    "texture": "art/fbx/new/palette_human.png",
     "size_studs_roblox_xyz": [
-      6.35,
-      5.0,
-      6.55
+      6.45,
+      5.004,
+      7.032
     ],
     "bbox_center_roblox": [
-      -0.0,
-      2.5,
-      -0.125
+      0.0,
+      2.472,
+      -0.354
     ],
     "weak_spots": [],
-    "triangles_total": 4652,
-    "palette": [
-      {
-        "index": 0,
-        "name": "WHITE",
-        "rgb": [
-          232,
-          228,
-          218
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "NAVY",
-        "rgb": [
-          44,
-          52,
-          70
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "ORANGE",
-        "rgb": [
-          240,
-          120,
-          40
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "METAL",
-        "rgb": [
-          40,
-          44,
-          52
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "WHITE_SH",
-        "rgb": [
-          188,
-          184,
-          176
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "NAVY_LT",
-        "rgb": [
-          74,
-          88,
-          116
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      },
-      {
-        "index": 6,
-        "name": "ORANGE_DK",
-        "rgb": [
-          186,
-          84,
-          30
-        ],
-        "uv": [
-          0.625,
-          0.625
-        ]
-      },
-      {
-        "index": 7,
-        "name": "SCORCH",
-        "rgb": [
-          26,
-          24,
-          26
-        ],
-        "uv": [
-          0.875,
-          0.625
-        ]
-      },
-      {
-        "index": 8,
-        "name": "STEEL",
-        "rgb": [
-          128,
-          136,
-          150
-        ],
-        "uv": [
-          0.125,
-          0.375
-        ]
-      },
-      {
-        "index": 9,
-        "name": "DIRT",
-        "rgb": [
-          112,
-          94,
-          78
-        ],
-        "uv": [
-          0.375,
-          0.375
-        ]
-      },
-      {
-        "index": 10,
-        "name": "SOOT",
-        "rgb": [
-          146,
-          138,
-          126
-        ],
-        "uv": [
-          0.625,
-          0.375
-        ]
-      },
-      {
-        "index": 11,
-        "name": "SAND",
-        "rgb": [
-          196,
-          176,
-          138
-        ],
-        "uv": [
-          0.875,
-          0.375
-        ]
-      },
-      {
-        "index": 12,
-        "name": "GLASS",
-        "rgb": [
-          26,
-          58,
-          80
-        ],
-        "uv": [
-          0.125,
-          0.125
-        ]
-      },
-      {
-        "index": 13,
-        "name": "NAVY_DK",
-        "rgb": [
-          26,
-          32,
-          46
-        ],
-        "uv": [
-          0.375,
-          0.125
-        ]
-      },
-      {
-        "index": 14,
-        "name": "SLATE",
-        "rgb": [
-          92,
-          100,
-          116
-        ],
-        "uv": [
-          0.625,
-          0.125
-        ]
-      },
-      {
-        "index": 15,
-        "name": "ASH",
-        "rgb": [
-          68,
-          66,
-          66
-        ],
-        "uv": [
-          0.875,
-          0.125
-        ]
-      }
-    ],
+    "triangles_total": 5710,
+    "palette": "human",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 3596
+        "triangles": 4858,
+        "rgb": null
       },
       {
         "name": "Switch",
         "role": "interact",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           1.65,
           -1.42
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 656
+        "triangles": 804,
+        "rgb": null
       },
       {
         "name": "Core",
@@ -7177,531 +6528,119 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 400,
+        "triangles": 48,
         "rgb": [
-          80,
-          230,
-          220
+          255,
+          179,
+          71
         ]
       }
     ],
-    "assetId": "104047872090725"
+    "assetId": "89649224398316",
+    "attachments": [],
+    "source": "art/blender/objectives_v2.py"
   },
   "trajectory_console": {
     "rigVersion": 2,
     "kind": "setpiece",
-    "fbx": "fbx/trajectory_console.fbx",
-    "texture": "textures/halcyon_palette.png",
+    "fbx": "art/fbx/new/trajectory_console.fbx",
+    "texture": "art/fbx/new/palette_human.png",
     "size_studs_roblox_xyz": [
-      4.3,
-      2.93,
+      4.311,
+      3.023,
       2.8
     ],
     "bbox_center_roblox": [
-      -0.0,
-      1.465,
+      0.0,
+      1.512,
       0.0
     ],
     "weak_spots": [],
-    "triangles_total": 2720,
-    "palette": [
-      {
-        "index": 0,
-        "name": "WHITE",
-        "rgb": [
-          232,
-          228,
-          218
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "NAVY",
-        "rgb": [
-          44,
-          52,
-          70
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "ORANGE",
-        "rgb": [
-          240,
-          120,
-          40
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "METAL",
-        "rgb": [
-          40,
-          44,
-          52
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "WHITE_SH",
-        "rgb": [
-          188,
-          184,
-          176
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "NAVY_LT",
-        "rgb": [
-          74,
-          88,
-          116
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      },
-      {
-        "index": 6,
-        "name": "ORANGE_DK",
-        "rgb": [
-          186,
-          84,
-          30
-        ],
-        "uv": [
-          0.625,
-          0.625
-        ]
-      },
-      {
-        "index": 7,
-        "name": "SCORCH",
-        "rgb": [
-          26,
-          24,
-          26
-        ],
-        "uv": [
-          0.875,
-          0.625
-        ]
-      },
-      {
-        "index": 8,
-        "name": "STEEL",
-        "rgb": [
-          128,
-          136,
-          150
-        ],
-        "uv": [
-          0.125,
-          0.375
-        ]
-      },
-      {
-        "index": 9,
-        "name": "DIRT",
-        "rgb": [
-          112,
-          94,
-          78
-        ],
-        "uv": [
-          0.375,
-          0.375
-        ]
-      },
-      {
-        "index": 10,
-        "name": "SOOT",
-        "rgb": [
-          146,
-          138,
-          126
-        ],
-        "uv": [
-          0.625,
-          0.375
-        ]
-      },
-      {
-        "index": 11,
-        "name": "SAND",
-        "rgb": [
-          196,
-          176,
-          138
-        ],
-        "uv": [
-          0.875,
-          0.375
-        ]
-      },
-      {
-        "index": 12,
-        "name": "GLASS",
-        "rgb": [
-          26,
-          58,
-          80
-        ],
-        "uv": [
-          0.125,
-          0.125
-        ]
-      },
-      {
-        "index": 13,
-        "name": "NAVY_DK",
-        "rgb": [
-          26,
-          32,
-          46
-        ],
-        "uv": [
-          0.375,
-          0.125
-        ]
-      },
-      {
-        "index": 14,
-        "name": "SLATE",
-        "rgb": [
-          92,
-          100,
-          116
-        ],
-        "uv": [
-          0.625,
-          0.125
-        ]
-      },
-      {
-        "index": 15,
-        "name": "ASH",
-        "rgb": [
-          68,
-          66,
-          66
-        ],
-        "uv": [
-          0.875,
-          0.125
-        ]
-      }
-    ],
+    "triangles_total": 2164,
+    "palette": "human",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1664
+        "triangles": 1772,
+        "rgb": null
       },
       {
         "name": "Keyboard",
         "role": "interact",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           1.18,
           -0.3
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1012
+        "triangles": 380,
+        "rgb": null
       },
       {
         "name": "Screen",
         "role": "glow",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           2.0,
           0.62
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 44,
+        "triangles": 12,
         "rgb": [
-          80,
-          230,
-          220
+          79,
+          216,
+          255
         ]
       }
     ],
-    "assetId": "74219538249886"
+    "assetId": "87779497677879",
+    "source": "art/blender/objectives_v2.py"
   },
   "missile_silo": {
     "rigVersion": 2,
     "kind": "setpiece",
-    "fbx": "fbx/missile_silo.fbx",
-    "texture": "textures/halcyon_palette.png",
+    "fbx": "art/fbx/new/missile_silo.fbx",
+    "texture": "art/fbx/new/palette_human.png",
     "size_studs_roblox_xyz": [
       14.0,
-      15.97,
-      16.3
+      15.9,
+      16.456
     ],
     "bbox_center_roblox": [
-      -0.0,
-      -4.865,
-      -1.15
+      0.0,
+      -4.85,
+      -1.228
     ],
     "weak_spots": [],
-    "triangles_total": 5012,
-    "palette": [
-      {
-        "index": 0,
-        "name": "WHITE",
-        "rgb": [
-          232,
-          228,
-          218
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "NAVY",
-        "rgb": [
-          44,
-          52,
-          70
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "ORANGE",
-        "rgb": [
-          240,
-          120,
-          40
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "METAL",
-        "rgb": [
-          40,
-          44,
-          52
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "WHITE_SH",
-        "rgb": [
-          188,
-          184,
-          176
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "NAVY_LT",
-        "rgb": [
-          74,
-          88,
-          116
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      },
-      {
-        "index": 6,
-        "name": "ORANGE_DK",
-        "rgb": [
-          186,
-          84,
-          30
-        ],
-        "uv": [
-          0.625,
-          0.625
-        ]
-      },
-      {
-        "index": 7,
-        "name": "SCORCH",
-        "rgb": [
-          26,
-          24,
-          26
-        ],
-        "uv": [
-          0.875,
-          0.625
-        ]
-      },
-      {
-        "index": 8,
-        "name": "STEEL",
-        "rgb": [
-          128,
-          136,
-          150
-        ],
-        "uv": [
-          0.125,
-          0.375
-        ]
-      },
-      {
-        "index": 9,
-        "name": "DIRT",
-        "rgb": [
-          112,
-          94,
-          78
-        ],
-        "uv": [
-          0.375,
-          0.375
-        ]
-      },
-      {
-        "index": 10,
-        "name": "SOOT",
-        "rgb": [
-          146,
-          138,
-          126
-        ],
-        "uv": [
-          0.625,
-          0.375
-        ]
-      },
-      {
-        "index": 11,
-        "name": "SAND",
-        "rgb": [
-          196,
-          176,
-          138
-        ],
-        "uv": [
-          0.875,
-          0.375
-        ]
-      },
-      {
-        "index": 12,
-        "name": "GLASS",
-        "rgb": [
-          26,
-          58,
-          80
-        ],
-        "uv": [
-          0.125,
-          0.125
-        ]
-      },
-      {
-        "index": 13,
-        "name": "NAVY_DK",
-        "rgb": [
-          26,
-          32,
-          46
-        ],
-        "uv": [
-          0.375,
-          0.125
-        ]
-      },
-      {
-        "index": 14,
-        "name": "SLATE",
-        "rgb": [
-          92,
-          100,
-          116
-        ],
-        "uv": [
-          0.625,
-          0.125
-        ]
-      },
-      {
-        "index": 15,
-        "name": "ASH",
-        "rgb": [
-          68,
-          66,
-          66
-        ],
-        "uv": [
-          0.875,
-          0.125
-        ]
-      }
-    ],
+    "triangles_total": 5984,
+    "palette": "human",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 2852
+        "triangles": 3028,
+        "rgb": null
       },
       {
         "name": "Door_L",
@@ -7712,9 +6651,10 @@
           0.62,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 420
+        "triangles": 760,
+        "rgb": null
       },
       {
         "name": "Door_R",
@@ -7725,9 +6665,10 @@
           0.62,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 420
+        "triangles": 748,
+        "rgb": null
       },
       {
         "name": "Lever_L",
@@ -7738,9 +6679,10 @@
           1.2,
           -8.2
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 204
+        "triangles": 180,
+        "rgb": null
       },
       {
         "name": "Lever_R",
@@ -7751,22 +6693,24 @@
           1.2,
           -8.2
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 204
+        "triangles": 180,
+        "rgb": null
       },
       {
         "name": "Missile",
         "role": "missile",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           -12.8,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 912
+        "triangles": 1088,
+        "rgb": null
       }
     ],
     "pose_open": {
@@ -7776,248 +6720,41 @@
       "Missile": "raise by +12.8 studs on Y (Roblox) to stand at the pit plate"
     },
     "note": "Rest pose = doors closed, Missile fully lowered (base 12.8 below ground). Size excludes Missile.",
-    "assetId": "93435215770414"
+    "assetId": "112949018603736",
+    "source": "art/blender/objectives_v2.py"
   },
   "uplink_dish": {
     "rigVersion": 2,
     "kind": "setpiece",
-    "fbx": "fbx/uplink_dish.fbx",
-    "texture": "textures/halcyon_palette.png",
+    "fbx": "art/fbx/new/uplink_dish.fbx",
+    "texture": "art/fbx/new/palette_human.png",
     "size_studs_roblox_xyz": [
-      7.44,
-      7.7,
-      6.16
+      7.388,
+      7.913,
+      6.538
     ],
     "bbox_center_roblox": [
-      -0.571,
-      3.852,
-      0.018
+      -0.866,
+      3.957,
+      0.451
     ],
     "weak_spots": [],
-    "triangles_total": 3808,
-    "palette": [
-      {
-        "index": 0,
-        "name": "WHITE",
-        "rgb": [
-          232,
-          228,
-          218
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "NAVY",
-        "rgb": [
-          44,
-          52,
-          70
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "ORANGE",
-        "rgb": [
-          240,
-          120,
-          40
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "METAL",
-        "rgb": [
-          40,
-          44,
-          52
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "WHITE_SH",
-        "rgb": [
-          188,
-          184,
-          176
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "NAVY_LT",
-        "rgb": [
-          74,
-          88,
-          116
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      },
-      {
-        "index": 6,
-        "name": "ORANGE_DK",
-        "rgb": [
-          186,
-          84,
-          30
-        ],
-        "uv": [
-          0.625,
-          0.625
-        ]
-      },
-      {
-        "index": 7,
-        "name": "SCORCH",
-        "rgb": [
-          26,
-          24,
-          26
-        ],
-        "uv": [
-          0.875,
-          0.625
-        ]
-      },
-      {
-        "index": 8,
-        "name": "STEEL",
-        "rgb": [
-          128,
-          136,
-          150
-        ],
-        "uv": [
-          0.125,
-          0.375
-        ]
-      },
-      {
-        "index": 9,
-        "name": "DIRT",
-        "rgb": [
-          112,
-          94,
-          78
-        ],
-        "uv": [
-          0.375,
-          0.375
-        ]
-      },
-      {
-        "index": 10,
-        "name": "SOOT",
-        "rgb": [
-          146,
-          138,
-          126
-        ],
-        "uv": [
-          0.625,
-          0.375
-        ]
-      },
-      {
-        "index": 11,
-        "name": "SAND",
-        "rgb": [
-          196,
-          176,
-          138
-        ],
-        "uv": [
-          0.875,
-          0.375
-        ]
-      },
-      {
-        "index": 12,
-        "name": "GLASS",
-        "rgb": [
-          26,
-          58,
-          80
-        ],
-        "uv": [
-          0.125,
-          0.125
-        ]
-      },
-      {
-        "index": 13,
-        "name": "NAVY_DK",
-        "rgb": [
-          26,
-          32,
-          46
-        ],
-        "uv": [
-          0.375,
-          0.125
-        ]
-      },
-      {
-        "index": 14,
-        "name": "SLATE",
-        "rgb": [
-          92,
-          100,
-          116
-        ],
-        "uv": [
-          0.625,
-          0.125
-        ]
-      },
-      {
-        "index": 15,
-        "name": "ASH",
-        "rgb": [
-          68,
-          66,
-          66
-        ],
-        "uv": [
-          0.875,
-          0.125
-        ]
-      }
-    ],
+    "triangles_total": 4404,
+    "palette": "human",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1896
+        "triangles": 2140,
+        "rgb": null
       },
       {
         "name": "Terminal",
@@ -8028,266 +6765,61 @@
           0.0,
           -1.6
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 416
+        "triangles": 664,
+        "rgb": null
       },
       {
         "name": "Dish",
         "role": "dish",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           5.2,
           0.55
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1496
+        "triangles": 1600,
+        "rgb": null
       }
     ],
-    "assetId": "126448135730881"
+    "assetId": "79552008331545",
+    "source": "art/blender/objectives_v2.py"
   },
   "extraction_pad": {
     "rigVersion": 2,
     "kind": "setpiece",
-    "fbx": "fbx/extraction_pad.fbx",
-    "texture": "textures/halcyon_palette.png",
+    "fbx": "art/fbx/new/extraction_pad.fbx",
+    "texture": "art/fbx/new/palette_human.png",
     "size_studs_roblox_xyz": [
-      15.88,
-      3.7,
-      13.8
+      15.97,
+      3.73,
+      13.856
     ],
     "bbox_center_roblox": [
-      -0.0,
-      1.85,
+      0.0,
+      1.865,
       0.0
     ],
     "weak_spots": [],
-    "triangles_total": 3940,
-    "palette": [
-      {
-        "index": 0,
-        "name": "WHITE",
-        "rgb": [
-          232,
-          228,
-          218
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "NAVY",
-        "rgb": [
-          44,
-          52,
-          70
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "ORANGE",
-        "rgb": [
-          240,
-          120,
-          40
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "METAL",
-        "rgb": [
-          40,
-          44,
-          52
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "WHITE_SH",
-        "rgb": [
-          188,
-          184,
-          176
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "NAVY_LT",
-        "rgb": [
-          74,
-          88,
-          116
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      },
-      {
-        "index": 6,
-        "name": "ORANGE_DK",
-        "rgb": [
-          186,
-          84,
-          30
-        ],
-        "uv": [
-          0.625,
-          0.625
-        ]
-      },
-      {
-        "index": 7,
-        "name": "SCORCH",
-        "rgb": [
-          26,
-          24,
-          26
-        ],
-        "uv": [
-          0.875,
-          0.625
-        ]
-      },
-      {
-        "index": 8,
-        "name": "STEEL",
-        "rgb": [
-          128,
-          136,
-          150
-        ],
-        "uv": [
-          0.125,
-          0.375
-        ]
-      },
-      {
-        "index": 9,
-        "name": "DIRT",
-        "rgb": [
-          112,
-          94,
-          78
-        ],
-        "uv": [
-          0.375,
-          0.375
-        ]
-      },
-      {
-        "index": 10,
-        "name": "SOOT",
-        "rgb": [
-          146,
-          138,
-          126
-        ],
-        "uv": [
-          0.625,
-          0.375
-        ]
-      },
-      {
-        "index": 11,
-        "name": "SAND",
-        "rgb": [
-          196,
-          176,
-          138
-        ],
-        "uv": [
-          0.875,
-          0.375
-        ]
-      },
-      {
-        "index": 12,
-        "name": "GLASS",
-        "rgb": [
-          26,
-          58,
-          80
-        ],
-        "uv": [
-          0.125,
-          0.125
-        ]
-      },
-      {
-        "index": 13,
-        "name": "NAVY_DK",
-        "rgb": [
-          26,
-          32,
-          46
-        ],
-        "uv": [
-          0.375,
-          0.125
-        ]
-      },
-      {
-        "index": 14,
-        "name": "SLATE",
-        "rgb": [
-          92,
-          100,
-          116
-        ],
-        "uv": [
-          0.625,
-          0.125
-        ]
-      },
-      {
-        "index": 15,
-        "name": "ASH",
-        "rgb": [
-          68,
-          66,
-          66
-        ],
-        "uv": [
-          0.875,
-          0.125
-        ]
-      }
-    ],
+    "triangles_total": 4700,
+    "palette": "human",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 3508
+        "triangles": 4396,
+        "rgb": null
       },
       {
         "name": "Light_1",
@@ -8300,11 +6832,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 108,
+        "triangles": 76,
         "rgb": [
-          80,
-          230,
-          220
+          255,
+          179,
+          71
         ]
       },
       {
@@ -8318,11 +6850,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 108,
+        "triangles": 76,
         "rgb": [
-          80,
-          230,
-          220
+          255,
+          179,
+          71
         ]
       },
       {
@@ -8336,11 +6868,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 108,
+        "triangles": 76,
         "rgb": [
-          80,
-          230,
-          220
+          255,
+          179,
+          71
         ]
       },
       {
@@ -8354,269 +6886,83 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 108,
+        "triangles": 76,
         "rgb": [
-          80,
-          230,
-          220
+          255,
+          179,
+          71
         ]
       }
     ],
-    "assetId": "133229090853106"
+    "assetId": "123218537317376",
+    "attachments": [],
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "source": "art/blender/extraction_v2.py"
   },
   "skiff": {
     "rigVersion": 2,
     "kind": "setpiece",
-    "fbx": "fbx/skiff.fbx",
-    "texture": "textures/halcyon_palette.png",
+    "fbx": "art/fbx/new/skiff.fbx",
+    "texture": "art/fbx/new/palette_human.png",
     "size_studs_roblox_xyz": [
-      11.24,
-      7.7,
-      25.81
+      11.66,
+      7.697,
+      25.95
     ],
     "bbox_center_roblox": [
-      -0.0,
-      3.578,
-      1.907
+      0.0,
+      3.592,
+      1.825
     ],
     "weak_spots": [],
-    "triangles_total": 3990,
-    "palette": [
-      {
-        "index": 0,
-        "name": "WHITE",
-        "rgb": [
-          232,
-          228,
-          218
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "NAVY",
-        "rgb": [
-          44,
-          52,
-          70
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "ORANGE",
-        "rgb": [
-          240,
-          120,
-          40
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "METAL",
-        "rgb": [
-          40,
-          44,
-          52
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "WHITE_SH",
-        "rgb": [
-          188,
-          184,
-          176
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "NAVY_LT",
-        "rgb": [
-          74,
-          88,
-          116
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      },
-      {
-        "index": 6,
-        "name": "ORANGE_DK",
-        "rgb": [
-          186,
-          84,
-          30
-        ],
-        "uv": [
-          0.625,
-          0.625
-        ]
-      },
-      {
-        "index": 7,
-        "name": "SCORCH",
-        "rgb": [
-          26,
-          24,
-          26
-        ],
-        "uv": [
-          0.875,
-          0.625
-        ]
-      },
-      {
-        "index": 8,
-        "name": "STEEL",
-        "rgb": [
-          128,
-          136,
-          150
-        ],
-        "uv": [
-          0.125,
-          0.375
-        ]
-      },
-      {
-        "index": 9,
-        "name": "DIRT",
-        "rgb": [
-          112,
-          94,
-          78
-        ],
-        "uv": [
-          0.375,
-          0.375
-        ]
-      },
-      {
-        "index": 10,
-        "name": "SOOT",
-        "rgb": [
-          146,
-          138,
-          126
-        ],
-        "uv": [
-          0.625,
-          0.375
-        ]
-      },
-      {
-        "index": 11,
-        "name": "SAND",
-        "rgb": [
-          196,
-          176,
-          138
-        ],
-        "uv": [
-          0.875,
-          0.375
-        ]
-      },
-      {
-        "index": 12,
-        "name": "GLASS",
-        "rgb": [
-          26,
-          58,
-          80
-        ],
-        "uv": [
-          0.125,
-          0.125
-        ]
-      },
-      {
-        "index": 13,
-        "name": "NAVY_DK",
-        "rgb": [
-          26,
-          32,
-          46
-        ],
-        "uv": [
-          0.375,
-          0.125
-        ]
-      },
-      {
-        "index": 14,
-        "name": "SLATE",
-        "rgb": [
-          92,
-          100,
-          116
-        ],
-        "uv": [
-          0.625,
-          0.125
-        ]
-      },
-      {
-        "index": 15,
-        "name": "ASH",
-        "rgb": [
-          68,
-          66,
-          66
-        ],
-        "uv": [
-          0.875,
-          0.125
-        ]
-      }
-    ],
+    "triangles_total": 5420,
+    "palette": "human",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 3750
+        "triangles": 4588,
+        "rgb": null
       },
       {
         "name": "Ramp",
         "role": "ramp",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           1.55,
           10.8
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 120
+        "triangles": 308,
+        "rgb": null
+      },
+      {
+        "name": "Gun",
+        "role": "gun",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          1.3,
+          -7.2
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 468,
+        "rgb": null
       },
       {
         "name": "Engine_L",
@@ -8629,11 +6975,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 60,
+        "triangles": 28,
         "rgb": [
-          80,
-          230,
-          220
+          255,
+          179,
+          71
         ]
       },
       {
@@ -8647,102 +6993,66 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 60,
+        "triangles": 28,
         "rgb": [
-          80,
-          230,
-          220
+          255,
+          179,
+          71
         ]
       }
     ],
-    "assetId": "93047515023412"
+    "assetId": "126376799053362",
+    "attachments": [
+      {
+        "name": "Muzzle",
+        "part": "Gun",
+        "pos": [
+          0.0,
+          0.82,
+          -10.9
+        ]
+      }
+    ],
+    "origin": [
+      0.0,
+      0.257,
+      -1.825
+    ],
+    "source": "art/blender/extraction_v2.py"
   },
   "fabricator": {
     "rigVersion": 2,
     "kind": "enemy_building",
-    "fbx": "fbx/fabricator.fbx",
-    "texture": "textures/cog_palette.png",
+    "fbx": "art/fbx/new/fabricator.fbx",
+    "texture": "art/fbx/new/palette_cogwork.png",
     "size_studs_roblox_xyz": [
       16.4,
-      10.15,
-      17.8
+      10.176,
+      17.962
     ],
     "bbox_center_roblox": [
-      -0.0,
-      5.075,
-      -2.7
+      0.0,
+      5.088,
+      -2.73
     ],
     "weak_spots": [
       "Vent"
     ],
-    "triangles_total": 4460,
-    "palette": [
-      {
-        "index": 0,
-        "name": "GUNMETAL",
-        "rgb": [
-          96,
-          110,
-          132
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "DARK",
-        "rgb": [
-          30,
-          34,
-          42
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "RUST",
-        "rgb": [
-          217,
-          100,
-          43
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "YELLOW",
-        "rgb": [
-          240,
-          190,
-          40
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      }
-    ],
+    "triangles_total": 5706,
+    "palette": "cogwork",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 4416
+        "triangles": 5682
       },
       {
         "name": "Vent",
@@ -8755,277 +7065,82 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 44,
+        "triangles": 24,
         "rgb": [
           255,
-          150,
-          25
+          74,
+          26
         ]
       }
     ],
-    "assetId": "105820892122776"
+    "assetId": "124695871413759",
+    "attachments": [],
+    "origin": [
+      0.0,
+      0.0,
+      2.73
+    ],
+    "source": "art/blender/structures_v2.py"
   },
   "sample_pod": {
     "rigVersion": 2,
     "kind": "setpiece",
-    "fbx": "fbx/sample_pod.fbx",
-    "texture": "textures/halcyon_palette.png",
+    "fbx": "art/fbx/new/sample_pod.fbx",
+    "texture": "art/fbx/new/palette_human.png",
     "size_studs_roblox_xyz": [
       1.1,
-      1.94,
+      1.96,
       1.1
     ],
     "bbox_center_roblox": [
-      -0.0,
-      0.969,
+      0.0,
+      0.98,
       0.0
     ],
     "weak_spots": [],
-    "triangles_total": 2048,
-    "palette": [
-      {
-        "index": 0,
-        "name": "WHITE",
-        "rgb": [
-          232,
-          228,
-          218
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "NAVY",
-        "rgb": [
-          44,
-          52,
-          70
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "ORANGE",
-        "rgb": [
-          240,
-          120,
-          40
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "METAL",
-        "rgb": [
-          40,
-          44,
-          52
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      },
-      {
-        "index": 4,
-        "name": "WHITE_SH",
-        "rgb": [
-          188,
-          184,
-          176
-        ],
-        "uv": [
-          0.125,
-          0.625
-        ]
-      },
-      {
-        "index": 5,
-        "name": "NAVY_LT",
-        "rgb": [
-          74,
-          88,
-          116
-        ],
-        "uv": [
-          0.375,
-          0.625
-        ]
-      },
-      {
-        "index": 6,
-        "name": "ORANGE_DK",
-        "rgb": [
-          186,
-          84,
-          30
-        ],
-        "uv": [
-          0.625,
-          0.625
-        ]
-      },
-      {
-        "index": 7,
-        "name": "SCORCH",
-        "rgb": [
-          26,
-          24,
-          26
-        ],
-        "uv": [
-          0.875,
-          0.625
-        ]
-      },
-      {
-        "index": 8,
-        "name": "STEEL",
-        "rgb": [
-          128,
-          136,
-          150
-        ],
-        "uv": [
-          0.125,
-          0.375
-        ]
-      },
-      {
-        "index": 9,
-        "name": "DIRT",
-        "rgb": [
-          112,
-          94,
-          78
-        ],
-        "uv": [
-          0.375,
-          0.375
-        ]
-      },
-      {
-        "index": 10,
-        "name": "SOOT",
-        "rgb": [
-          146,
-          138,
-          126
-        ],
-        "uv": [
-          0.625,
-          0.375
-        ]
-      },
-      {
-        "index": 11,
-        "name": "SAND",
-        "rgb": [
-          196,
-          176,
-          138
-        ],
-        "uv": [
-          0.875,
-          0.375
-        ]
-      },
-      {
-        "index": 12,
-        "name": "GLASS",
-        "rgb": [
-          26,
-          58,
-          80
-        ],
-        "uv": [
-          0.125,
-          0.125
-        ]
-      },
-      {
-        "index": 13,
-        "name": "NAVY_DK",
-        "rgb": [
-          26,
-          32,
-          46
-        ],
-        "uv": [
-          0.375,
-          0.125
-        ]
-      },
-      {
-        "index": 14,
-        "name": "SLATE",
-        "rgb": [
-          92,
-          100,
-          116
-        ],
-        "uv": [
-          0.625,
-          0.125
-        ]
-      },
-      {
-        "index": 15,
-        "name": "ASH",
-        "rgb": [
-          68,
-          66,
-          66
-        ],
-        "uv": [
-          0.875,
-          0.125
-        ]
-      }
-    ],
+    "triangles_total": 820,
+    "palette": "human",
     "parts": [
       {
         "name": "Casing",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           0.0,
           0.0
         ],
         "material": "SmoothPlastic",
         "textured": true,
-        "triangles": 1880
+        "triangles": 740
       },
       {
         "name": "Glow",
         "role": "glow",
         "parent": "Casing",
         "pivot": [
-          -0.0,
+          0.0,
           0.82,
           0.0
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 168,
+        "triangles": 80,
         "rgb": [
-          190,
-          110,
-          255
+          255,
+          179,
+          71
         ]
       }
     ],
-    "assetId": "82417762160519"
+    "assetId": "102545375151574",
+    "attachments": [],
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "source": "art/blender/structures_v2.py"
   },
   "env_sandbags": {
     "fbx": "art/fbx/set1/env_sandbags.fbx",

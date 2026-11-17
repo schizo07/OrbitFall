@@ -1,0 +1,335 @@
+{
+  "fbx": "art/fbx/titan_brood.fbx",
+  "texture": "art/fbx/palette_brood.png",
+  "size_studs_roblox_xyz": [
+    21.254,
+    20.233,
+    29.795
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    10.116,
+    -1.204
+  ],
+  "palette": "brood",
+  "parts": [
+    {
+      "name": "Vent_1",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        18.012,
+        -3.79
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 60,
+      "rgb": [
+        125,
+        255,
+        58
+      ]
+    },
+    {
+      "name": "Vent_2",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        17.161,
+        0.518
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 120,
+      "rgb": [
+        125,
+        255,
+        58
+      ]
+    },
+    {
+      "name": "Vent_3",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        15.384,
+        5.174
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 120,
+      "rgb": [
+        125,
+        255,
+        58
+      ]
+    },
+    {
+      "name": "Vent_4",
+      "role": "weak",
+      "parent": "Abdomen",
+      "pivot": [
+        0.0,
+        16.38,
+        9.502
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 60,
+      "rgb": [
+        125,
+        255,
+        58
+      ]
+    },
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        7.2,
+        0.54
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 3206,
+      "rgb": null
+    },
+    {
+      "name": "Abdomen",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        9.0,
+        3.78
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 1138,
+      "rgb": null
+    },
+    {
+      "name": "Head",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        7.74,
+        -7.2
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 1390,
+      "rgb": null
+    },
+    {
+      "name": "Mandible_L",
+      "role": "limb",
+      "parent": "Head",
+      "pivot": [
+        -1.71,
+        7.2,
+        -10.44
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 150,
+      "rgb": null
+    },
+    {
+      "name": "Mandible_R",
+      "role": "limb",
+      "parent": "Head",
+      "pivot": [
+        1.71,
+        7.2,
+        -10.44
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 150,
+      "rgb": null
+    },
+    {
+      "name": "Leg_1_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -4.32,
+        7.2,
+        -5.04
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 194,
+      "rgb": null
+    },
+    {
+      "name": "Leg_1_Lower",
+      "role": "limb",
+      "parent": "Leg_1_Upper",
+      "pivot": [
+        -7.92,
+        9.36,
+        -6.3
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 218,
+      "rgb": null
+    },
+    {
+      "name": "Leg_2_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        4.32,
+        7.2,
+        -5.04
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 194,
+      "rgb": null
+    },
+    {
+      "name": "Leg_2_Lower",
+      "role": "limb",
+      "parent": "Leg_2_Upper",
+      "pivot": [
+        7.92,
+        9.36,
+        -6.3
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 218,
+      "rgb": null
+    },
+    {
+      "name": "Leg_3_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -4.32,
+        7.2,
+        0.54
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 194,
+      "rgb": null
+    },
+    {
+      "name": "Leg_3_Lower",
+      "role": "limb",
+      "parent": "Leg_3_Upper",
+      "pivot": [
+        -7.92,
+        9.36,
+        0.72
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 218,
+      "rgb": null
+    },
+    {
+      "name": "Leg_4_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        4.32,
+        7.2,
+        0.54
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 194,
+      "rgb": null
+    },
+    {
+      "name": "Leg_4_Lower",
+      "role": "limb",
+      "parent": "Leg_4_Upper",
+      "pivot": [
+        7.92,
+        9.36,
+        0.72
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 218,
+      "rgb": null
+    },
+    {
+      "name": "Leg_5_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -4.32,
+        7.2,
+        5.94
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 194,
+      "rgb": null
+    },
+    {
+      "name": "Leg_5_Lower",
+      "role": "limb",
+      "parent": "Leg_5_Upper",
+      "pivot": [
+        -7.92,
+        9.36,
+        7.38
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 218,
+      "rgb": null
+    },
+    {
+      "name": "Leg_6_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        4.32,
+        7.2,
+        5.94
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 194,
+      "rgb": null
+    },
+    {
+      "name": "Leg_6_Lower",
+      "role": "limb",
+      "parent": "Leg_6_Upper",
+      "pivot": [
+        7.92,
+        9.36,
+        7.38
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 218,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [
+    "Vent_1",
+    "Vent_2",
+    "Vent_3",
+    "Vent_4"
+  ],
+  "attachments": [],
+  "assetId": ""
+}

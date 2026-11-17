@@ -1,0 +1,82 @@
+{
+  "fbx": "art/fbx/new/courier_wreck.fbx",
+  "texture": "art/fbx/new/palette_human.png",
+  "size_studs_roblox_xyz": [
+    17.349,
+    8.635,
+    24.083
+  ],
+  "bbox_center_roblox": [
+    1.817,
+    3.318,
+    0.881
+  ],
+  "palette": "human",
+  "parts": [
+    {
+      "name": "Hull",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 3248
+    },
+    {
+      "name": "DataCase",
+      "role": "interact",
+      "parent": "Hull",
+      "pivot": [
+        6.9,
+        0.0,
+        -5.6
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 348
+    },
+    {
+      "name": "Ground",
+      "role": "decor",
+      "parent": "Hull",
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 276
+    },
+    {
+      "name": "Debris",
+      "role": "decor",
+      "parent": "Hull",
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 224
+    }
+  ],
+  "weak_spots": [],
+  "attachments": [],
+  "assetId": "",
+  "rigVersion": 2,
+  "kind": "setpiece",
+  "notes": "Origin at ground centre, nose toward -Y. Interactable: DataCase. Decor parts (Ground, Debris) can be dropped.",
+  "triangles_total": 4096,
+  "source": "art/blender/structures_v2.py",
+  "origin": [
+    -1.817,
+    1.0,
+    -0.881
+  ]
+}

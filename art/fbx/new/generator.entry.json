@@ -1,0 +1,70 @@
+{
+  "fbx": "art/fbx/new/generator.fbx",
+  "texture": "art/fbx/new/palette_human.png",
+  "size_studs_roblox_xyz": [
+    6.45,
+    5.004,
+    7.032
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    2.472,
+    -0.354
+  ],
+  "palette": "human",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 4858,
+      "rgb": null
+    },
+    {
+      "name": "Switch",
+      "role": "interact",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        1.65,
+        -1.42
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 804,
+      "rgb": null
+    },
+    {
+      "name": "Core",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        0.4,
+        3.75,
+        0.0
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 48,
+      "rgb": [
+        255,
+        179,
+        71
+      ]
+    }
+  ],
+  "weak_spots": [],
+  "attachments": [],
+  "assetId": "",
+  "kind": "setpiece",
+  "rigVersion": 2,
+  "triangles_total": 5710,
+  "source": "art/blender/objectives_v2.py"
+}

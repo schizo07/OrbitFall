@@ -1,0 +1,166 @@
+{
+  "fbx": "art/fbx/spitter_brood.fbx",
+  "texture": "art/fbx/palette_brood.png",
+  "size_studs_roblox_xyz": [
+    4.787,
+    6.036,
+    7.77
+  ],
+  "bbox_center_roblox": [
+    0.003,
+    3.018,
+    -0.539
+  ],
+  "palette": "brood",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        1.92,
+        0.4
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 1096,
+      "rgb": null
+    },
+    {
+      "name": "Sac",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        3.92,
+        1.274
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 160,
+      "rgb": [
+        125,
+        255,
+        58
+      ]
+    },
+    {
+      "name": "Neck",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        2.56,
+        -1.28
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 276,
+      "rgb": null
+    },
+    {
+      "name": "Head",
+      "role": "limb",
+      "parent": "Neck",
+      "pivot": [
+        0.0,
+        4.88,
+        -2.12
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 488,
+      "rgb": null
+    },
+    {
+      "name": "Leg_1",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -0.72,
+        1.92,
+        -0.8
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 154,
+      "rgb": null
+    },
+    {
+      "name": "Leg_2",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        0.72,
+        1.92,
+        -0.8
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 154,
+      "rgb": null
+    },
+    {
+      "name": "Leg_3",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -0.72,
+        1.92,
+        0.4
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 172,
+      "rgb": null
+    },
+    {
+      "name": "Leg_4",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        0.72,
+        1.92,
+        0.4
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 172,
+      "rgb": null
+    },
+    {
+      "name": "Leg_5",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -0.72,
+        1.92,
+        1.6
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 172,
+      "rgb": null
+    },
+    {
+      "name": "Leg_6",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        0.72,
+        1.92,
+        1.6
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 172,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [
+    "Sac"
+  ],
+  "attachments": [],
+  "assetId": ""
+}

@@ -1,0 +1,60 @@
+{
+  "fbx": "art/fbx/new/sample_pod.fbx",
+  "texture": "art/fbx/new/palette_human.png",
+  "size_studs_roblox_xyz": [
+    1.1,
+    1.96,
+    1.1
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    0.98,
+    0.0
+  ],
+  "palette": "human",
+  "parts": [
+    {
+      "name": "Casing",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 740
+    },
+    {
+      "name": "Glow",
+      "role": "glow",
+      "parent": "Casing",
+      "pivot": [
+        0.0,
+        0.82,
+        0.0
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 80,
+      "rgb": [
+        255,
+        179,
+        71
+      ]
+    }
+  ],
+  "weak_spots": [],
+  "attachments": [],
+  "assetId": "",
+  "rigVersion": 2,
+  "kind": "setpiece",
+  "triangles_total": 820,
+  "source": "art/blender/structures_v2.py",
+  "origin": [
+    0.0,
+    0.0,
+    0.0
+  ]
+}

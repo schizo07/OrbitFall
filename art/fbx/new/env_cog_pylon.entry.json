@@ -1,0 +1,92 @@
+{
+  "fbx": "art/fbx/new/env_cog_pylon.fbx",
+  "texture": "art/fbx/new/palette_cogwork.png",
+  "size_studs_roblox_xyz": [
+    6.54,
+    15.72,
+    7.46
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    7.86,
+    0.0
+  ],
+  "palette": "cogwork",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 580
+    },
+    {
+      "name": "Plates",
+      "role": "trim",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 852
+    },
+    {
+      "name": "Dark",
+      "role": "trim",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 416
+    },
+    {
+      "name": "Trim",
+      "role": "trim",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 1340
+    },
+    {
+      "name": "Beacon",
+      "role": "glow",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 80,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    }
+  ],
+  "weak_spots": [],
+  "attachments": [],
+  "assetId": "",
+  "triangles_total": 3268,
+  "source": "art/blender/structures_v2.py"
+}

@@ -1,0 +1,152 @@
+{
+  "fbx": "art/fbx/charger_brood.fbx",
+  "texture": "art/fbx/palette_brood.png",
+  "size_studs_roblox_xyz": [
+    10.245,
+    8.045,
+    12.553
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    4.022,
+    0.023
+  ],
+  "palette": "brood",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        3.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 1696,
+      "rgb": null
+    },
+    {
+      "name": "Abdomen",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        4.9,
+        2.888
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 60,
+      "rgb": [
+        125,
+        255,
+        58
+      ]
+    },
+    {
+      "name": "Ram",
+      "role": "armor",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        3.4,
+        -2.584
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 1170,
+      "rgb": null
+    },
+    {
+      "name": "Leg_1",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -2.4,
+        3.0,
+        -1.672
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 216,
+      "rgb": null
+    },
+    {
+      "name": "Leg_2",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        2.4,
+        3.0,
+        -1.672
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 216,
+      "rgb": null
+    },
+    {
+      "name": "Leg_3",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -2.4,
+        3.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 216,
+      "rgb": null
+    },
+    {
+      "name": "Leg_4",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        2.4,
+        3.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 216,
+      "rgb": null
+    },
+    {
+      "name": "Leg_5",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -2.4,
+        3.0,
+        1.824
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 216,
+      "rgb": null
+    },
+    {
+      "name": "Leg_6",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        2.4,
+        3.0,
+        1.824
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 216,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [
+    "Abdomen"
+  ],
+  "attachments": [],
+  "assetId": ""
+}

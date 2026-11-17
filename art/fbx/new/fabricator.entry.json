@@ -1,0 +1,62 @@
+{
+  "fbx": "art/fbx/new/fabricator.fbx",
+  "texture": "art/fbx/new/palette_cogwork.png",
+  "size_studs_roblox_xyz": [
+    16.4,
+    10.176,
+    17.962
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    5.088,
+    -2.73
+  ],
+  "palette": "cogwork",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "SmoothPlastic",
+      "textured": true,
+      "triangles": 5682
+    },
+    {
+      "name": "Vent",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        -4.4,
+        8.15,
+        -2.2
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 24,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    }
+  ],
+  "weak_spots": [
+    "Vent"
+  ],
+  "attachments": [],
+  "assetId": "",
+  "rigVersion": 2,
+  "kind": "enemy_building",
+  "triangles_total": 5706,
+  "source": "art/blender/structures_v2.py",
+  "origin": [
+    0.0,
+    0.0,
+    2.73
+  ]
+}

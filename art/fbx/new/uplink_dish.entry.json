@@ -1,0 +1,66 @@
+{
+  "fbx": "art/fbx/new/uplink_dish.fbx",
+  "texture": "art/fbx/new/palette_human.png",
+  "size_studs_roblox_xyz": [
+    7.388,
+    7.913,
+    6.538
+  ],
+  "bbox_center_roblox": [
+    -0.866,
+    3.957,
+    0.451
+  ],
+  "palette": "human",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 2140,
+      "rgb": null
+    },
+    {
+      "name": "Terminal",
+      "role": "interact",
+      "parent": "Body",
+      "pivot": [
+        -3.4,
+        0.0,
+        -1.6
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 664,
+      "rgb": null
+    },
+    {
+      "name": "Dish",
+      "role": "dish",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        5.2,
+        0.55
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1600,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [],
+  "attachments": [],
+  "assetId": "",
+  "kind": "setpiece",
+  "rigVersion": 2,
+  "triangles_total": 4404,
+  "source": "art/blender/objectives_v2.py"
+}

@@ -1,0 +1,114 @@
+{
+  "fbx": "art/fbx/new/extraction_pad.fbx",
+  "texture": "art/fbx/new/palette_human.png",
+  "size_studs_roblox_xyz": [
+    15.97,
+    3.73,
+    13.856
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    1.865,
+    0.0
+  ],
+  "palette": "human",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 4396,
+      "rgb": null
+    },
+    {
+      "name": "Light_1",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        -3.45,
+        3.45,
+        5.976
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 76,
+      "rgb": [
+        255,
+        179,
+        71
+      ]
+    },
+    {
+      "name": "Light_2",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        3.45,
+        3.45,
+        5.976
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 76,
+      "rgb": [
+        255,
+        179,
+        71
+      ]
+    },
+    {
+      "name": "Light_3",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        3.45,
+        3.45,
+        -5.976
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 76,
+      "rgb": [
+        255,
+        179,
+        71
+      ]
+    },
+    {
+      "name": "Light_4",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        -3.45,
+        3.45,
+        -5.976
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 76,
+      "rgb": [
+        255,
+        179,
+        71
+      ]
+    }
+  ],
+  "weak_spots": [],
+  "attachments": [],
+  "kind": "setpiece",
+  "rigVersion": 2,
+  "origin": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "triangles_total": 4700,
+  "source": "art/blender/extraction_v2.py"
+}

@@ -1,0 +1,70 @@
+{
+  "fbx": "art/fbx/new/trajectory_console.fbx",
+  "texture": "art/fbx/new/palette_human.png",
+  "size_studs_roblox_xyz": [
+    4.311,
+    3.023,
+    2.8
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    1.512,
+    0.0
+  ],
+  "palette": "human",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1772,
+      "rgb": null
+    },
+    {
+      "name": "Keyboard",
+      "role": "interact",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        1.18,
+        -0.3
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 380,
+      "rgb": null
+    },
+    {
+      "name": "Screen",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        2.0,
+        0.62
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 12,
+      "rgb": [
+        79,
+        216,
+        255
+      ]
+    }
+  ],
+  "weak_spots": [],
+  "attachments": [],
+  "assetId": "",
+  "kind": "setpiece",
+  "rigVersion": 2,
+  "triangles_total": 2164,
+  "source": "art/blender/objectives_v2.py"
+}

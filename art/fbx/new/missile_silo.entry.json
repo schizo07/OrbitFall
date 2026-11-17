@@ -1,0 +1,115 @@
+{
+  "fbx": "art/fbx/new/missile_silo.fbx",
+  "texture": "art/fbx/new/palette_human.png",
+  "size_studs_roblox_xyz": [
+    14.0,
+    15.9,
+    16.456
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    -4.85,
+    -1.228
+  ],
+  "palette": "human",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 3028,
+      "rgb": null
+    },
+    {
+      "name": "Door_L",
+      "role": "door",
+      "parent": "Body",
+      "pivot": [
+        -5.5,
+        0.62,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 760,
+      "rgb": null
+    },
+    {
+      "name": "Door_R",
+      "role": "door",
+      "parent": "Body",
+      "pivot": [
+        5.5,
+        0.62,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 748,
+      "rgb": null
+    },
+    {
+      "name": "Lever_L",
+      "role": "interact",
+      "parent": "Body",
+      "pivot": [
+        -3.4,
+        1.2,
+        -8.2
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 180,
+      "rgb": null
+    },
+    {
+      "name": "Lever_R",
+      "role": "interact",
+      "parent": "Body",
+      "pivot": [
+        3.4,
+        1.2,
+        -8.2
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 180,
+      "rgb": null
+    },
+    {
+      "name": "Missile",
+      "role": "missile",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        -12.8,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1088,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [],
+  "attachments": [],
+  "assetId": "",
+  "kind": "setpiece",
+  "rigVersion": 2,
+  "triangles_total": 5984,
+  "source": "art/blender/objectives_v2.py",
+  "pose_open": {
+    "Door_L": "rotate +72 deg about Y (hinge)",
+    "Door_R": "rotate -72 deg about Y (hinge)",
+    "Lever_L/R": "rotate -28 deg about X (pivot)",
+    "Missile": "raise by +12.8 studs on Y (Roblox) to stand at the pit plate"
+  },
+  "note": "Rest pose = doors closed, Missile fully lowered (base 12.8 below ground). Size excludes Missile."
+}
