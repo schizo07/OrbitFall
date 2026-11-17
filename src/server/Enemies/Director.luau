@@ -504,7 +504,11 @@ local function deliver(kinds: { string }, base: Vector3, method: string, opts: a
 	elseif method == "breach" then
 		for i, p in spots do
 			if i <= 8 then
-				S.Fx.play("Breach", { p = p })
+				if factionId == "LUMEN" then
+					S.Fx.play("RiftGate", { p = p, r = 3.5, t = 1.4 }) -- Concord units fold in through a rift
+				else
+					S.Fx.play("Breach", { p = p })
+				end
 			end
 		end
 		delayT = 0.7
