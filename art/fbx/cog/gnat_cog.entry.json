@@ -1,0 +1,100 @@
+{
+  "fbx": "art/fbx/gnat_cog.fbx",
+  "texture": "art/fbx/palette_cogwork.png",
+  "size_studs_roblox_xyz": [
+    4.446,
+    3.25,
+    3.095
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    1.625,
+    -0.097
+  ],
+  "palette": "cogwork",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        1.45,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 2554,
+      "rgb": null
+    },
+    {
+      "name": "Glow",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        1.45,
+        0.0
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 92,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Eye",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        1.5,
+        -1.05
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 36,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "RotorL",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -1.55,
+        2.95,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 232,
+      "rgb": null
+    },
+    {
+      "name": "RotorR",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        1.55,
+        2.95,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 232,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [
+    "Eye"
+  ],
+  "attachments": [],
+  "assetId": ""
+}

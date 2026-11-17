@@ -1,0 +1,139 @@
+{
+  "fbx": "art/fbx/bastion_cog.fbx",
+  "texture": "art/fbx/palette_cogwork.png",
+  "size_studs_roblox_xyz": [
+    11.408,
+    10.576,
+    13.67
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    5.288,
+    -1.065
+  ],
+  "palette": "cogwork",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        2.2,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1236,
+      "rgb": null
+    },
+    {
+      "name": "Turret",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        2.2,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 6584,
+      "rgb": null
+    },
+    {
+      "name": "Heatsink",
+      "role": "weak",
+      "parent": "Turret",
+      "pivot": [
+        0.0,
+        2.2,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1452,
+      "rgb": null
+    },
+    {
+      "name": "Vent",
+      "role": "weak",
+      "parent": "Turret",
+      "pivot": [
+        0.0,
+        4.8,
+        4.75
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 12,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "EyeL",
+      "role": "weak",
+      "parent": "Turret",
+      "pivot": [
+        -1.7,
+        5.7,
+        -6.9
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 36,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "EyeR",
+      "role": "weak",
+      "parent": "Turret",
+      "pivot": [
+        1.7,
+        5.7,
+        -6.9
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 36,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Glow",
+      "role": "glow",
+      "parent": "Turret",
+      "pivot": [
+        0.0,
+        2.2,
+        0.0
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 196,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    }
+  ],
+  "weak_spots": [
+    "Heatsink",
+    "Vent",
+    "EyeL",
+    "EyeR"
+  ],
+  "attachments": [],
+  "assetId": ""
+}

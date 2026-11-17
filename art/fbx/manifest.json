@@ -9062,5 +9062,1893 @@
     "assetId": "98950895039469",
     "triangles_total": 1088,
     "source": "art/blender/env_set1.py"
+  },
+  "bastion_cog": {
+    "fbx": "art/fbx/cog/bastion_cog.fbx",
+    "texture": "art/fbx/cog/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      11.408,
+      10.576,
+      13.67
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      5.288,
+      -1.065
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          2.2,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1236,
+        "rgb": null
+      },
+      {
+        "name": "Turret",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          2.2,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 6584,
+        "rgb": null
+      },
+      {
+        "name": "Heatsink",
+        "role": "weak",
+        "parent": "Turret",
+        "pivot": [
+          0.0,
+          2.2,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1452,
+        "rgb": null
+      },
+      {
+        "name": "Vent",
+        "role": "weak",
+        "parent": "Turret",
+        "pivot": [
+          0.0,
+          4.8,
+          4.75
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 12,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      },
+      {
+        "name": "EyeL",
+        "role": "weak",
+        "parent": "Turret",
+        "pivot": [
+          -1.7,
+          5.7,
+          -6.9
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      },
+      {
+        "name": "EyeR",
+        "role": "weak",
+        "parent": "Turret",
+        "pivot": [
+          1.7,
+          5.7,
+          -6.9
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Turret",
+        "pivot": [
+          0.0,
+          2.2,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 196,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [
+      "Heatsink",
+      "Vent",
+      "EyeL",
+      "EyeR"
+    ],
+    "attachments": [],
+    "assetId": "96699557030572",
+    "kind": "setpiece",
+    "source": "art/blender/cog_bastion.py"
+  },
+  "gnat_cog": {
+    "fbx": "art/fbx/cog/gnat_cog.fbx",
+    "texture": "art/fbx/cog/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      4.446,
+      3.25,
+      3.095
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.625,
+      -0.097
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          1.45,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 2554,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          1.45,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 92,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      },
+      {
+        "name": "Eye",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          1.5,
+          -1.05
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      },
+      {
+        "name": "RotorL",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -1.55,
+          2.95,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 232,
+        "rgb": null
+      },
+      {
+        "name": "RotorR",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          1.55,
+          2.95,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 232,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [
+      "Eye"
+    ],
+    "attachments": [],
+    "assetId": "130676488036982",
+    "kind": "setpiece",
+    "source": "art/blender/cog_gnat.py"
+  },
+  "courier_cog": {
+    "fbx": "art/fbx/cog/courier_cog.fbx",
+    "texture": "art/fbx/cog/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      3.707,
+      3.699,
+      4.19
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.85,
+      -0.095
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          1.85,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 3928,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          1.85,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 136,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      },
+      {
+        "name": "Crate",
+        "role": "weak",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          2.75,
+          0.55
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 48,
+        "rgb": [
+          255,
+          201,
+          74
+        ]
+      },
+      {
+        "name": "Leg_FL",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -1.2,
+          1.7,
+          -1.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 400,
+        "rgb": null
+      },
+      {
+        "name": "Leg_FR",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          1.2,
+          1.7,
+          -1.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 400,
+        "rgb": null
+      },
+      {
+        "name": "Leg_RL",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -1.2,
+          1.7,
+          1.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 400,
+        "rgb": null
+      },
+      {
+        "name": "Leg_RR",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          1.2,
+          1.7,
+          1.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 400,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [
+      "Crate"
+    ],
+    "attachments": [],
+    "assetId": "96811975374829",
+    "kind": "setpiece",
+    "source": "art/blender/cog_courier.py"
+  },
+  "callin_drop_capsule": {
+    "fbx": "art/fbx/callins/drop_capsule.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      7.64,
+      12.55,
+      7.74
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      6.275,
+      -0.05
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 6786,
+        "rgb": null
+      },
+      {
+        "name": "Door",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          1.12,
+          -3.44
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1580,
+        "rgb": null
+      },
+      {
+        "name": "Restraint",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          7.15,
+          2.55
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 428,
+        "rgb": null
+      },
+      {
+        "name": "Fins",
+        "role": "body",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 672,
+        "rgb": null
+      },
+      {
+        "name": "Thruster",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 112,
+        "rgb": [
+          255,
+          154,
+          60
+        ]
+      },
+      {
+        "name": "Lights",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 168,
+        "rgb": [
+          255,
+          226,
+          176
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "125020650349055",
+    "kind": "setpiece"
+  },
+  "callin_supply_pod": {
+    "fbx": "art/fbx/callins/supply_pod.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      5.074,
+      8.93,
+      5.074
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      4.465,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 2920,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 92,
+        "rgb": [
+          255,
+          179,
+          71
+        ]
+      },
+      {
+        "name": "Thruster",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 112,
+        "rgb": [
+          255,
+          154,
+          60
+        ]
+      },
+      {
+        "name": "Petal_1",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          1.3,
+          -2.1
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 696,
+        "rgb": null
+      },
+      {
+        "name": "Petal_2",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -2.1,
+          1.3,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 696,
+        "rgb": null
+      },
+      {
+        "name": "Petal_3",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          1.3,
+          2.1
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 696,
+        "rgb": null
+      },
+      {
+        "name": "Petal_4",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.1,
+          1.3,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 708,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "ItemMount",
+        "part": "Body",
+        "pos": [
+          0.0,
+          1.52,
+          -0.85
+        ]
+      },
+      {
+        "name": "Beacon",
+        "part": "Body",
+        "pos": [
+          0.0,
+          8.6,
+          0.0
+        ]
+      }
+    ],
+    "assetId": "109079562773024",
+    "kind": "setpiece"
+  },
+  "callin_strafe_jet": {
+    "fbx": "art/fbx/callins/strafe_jet.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      25.708,
+      6.26,
+      32.15
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      3.13,
+      -0.575
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          -0.84,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 3764,
+        "rgb": null
+      },
+      {
+        "name": "Canopy",
+        "role": "body",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          -0.84,
+          0.0
+        ],
+        "material": "Glass",
+        "textured": true,
+        "triangles": 100,
+        "rgb": null
+      },
+      {
+        "name": "BayDoor_L",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -1.2,
+          0.06,
+          1.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 128,
+        "rgb": null
+      },
+      {
+        "name": "BayDoor_R",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          1.2,
+          0.06,
+          1.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 128,
+        "rgb": null
+      },
+      {
+        "name": "Bombs",
+        "role": "body",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          -0.84,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 456,
+        "rgb": null
+      },
+      {
+        "name": "Missiles",
+        "role": "body",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          -0.84,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 116,
+        "rgb": null
+      },
+      {
+        "name": "EngineGlow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          -0.84,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 88,
+        "rgb": [
+          255,
+          176,
+          102
+        ]
+      },
+      {
+        "name": "Lights",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          -0.84,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 180,
+        "rgb": [
+          255,
+          241,
+          214
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Muzzle_R",
+        "part": "Body",
+        "pos": [
+          0.45,
+          0.91,
+          -16.7
+        ]
+      },
+      {
+        "name": "Muzzle_L",
+        "part": "Body",
+        "pos": [
+          -0.45,
+          0.91,
+          -16.7
+        ]
+      },
+      {
+        "name": "Exhaust_R",
+        "part": "Body",
+        "pos": [
+          2.75,
+          2.06,
+          15.7
+        ]
+      },
+      {
+        "name": "Exhaust_L",
+        "part": "Body",
+        "pos": [
+          -2.75,
+          2.06,
+          15.7
+        ]
+      },
+      {
+        "name": "BombRelease",
+        "part": "Body",
+        "pos": [
+          0.0,
+          -0.04,
+          1.0
+        ]
+      },
+      {
+        "name": "Pylon_1",
+        "part": "Body",
+        "pos": [
+          -5.0,
+          1.09,
+          2.243
+        ]
+      },
+      {
+        "name": "Pylon_2",
+        "part": "Body",
+        "pos": [
+          -8.0,
+          0.99,
+          3.486
+        ]
+      },
+      {
+        "name": "Pylon_3",
+        "part": "Body",
+        "pos": [
+          5.0,
+          1.09,
+          2.243
+        ]
+      },
+      {
+        "name": "Pylon_4",
+        "part": "Body",
+        "pos": [
+          8.0,
+          0.99,
+          3.486
+        ]
+      }
+    ],
+    "assetId": "73759555196592",
+    "kind": "setpiece"
+  },
+  "callin_sentry_turret": {
+    "fbx": "art/fbx/callins/sentry_turret.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      4.266,
+      4.08,
+      5.025
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      2.04,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Base",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.767
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 2182,
+        "rgb": null
+      },
+      {
+        "name": "Yaw",
+        "role": "limb",
+        "parent": "Base",
+        "pivot": [
+          0.0,
+          1.6,
+          0.767
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1626,
+        "rgb": null
+      },
+      {
+        "name": "Gun",
+        "role": "limb",
+        "parent": "Yaw",
+        "pivot": [
+          0.0,
+          2.95,
+          0.767
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1444,
+        "rgb": null
+      },
+      {
+        "name": "Sensor",
+        "role": "glow",
+        "parent": "Gun",
+        "pivot": [
+          0.0,
+          2.95,
+          0.767
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          79,
+          216,
+          255
+        ]
+      },
+      {
+        "name": "Status",
+        "role": "glow",
+        "parent": "Base",
+        "pivot": [
+          0.0,
+          0.0,
+          0.767
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 48,
+        "rgb": [
+          255,
+          179,
+          71
+        ]
+      },
+      {
+        "name": "Barrel_L",
+        "role": "limb",
+        "parent": "Gun",
+        "pivot": [
+          -0.2,
+          2.9,
+          -0.083
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 268,
+        "rgb": null
+      },
+      {
+        "name": "Barrel_R",
+        "role": "limb",
+        "parent": "Gun",
+        "pivot": [
+          0.2,
+          2.9,
+          -0.083
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 268,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Sensor",
+        "part": "Gun",
+        "pos": [
+          0.0,
+          3.48,
+          0.087
+        ]
+      },
+      {
+        "name": "Muzzle_L",
+        "part": "Barrel_L",
+        "pos": [
+          -0.2,
+          2.9,
+          -2.533
+        ]
+      },
+      {
+        "name": "Muzzle_R",
+        "part": "Barrel_R",
+        "pos": [
+          0.2,
+          2.9,
+          -2.533
+        ]
+      }
+    ],
+    "assetId": "139947058667229",
+    "kind": "setpiece"
+  },
+  "callin_mine": {
+    "fbx": "art/fbx/callins/mine.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      1.429,
+      0.57,
+      1.414
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      0.285,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.04,
+          -0.083
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 624,
+        "rgb": null
+      },
+      {
+        "name": "Light",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.04,
+          -0.083
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 32,
+        "rgb": [
+          255,
+          42,
+          42
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Blast",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.24,
+          -0.083
+        ]
+      },
+      {
+        "name": "Lens",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.57,
+          -0.083
+        ]
+      }
+    ],
+    "assetId": "80365228669094",
+    "kind": "setpiece"
+  },
+  "callin_shield_emitter": {
+    "fbx": "art/fbx/callins/shield_emitter.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      1.99,
+      3.273,
+      2.182
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.636,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.265,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1356,
+        "rgb": null
+      },
+      {
+        "name": "Head",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -0.265,
+          2.3,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 454,
+        "rgb": null
+      },
+      {
+        "name": "Emitter",
+        "role": "glow",
+        "parent": "Head",
+        "pivot": [
+          -0.265,
+          2.3,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 116,
+        "rgb": [
+          79,
+          216,
+          255
+        ]
+      },
+      {
+        "name": "Cells",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -0.265,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 108,
+        "rgb": [
+          79,
+          216,
+          255
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "DomeCenter",
+        "part": "Body",
+        "pos": [
+          -0.265,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "name": "Emitter",
+        "part": "Head",
+        "pos": [
+          -0.265,
+          2.9,
+          0.0
+        ]
+      }
+    ],
+    "assetId": "86759901605433",
+    "kind": "setpiece"
+  },
+  "callin_bomb_halfton": {
+    "fbx": "art/fbx/callins/bomb_halfton.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      1.676,
+      1.848,
+      6.625
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      0.924,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.038,
+          -0.087
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1568,
+        "rgb": null
+      },
+      {
+        "name": "Fins",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.838,
+          3.213
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 272,
+        "rgb": null
+      },
+      {
+        "name": "Light",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.038,
+          -0.087
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          42,
+          42
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Trail",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.838,
+          3.312
+        ]
+      },
+      {
+        "name": "Impact",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.838,
+          -3.387
+        ]
+      }
+    ],
+    "assetId": "135178989612861",
+    "kind": "setpiece"
+  },
+  "callin_shell_barrage": {
+    "fbx": "art/fbx/callins/shell_barrage.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      0.51,
+      0.51,
+      1.54
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      0.255,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.255,
+          -0.01
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 528,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.255,
+          -0.01
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          154,
+          60
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Impact",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.255,
+          -0.77
+        ]
+      },
+      {
+        "name": "Trail",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.255,
+          0.77
+        ]
+      }
+    ],
+    "assetId": "72760059842460",
+    "kind": "setpiece"
+  },
+  "callin_shell_bomblet": {
+    "fbx": "art/fbx/callins/shell_bomblet.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      0.29,
+      0.276,
+      0.69
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      0.138,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.138,
+          -0.015
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 268,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.138,
+          -0.015
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 20,
+        "rgb": [
+          255,
+          42,
+          42
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Impact",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.138,
+          -0.345
+        ]
+      },
+      {
+        "name": "Trail",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.138,
+          0.335
+        ]
+      }
+    ],
+    "assetId": "125695040091497",
+    "kind": "setpiece"
+  },
+  "callin_shell_emp": {
+    "fbx": "art/fbx/callins/shell_emp.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      0.6,
+      0.571,
+      1.51
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      0.285,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.285,
+          -0.03
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 488,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.285,
+          -0.03
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 180,
+        "rgb": [
+          79,
+          216,
+          255
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Impact",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.285,
+          -0.755
+        ]
+      },
+      {
+        "name": "Trail",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.285,
+          0.715
+        ]
+      }
+    ],
+    "assetId": "73503827860156",
+    "kind": "setpiece"
+  },
+  "callin_shell_canister": {
+    "fbx": "art/fbx/callins/shell_canister.fbx",
+    "texture": "art/fbx/callins/palette_human.png",
+    "size_studs_roblox_xyz": [
+      0.704,
+      0.696,
+      1.29
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      0.348,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.348,
+          -0.07
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 576,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.348,
+          -0.07
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 120,
+        "rgb": [
+          125,
+          255,
+          58
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Impact",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.348,
+          -0.645
+        ]
+      },
+      {
+        "name": "Trail",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.348,
+          0.625
+        ]
+      },
+      {
+        "name": "Vent",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.348,
+          -0.645
+        ]
+      }
+    ],
+    "assetId": "78552785723300",
+    "kind": "setpiece"
+  },
+  "callin_cog_dropship": {
+    "fbx": "art/fbx/callins/cog_dropship.fbx",
+    "texture": "art/fbx/callins/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      19.922,
+      10.614,
+      24.298
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      5.307,
+      0.0
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          -6.54,
+          0.531
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 5416,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          -6.54,
+          0.531
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 204,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      },
+      {
+        "name": "Engine_FL",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -5.95,
+          5.66,
+          -5.469
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 744,
+        "rgb": null
+      },
+      {
+        "name": "Thrusters_FL",
+        "role": "glow",
+        "parent": "Engine_FL",
+        "pivot": [
+          -5.95,
+          5.66,
+          -5.469
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 60,
+        "rgb": [
+          255,
+          122,
+          42
+        ]
+      },
+      {
+        "name": "Engine_FR",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          5.95,
+          5.66,
+          -5.469
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 744,
+        "rgb": null
+      },
+      {
+        "name": "Thrusters_FR",
+        "role": "glow",
+        "parent": "Engine_FR",
+        "pivot": [
+          5.95,
+          5.66,
+          -5.469
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 60,
+        "rgb": [
+          255,
+          122,
+          42
+        ]
+      },
+      {
+        "name": "Engine_BL",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          -5.95,
+          5.66,
+          6.531
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 744,
+        "rgb": null
+      },
+      {
+        "name": "Thrusters_BL",
+        "role": "glow",
+        "parent": "Engine_BL",
+        "pivot": [
+          -5.95,
+          5.66,
+          6.531
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 60,
+        "rgb": [
+          255,
+          122,
+          42
+        ]
+      },
+      {
+        "name": "Engine_BR",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          5.95,
+          5.66,
+          6.531
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 744,
+        "rgb": null
+      },
+      {
+        "name": "Thrusters_BR",
+        "role": "glow",
+        "parent": "Engine_BR",
+        "pivot": [
+          5.95,
+          5.66,
+          6.531
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 60,
+        "rgb": [
+          255,
+          122,
+          42
+        ]
+      },
+      {
+        "name": "Hook_1",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          2.76,
+          -6.069
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 236,
+        "rgb": null
+      },
+      {
+        "name": "Hook_2",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          2.76,
+          -1.669
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 236,
+        "rgb": null
+      },
+      {
+        "name": "Hook_3",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          2.76,
+          2.731
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 236,
+        "rgb": null
+      },
+      {
+        "name": "Hook_4",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          2.76,
+          7.131
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 236,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Eye",
+        "part": "Body",
+        "pos": [
+          0.0,
+          5.91,
+          -12.169
+        ]
+      },
+      {
+        "name": "Exhaust_FL",
+        "part": "Engine_FL",
+        "pos": [
+          -7.95,
+          4.06,
+          -5.469
+        ]
+      },
+      {
+        "name": "Exhaust_FR",
+        "part": "Engine_FR",
+        "pos": [
+          7.95,
+          4.06,
+          -5.469
+        ]
+      },
+      {
+        "name": "Exhaust_BL",
+        "part": "Engine_BL",
+        "pos": [
+          -7.95,
+          4.06,
+          6.531
+        ]
+      },
+      {
+        "name": "Exhaust_BR",
+        "part": "Engine_BR",
+        "pos": [
+          7.95,
+          4.06,
+          6.531
+        ]
+      },
+      {
+        "name": "Hook_1",
+        "part": "Hook_1",
+        "pos": [
+          0.0,
+          0.46,
+          -6.069
+        ]
+      },
+      {
+        "name": "Hook_2",
+        "part": "Hook_2",
+        "pos": [
+          0.0,
+          0.46,
+          -1.669
+        ]
+      },
+      {
+        "name": "Hook_3",
+        "part": "Hook_3",
+        "pos": [
+          0.0,
+          0.46,
+          2.731
+        ]
+      },
+      {
+        "name": "Hook_4",
+        "part": "Hook_4",
+        "pos": [
+          0.0,
+          0.46,
+          7.131
+        ]
+      }
+    ],
+    "assetId": "116700620560829",
+    "kind": "setpiece"
   }
 }

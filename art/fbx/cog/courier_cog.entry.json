@@ -1,0 +1,128 @@
+{
+  "fbx": "art/fbx/courier_cog.fbx",
+  "texture": "art/fbx/palette_cogwork.png",
+  "size_studs_roblox_xyz": [
+    3.707,
+    3.699,
+    4.19
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    1.85,
+    -0.095
+  ],
+  "palette": "cogwork",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        1.85,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 3928,
+      "rgb": null
+    },
+    {
+      "name": "Glow",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        1.85,
+        0.0
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 136,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Crate",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        2.75,
+        0.55
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 48,
+      "rgb": [
+        255,
+        201,
+        74
+      ]
+    },
+    {
+      "name": "Leg_FL",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -1.2,
+        1.7,
+        -1.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 400,
+      "rgb": null
+    },
+    {
+      "name": "Leg_FR",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        1.2,
+        1.7,
+        -1.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 400,
+      "rgb": null
+    },
+    {
+      "name": "Leg_RL",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -1.2,
+        1.7,
+        1.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 400,
+      "rgb": null
+    },
+    {
+      "name": "Leg_RR",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        1.2,
+        1.7,
+        1.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 400,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [
+    "Crate"
+  ],
+  "attachments": [],
+  "assetId": ""
+}
