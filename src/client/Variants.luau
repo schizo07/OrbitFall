@@ -43,6 +43,16 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/CombatPose (+ Fx/GunFeel casings): the gun follows the camera to the left shoulder (V / R3)
+		name = "LEFT HAND",
+		keys = { "Feel_LeftShoulder", "Feel_LeftCasings" },
+		presets = {
+			{ name = "A gun mirrors with the camera, brass out left", set = {} },
+			{ name = "B gun mirrors, brass from the gun's right port", set = { Feel_LeftCasings = "port" } },
+			{ name = "C always right-handed (old)", set = { Feel_LeftShoulder = "old" } },
+		},
+	},
+	{
 		-- client/Fx/Blast.luau: mushroom cloud (stem + cap + rolling ring) on fire blasts from a Huge frag up
 		name = "MUSHROOM",
 		keys = { "Feel_Mushroom" },
@@ -266,6 +276,135 @@ local GROUPS = {
 		presets = {
 			{ name = "A every dropship shot down", set = {} },
 			{ name = "B every second dropship", set = { Feel_AirDefence = "half" } },
+		},
+	},
+	{
+		-- client/Fx/VitalsFx + server/PlayerService: hold the stim key (F / D-pad Left / touch STIM) this long; a bar fills
+		-- under the prompt, early release = no stim. Read by the server too (server = mirrored)
+		name = "STIM HOLD",
+		keys = { "Feel_StimHold" },
+		server = true,
+		presets = {
+			{ name = "A hold 0.8 s", set = {} },
+			{ name = "B hold 0.5 s", set = { Feel_StimHold = 0.5 } },
+			{ name = "C hold 1.2 s", set = { Feel_StimHold = 1.2 } },
+			{ name = "D tap (old)", set = { Feel_StimHold = 0 } },
+		},
+	},
+	{
+		-- client/DownedPose + Movement: how a downed trooper lies (everyone sees it). Test: arena key M x3 = down
+		name = "DOWNED POSE",
+		keys = { "Feel_DownedPose" },
+		presets = {
+			{ name = "A propped on the left elbow", set = {} },
+			{ name = "B on the back", set = { Feel_DownedPose = "back" } },
+			{ name = "C plain prone (old)", set = { Feel_DownedPose = "prone" } },
+		},
+	},
+	{
+		-- client/DownedPose + Movement: getting up from downed (stim or squadmate revive)
+		name = "GET UP",
+		keys = { "Feel_DownedGetUp" },
+		presets = {
+			{ name = "A push up, crouch, stand (~0.4 s)", set = {} },
+			{ name = "B straight up (old)", set = { Feel_DownedGetUp = "snap" } },
+		},
+	},
+	{
+		-- Phone perf tuning. client/Fx/EnemyAnim: 100-stud enemy anim range at quality 0.5 (was 160), at most 6 hit
+		-- Highlights at once (was 20). client/FootPlant: heel + toe rays only. client/Fx/CallInFx: beacon pulse written at
+		-- 20 Hz. server/Enemies/EnemyAI: non-fodder ground snap every 0.9 studs (was 0.25); the server can't tell who is on
+		-- touch, so its part is on for both B and C (server = mirrored).
+		name = "PERF",
+		keys = { "Feel_Perf" },
+		server = true,
+		presets = {
+			{ name = "A current (off)", set = {} },
+			{ name = "B on touch devices only", set = { Feel_Perf = "touch" } },
+			{ name = "C everywhere (judge on PC)", set = { Feel_Perf = "all" } },
+		},
+	},
+	{
+		-- client/Fx/LumenFx: Lumen Concord charge / beam / pulse / blink / rift / shard death sizes and counts, and the
+		-- crystal-biome aurora. The pulse ring always shows the real damage radius.
+		name = "LUMEN FX",
+		keys = { "Feel_LumenFx" },
+		presets = {
+			{ name = "A default", set = {} },
+			{ name = "B bigger + brighter, more shards", set = { Feel_LumenFx = "big" } },
+			{ name = "C minimal (fewer parts, no lights, no aurora)", set = { Feel_LumenFx = "min" } },
+		},
+	},
+	{
+		-- client/UI/Tips: first-time hint card at the top centre (shared/Data/Tips.luau)
+		name = "TIPS",
+		keys = { "Feel_Tips" },
+		presets = {
+			{ name = "A hints on", set = {} },
+			{ name = "B only the first 3 min of combat", set = { Feel_Tips = "early" } },
+			{ name = "C off", set = { Feel_Tips = "off" } },
+		},
+	},
+	{
+		-- client/UI/AfterAction: mission-end report (numbers per trooper from server/MissionStats); read when a report arrives
+		name = "AFTER ACTION",
+		keys = { "Feel_AfterAction" },
+		presets = {
+			{ name = "A full report (objectives + stats per trooper)", set = {} },
+			{ name = "B compact (banner + titles only)", set = { Feel_AfterAction = "compact" } },
+			{ name = "C off (results panel only, old)", set = { Feel_AfterAction = "off" } },
+		},
+	},
+	{
+		-- server/Enemies/EnemyAI (per-unit numbers in shared/Data/Enemies `tactics`): COG hold range + side-step, callout,
+		-- flank, wounded Rivet backs off, Bulwark pushes; Brood packs spread their approach, swarm Skitterlings sometimes leap,
+		-- a wounded Charger / Titan screeches and speeds up nearby bugs. Arena keys 4/8/I (COG), 5/7/O (Brood)
+		name = "ENEMY TACTICS",
+		keys = { "Feel_EnemyTactics" },
+		server = true,
+		presets = {
+			{ name = "A on", set = {} },
+			{ name = "B stronger (2x flank + leap chance, wider spread)", set = { Feel_EnemyTactics = "strong" } },
+			{ name = "C off (old straight-in AI)", set = { Feel_EnemyTactics = "off" } },
+		},
+	},
+	{
+		-- touch only (Studio Device Emulator): UI/EventFeed FEED button, UI/HUD beacon prompt / kill streak / barrel ring
+		name = "PHONE HUD",
+		keys = { "Feel_PhoneHud" },
+		presets = {
+			{ name = "A FEED top row, prompt + streak above crosshair, ring x0.7", set = {} },
+			{ name = "B old (FEED bottom-left, prompt low, streak high)", set = { Feel_PhoneHud = "old" } },
+		},
+	},
+	{
+		-- client/Input: gamepad L3 sprint
+		name = "PAD SPRINT",
+		keys = { "Feel_PadSprint" },
+		presets = {
+			{ name = "A L3 click toggles, stops when the stick is let go", set = {} },
+			{ name = "B hold L3 (old)", set = { Feel_PadSprint = "hold" } },
+		},
+	},
+	{
+		-- server/WeaponService: what a reload does with the magazine still in the gun (server = mirrored); HUD reserve readout
+		name = "MAGS",
+		keys = { "Feel_Mags" },
+		server = true,
+		presets = {
+			{ name = "A mags, early reload throws the rounds left away", set = {} },
+			{ name = "B mags, part-used mag kept and loaded last", set = { Feel_Mags = "keep" } },
+			{ name = "C pooled rounds, nothing lost", set = { Feel_Mags = "pool" } },
+		},
+	},
+	{
+		-- client/Sway: aim-point drift + breathing while aiming, more after sprinting / low stamina, less crouched / prone
+		name = "SWAY",
+		keys = { "Feel_Sway" },
+		presets = {
+			{ name = "A light", set = {} },
+			{ name = "B stronger (x2.2)", set = { Feel_Sway = "strong" } },
+			{ name = "C off", set = { Feel_Sway = "off" } },
 		},
 	},
 }

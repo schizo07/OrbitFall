@@ -62,9 +62,14 @@ local function relDeg(bearing: number, yaw: number): number
 	return (bearing - yaw + 180) % 360 - 180
 end
 
+-- called every frame for the alert clock: the string is only formatted again when the whole second changes
+local fmtSec, fmtText = -1, ""
 local function fmtTime(s: number): string
 	s = math.max(0, math.ceil(s))
-	return string.format("%d:%02d", s // 60, s % 60)
+	if s ~= fmtSec then
+		fmtSec, fmtText = s, string.format("%d:%02d", s // 60, s % 60)
+	end
+	return fmtText
 end
 
 local function music(level: number, fade: number?)

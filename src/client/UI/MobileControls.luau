@@ -311,6 +311,27 @@ function MobileControls.init()
 		stim.stroke.Transparency = if n > 0 then 0.15 else 0.6
 	end
 	Store.on("me", refreshStim)
+	-- hold to stim (Fx/VitalsFx writes Store "stimHold" = 0..1 while held, nil otherwise): a green disc grows in the button
+	local holdFill = Instance.new("Frame")
+	holdFill.Name = "HoldFill"
+	holdFill.AnchorPoint = Vector2.new(0.5, 0.5)
+	holdFill.Position = UDim2.fromScale(0.5, 0.5)
+	holdFill.Size = UDim2.fromScale(0, 0)
+	holdFill.BackgroundColor3 = Style.Green
+	holdFill.BackgroundTransparency = 0.45
+	holdFill.BorderSizePixel = 0
+	holdFill.ZIndex = 0
+	holdFill.Visible = false
+	holdFill.Parent = stim.btn
+	Theme.corner(holdFill, 56)
+	Store.on("stimHold", function(v)
+		if type(v) == "number" then
+			holdFill.Visible = true
+			holdFill.Size = UDim2.fromScale(math.clamp(v, 0, 1), math.clamp(v, 0, 1))
+		else
+			holdFill.Visible = false
+		end
+	end)
 
 	-- JUMP (hold)
 	local jump = make("Jump", 76, 176, 64, "@up", "JUMP", C.Text, 24)

@@ -6,6 +6,17 @@ local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local IS_STUDIO = RunService:IsStudio()
+
+-- Studio A/B Feel_Perf ("PERF": "touch" = phones only, "all" = everywhere): the beacon pulse writes its parts at 20 Hz
+local function perfOn(): boolean
+	if not IS_STUDIO then
+		return false
+	end
+	local mode = workspace:GetAttribute("Feel_Perf")
+	return mode == "all" or (mode == "touch" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
+end
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local OverwatchPath = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("OverwatchPath"))
@@ -372,6 +383,7 @@ local function registerBeacon(Fx: any)
 		local t0 = os.clock()
 		local delay = if type(d.t) == "number" then d.t else 3
 		local nextRing = 0
+		local nextPulse = 0 -- PERF A/B: next time the pulse is written
 		local phase = 0
 		local id = d.id
 		local conn = RunService.RenderStepped:Connect(function(dt)
@@ -389,24 +401,33 @@ local function registerBeacon(Fx: any)
 			end
 			heat = heat * heat
 			phase += dt * (7 + 18 * heat) -- pulse speeds up as the strike gets close
+			local writePulse = true
+			if perfOn() then
+				writePulse = now >= nextPulse
+				if writePulse then
+					nextPulse = now + 1 / 20
+				end
+			end
 			local k = 0.5 + 0.5 * math.sin(phase)
-			local w = 1 + 1.3 * heat
-			column.Transparency = 0.45 + 0.2 * k - 0.25 * heat
-			column.Size = Vector3.new((1.2 + 0.4 * k) * w, HEIGHT, (1.2 + 0.4 * k) * w)
-			core.Size = Vector3.new(0.45 * (1 + 0.8 * heat), HEIGHT, 0.45 * (1 + 0.8 * heat))
-			halo.Size = Vector3.new((3 + 1.2 * k) * w, HEIGHT, (3 + 1.2 * k) * w)
-			halo.Transparency = 0.88 - 0.18 * heat
-			bloomSleeve.Size = Vector3.new((9 + 3 * k) * w, HEIGHT, (9 + 3 * k) * w)
-			bloomSleeve.Transparency = 0.94 - 0.08 * heat
-			lamp.Brightness = (2 + 2 * k) * (1 + 1.5 * heat)
-			lamp.Range = 30 + 25 * heat
-			sparks.Rate = (if perfect then 40 else 22) * (1 + 2 * heat)
-			-- far billboard: off within 60 studs, full from 160
-			local cam = workspace.CurrentCamera
-			local cd = if cam then (cam.CFrame.Position - pos).Magnitude else 0
-			local farA = math.clamp((cd - 60) / 100, 0, 1)
-			far.BackgroundTransparency = 1 - farA * (0.55 + 0.15 * k + 0.3 * heat)
-			bb.Size = UDim2.new(2.4 * w + cd * 0.004, 0, HEIGHT, 0) -- a little wider with distance so it stays a few pixels thick
+			if writePulse then
+				local w = 1 + 1.3 * heat
+				column.Transparency = 0.45 + 0.2 * k - 0.25 * heat
+				column.Size = Vector3.new((1.2 + 0.4 * k) * w, HEIGHT, (1.2 + 0.4 * k) * w)
+				core.Size = Vector3.new(0.45 * (1 + 0.8 * heat), HEIGHT, 0.45 * (1 + 0.8 * heat))
+				halo.Size = Vector3.new((3 + 1.2 * k) * w, HEIGHT, (3 + 1.2 * k) * w)
+				halo.Transparency = 0.88 - 0.18 * heat
+				bloomSleeve.Size = Vector3.new((9 + 3 * k) * w, HEIGHT, (9 + 3 * k) * w)
+				bloomSleeve.Transparency = 0.94 - 0.08 * heat
+				lamp.Brightness = (2 + 2 * k) * (1 + 1.5 * heat)
+				lamp.Range = 30 + 25 * heat
+				sparks.Rate = (if perfect then 40 else 22) * (1 + 2 * heat)
+				-- far billboard: off within 60 studs, full from 160
+				local cam = workspace.CurrentCamera
+				local cd = if cam then (cam.CFrame.Position - pos).Magnitude else 0
+				local farA = math.clamp((cd - 60) / 100, 0, 1)
+				far.BackgroundTransparency = 1 - farA * (0.55 + 0.15 * k + 0.3 * heat)
+				bb.Size = UDim2.new(2.4 * w + cd * 0.004, 0, HEIGHT, 0) -- a little wider with distance so it stays a few pixels thick
+			end
 			if t >= nextRing then
 				nextRing = t + 0.9 * (1 - 0.55 * heat)
 				ring(pos, main, 1, 7 + 5 * heat, 0.9)

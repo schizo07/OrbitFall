@@ -13,9 +13,10 @@
 --
 -- Stims (server: PlayerService.useStim, Config.Stims):
 --   * input: Input action "Stim" (F; MobileControls STIM button) and gamepad D-pad Left, read here, only while the
---     Uplink dial (LB) is not held (A's dial types codes with the D-pad). Sends Action "stim".
+--     Uplink dial (LB) is not held (the dial types codes with the D-pad). Held for shared/Downed.stimHold() s
+--     (Config.Stims.Hold, Studio A/B STIM HOLD): "stimstart" on press, "stimcancel" on early release, "stim" when full.
 --   * Fx "Stim" {u, p, t} (everyone): green burst at the trooper + injector sound; for yourself a green screen flash
---   * Fx "StimDenied" {why = "empty" | "full" | "busy"}: short prompt + error click
+--   * Fx "StimDenied" {why = "empty" | "full" | "busy" | "hold"}: short prompt + error click
 --
 -- Context prompts (UI/ContextPrompt): "PRESS [F] TO USE STIM" while health is critical and you have stims;
 -- "PRESS [Z] TO DIVE PRONE" the first 3 times you take heavy fire (>= 30 % hp or 4 hits within 2.5 s).
@@ -32,6 +33,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
 local CombatPose = require(script.Parent.Parent:WaitForChild("CombatPose"))
+local DownedRules = require(Shared:WaitForChild("Downed"))
 
 local VitalsFx = {}
 
@@ -380,26 +382,97 @@ local function onHurt(d: any)
 end
 
 -- Stims --------------------------------------------------------------------------------------------------------------
-local function requestStim()
+-- Hold to stim: the key / D-pad Left / touch button is held for DownedRules.stimHold() s while a bar fills under the
+-- context prompt (and on the touch button, Store "stimHold" = 0..1); an early release cancels with no stim used. The
+-- server times the hold from "stimstart" (server/PlayerService). Hold time 0 (Studio A/B STIM HOLD D) = old tap.
+local hold: { t0: number, dur: number, down: boolean }? = nil
+local sentHoldFrac = -1
+
+local function canStim(): boolean
 	if dialHeld or Input.isDown("Dial") or Store.get("menuOpen") then
-		return
+		return false
 	end
 	local alive, me = meAlive()
 	if not alive or not inCombat() then
-		return
+		return false
 	end
 	if type(me.stims) == "number" and me.stims <= 0 then
 		ContextPrompt.show("stimdeny", "No stims left - call a supply drop", "", 1.6, 6)
 		if Audio then
 			Audio.play2D("UIError", { volume = 0.6 })
 		end
-		return
+		return false
 	end
-	if hpFrac(me) >= 0.999 then
+	local downed = DownedRules.isDowned(player)
+	if hpFrac(me) >= 0.999 and not downed then
 		ContextPrompt.show("stimdeny", "Health full", "", 1.2, 6)
+		return false
+	end
+	if not downed and (me.stimEnd or 0) > workspace:GetServerTimeNow() then
+		ContextPrompt.show("stimdeny", "Stim already working", "", 1.0, 6)
+		return false
+	end
+	return true
+end
+
+local function endHold(sendCancel: boolean)
+	if not hold then
 		return
 	end
-	Net.event("Action"):FireServer("stim")
+	hold = nil
+	sentHoldFrac = -1
+	ContextPrompt.setProgress("stimhold", nil)
+	ContextPrompt.hide("stimhold")
+	Store.set("stimHold", nil)
+	if sendCancel then
+		Net.event("Action"):FireServer("stimcancel")
+	end
+end
+
+local function requestStim()
+	if hold or not canStim() then
+		return
+	end
+	local dur = DownedRules.stimHold()
+	if dur <= 0 then
+		Net.event("Action"):FireServer("stim")
+		return
+	end
+	local downed = DownedRules.isDowned(player)
+	hold = { t0 = os.clock(), dur = dur, down = downed }
+	Net.event("Action"):FireServer("stimstart")
+	ContextPrompt.show("stimhold", if downed then "Hold {key} - stimming back up" else "Hold {key} - stimming", "Stim", nil, 9)
+	ContextPrompt.setProgress("stimhold", 0)
+	Store.set("stimHold", 0)
+	sentHoldFrac = 0
+end
+
+-- per frame while holding: fill, finish, or cancel when the hold can't go on (dial opened, menu, death, downed change)
+local function holdStep()
+	local h = hold
+	if not h then
+		return
+	end
+	local alive = meAlive()
+	if not alive or not inCombat() or Store.get("menuOpen") or Input.isDown("Dial") or DownedRules.isDowned(player) ~= h.down then
+		endHold(true)
+		return
+	end
+	local frac = (os.clock() - h.t0) / h.dur
+	if frac >= 1 then
+		endHold(false)
+		Net.event("Action"):FireServer("stim")
+		return
+	end
+	ContextPrompt.setProgress("stimhold", frac)
+	if frac - sentHoldFrac >= 0.04 then
+		sentHoldFrac = frac
+		Store.set("stimHold", frac)
+	end
+end
+
+function VitalsFx.isStimHolding(): boolean
+	return hold ~= nil
 end
 
 local function onStim(d: any)
@@ -447,6 +520,8 @@ local function onStimDenied(d: any)
 		ContextPrompt.show("stimdeny", "Health full", "", 1.2, 6)
 	elseif why == "busy" then
 		ContextPrompt.show("stimdeny", "Stim already working", "", 1.0, 6)
+	elseif why == "hold" then
+		ContextPrompt.show("stimdeny", "Hold to stim", "", 1.0, 6)
 	else
 		return
 	end
@@ -539,7 +614,7 @@ local function step(dt: number)
 	local wantStim = frac < CRIT and stims > 0 and not healing
 	if wantStim ~= ContextPrompt.isShowing("stim") then
 		if wantStim then
-			ContextPrompt.show("stim", "Press {key} to use stim", "Stim", nil, 5)
+			ContextPrompt.show("stim", if DownedRules.stimHold() > 0 then "Hold {key} to use stim" else "Press {key} to use stim", "Stim", nil, 5)
 		else
 			ContextPrompt.hide("stim")
 		end
@@ -582,8 +657,11 @@ function VitalsFx.init(fx: any, audio: any, juice: any)
 	Input.on("Stim", function(isDown)
 		if isDown then
 			requestStim()
+		else
+			endHold(true) -- released before the fill completed: no stim used
 		end
 	end)
+	RunService.RenderStepped:Connect(holdStep)
 	-- gamepad D-pad Left, only while the Uplink dial (LB / "Dial") is not held
 	Input.on("Dial", function(isDown)
 		dialHeld = isDown

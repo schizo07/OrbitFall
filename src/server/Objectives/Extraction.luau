@@ -1102,6 +1102,9 @@ function Extraction.start(map: any, onDone: (boarded: { Player }) -> ())
 			snapToEnd()
 			local cb = onDone
 			local out = table.clone(boardedList)
+			if S.MissionStats then
+				pcall(S.MissionStats.setBoarded, out) -- after-action report: who made it out
+			end
 			pcall(cb, out)
 		else
 			-- nobody made it: the Skiff leaves, the terminal re-arms

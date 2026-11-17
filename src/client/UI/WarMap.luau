@@ -29,6 +29,7 @@ local OWNER_COLOR = {
 	FREE = C.Friendly,
 	COG = Color3.fromHex("ff4a3a"),
 	BROOD = Color3.fromHex("8cff3a"),
+	LUMEN = Color3.fromHex("c060ff"),
 }
 local OBJECTIVES = { { id = "MISSILE", name = "Missile Launch" }, { id = "UPLINK", name = "Uplink Relay" }, { id = "HAUL", name = "Core Cells" } }
 

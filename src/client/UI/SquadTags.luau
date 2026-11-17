@@ -3,6 +3,7 @@
 --   * fades out when the teammate is close (< FADE_NEAR studs) and dims when it sits near the screen centre (the aim)
 --   * clamps to the screen edge (with a pointer) when the teammate is off-screen or behind the camera
 --   * a cyan cell glyph + CELL when that teammate carries a core cell (Player attribute CarryCell, haul objective)
+--   * red NAME DOWNED + a small bleed-out bar (DownedEnd); the bar turns green and fills while someone revives them
 -- Shown only while the mission is in Drop / Active / Extract.
 -- Studio A/B "SQUAD TAGS" (client/Variants.luau): workspace attribute TagTune_Mode = nil (fade) | "solid" | "off".
 -- Also: SquadTags.feed(text, color) puts Notify "comms" / "ship" lines ("<name>: <line>", HALCYON announcements) into the
@@ -14,6 +15,7 @@ local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
 local EventFeed = require(script.Parent.EventFeed)
 local Store = require(script.Parent.Parent.Store)
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"))
 
 local SquadTags = {}
 
@@ -83,7 +85,17 @@ local function makeTag(p: Player): any
 	cell.BorderSizePixel = 0
 	cell.Visible = false
 	cell.Parent = g
-	return { g = g, tag = tag, name = name, pointer = pointer, cell = cell, key = "" }
+	-- downed: bleed-out left (red), or the revive hold (green) while a squadmate holds the prompt
+	local bleed = Style.bar({
+		Name = "Bleed",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 29),
+		Size = UDim2.fromOffset(64, 3),
+		Color = Style.Red,
+		Parent = g,
+	})
+	bleed.back.Visible = false
+	return { g = g, tag = tag, name = name, pointer = pointer, cell = cell, bleed = bleed, span = 0, key = "" }
 end
 
 local function dropTag(p: Player)
@@ -142,6 +154,22 @@ local function step()
 			t.name.TextColor3 = if downed then Style.Red elseif carrying then CELL else Style.White
 			t.cell.Visible = carrying
 			t.cell.Position = UDim2.new(0.5, 24, 0, 8)
+			t.bleed.back.Visible = downed
+			t.span = 0
+		end
+		if downed then
+			local nowT = workspace:GetServerTimeNow()
+			local endAt = p:GetAttribute("DownedEnd")
+			local left = if type(endAt) == "number" then math.max(0, endAt - nowT) else 0
+			if t.span <= 0 then
+				t.span = math.max(left, 1) -- first look after going down = the full bar
+			end
+			local rs = p:GetAttribute("ReviveStart")
+			if type(rs) == "number" and p:GetAttribute("ReviveBy") ~= nil then
+				t.bleed.set((nowT - rs) / math.max(Config.Downed.ReviveHold, 0.1), Style.Green)
+			else
+				t.bleed.set(left / t.span, Style.Red)
+			end
 		end
 		-- position
 		local world = root.Position + Vector3.new(0, HEAD_UP, 0)

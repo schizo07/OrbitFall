@@ -11,6 +11,7 @@
 --  HitConfirm  S->C  (result: string, pos: Vector3, killed: boolean, weak: boolean)
 --  Ping        C->S  (pos: Vector3, enemyId: number?)           squad ping request (server/PingService)
 --              S->C  ({ u: userId, p: Vector3, e: number?, n: string? })   the ping, to every player (client/UI/Pings)
+--  AfterAction S->C  (report: table)                         mission-end report (server/MissionStats -> client/UI/AfterAction)
 --  Request     C->S  RemoteFunction (cmd: string, args: any) -> (ok: boolean, result: any)
 
 local RunService = game:GetService("RunService")
@@ -18,7 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Net = {}
 
-local EVENTS = { "Fire", "Action", "Fx", "State", "Notify", "HitConfirm", "Ping" }
+local EVENTS = { "Fire", "Action", "Fx", "State", "Notify", "HitConfirm", "Ping", "AfterAction" }
 local UNRELIABLE = { "FxU" }
 local FUNCS = { "Request" }
 

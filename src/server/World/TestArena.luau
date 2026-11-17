@@ -7,7 +7,7 @@
 --   S.TestArena.refill(p)                  ammo, grenades, call-in cooldowns
 --   S.TestArena.toggleDirector(on?)        the Director's automatic pacing (OFF by default: the arena is quiet)
 --   S.TestArena.forceBreach()              starts the Director if needed and forces a BREACH now
---   S.TestArena.toggleFaction()            COG <-> BROOD (what the Director spawns; Mission.faction)
+--   S.TestArena.toggleFaction()            COG -> BROOD -> LUMEN -> COG (what the Director spawns; Mission.faction)
 --   S.TestArena.spawnPlayer(p)             (re)spawn at the start with the starter kit (Mission.onPlayerJoined / auto respawn)
 --   S.TestArena.onClosed()                 Mission calls this when the arena state ends (any path)
 --
@@ -216,7 +216,7 @@ function TestArena.enter(faction: string?): (boolean, string?)
 	if S.Mission.state ~= "Ship" then
 		return false, "A mission is underway: `abort` first"
 	end
-	arenaFaction = if faction == "BROOD" then "BROOD" else "COG"
+	arenaFaction = if faction == "BROOD" or faction == "LUMEN" then faction else "COG"
 	directorOn = false
 
 	S.Map.clear() -- drop any leftover map / lighting so the arena starts from the ship state
@@ -359,7 +359,7 @@ function TestArena.forceBreach(): any
 end
 
 function TestArena.toggleFaction(): string
-	arenaFaction = if arenaFaction == "COG" then "BROOD" else "COG"
+	arenaFaction = if arenaFaction == "COG" then "BROOD" elseif arenaFaction == "BROOD" then "LUMEN" else "COG"
 	if isActive then
 		S.Mission.faction = arenaFaction
 		S.Mission.broadcast()

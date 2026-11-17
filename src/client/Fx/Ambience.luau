@@ -3,6 +3,7 @@
 -- plus 2-4 distant smoke columns. Local only, budgeted by Fx.quality (0.3-1, derived from the saved graphics level).
 --   desert: dust motes + a few wind-blown dust gusts      ash: falling ash + rising embers
 --   swamp:  drifting spores + a few glowing fireflies     ice: snowfall + glints
+--   crystal (Lumen Concord): violet light motes + cyan glints
 -- The biome comes from workspace.Map attribute "Biome" (set by MapBuilder; falls back to the mission planet's biome).
 -- Off on the ship (no Map folder / mission state "Ship").
 
@@ -78,6 +79,16 @@ local BIOME_FX: { [string]: { any } } = {
 			size = { 0.3, 0.5 }, alpha = { 1, 0.1, 1 }, color = RGB(220, 240, 255), emit = 1, accel = Vector3.new(2, -0.4, 1),
 		},
 	},
+	crystal = { -- Lumen Concord worlds (aurora ribbons: Fx/LumenFx.luau)
+		{ -- floating light motes, drifting slowly upward
+			tex = TEX_MOTE, rate = 10, life = { 8, 12 }, speed = { 0.3, 1 }, spread = 180, dir = "Top",
+			size = { 0.22, 0.42 }, alpha = { 1, 0.15, 1 }, color = RGB(200, 160, 255), emit = 1, accel = Vector3.new(0.3, 0.6, 0.2),
+		},
+		{ -- cyan crystal glints (decent graphics only)
+			tex = TEX_MOTE, rate = 3, life = { 4, 7 }, speed = { 0.4, 1.2 }, spread = 180, dir = "Top",
+			size = { 0.3, 0.5 }, alpha = { 1, 0.05, 1 }, color = RGB(170, 230, 255), emit = 1, accel = Vector3.new(0.5, 0.2, 0.3), firefly = true,
+		},
+	},
 }
 
 -- distant smoke column colours per biome
@@ -86,6 +97,7 @@ local SMOKE_COLOR = {
 	ash = RGB(46, 30, 30),
 	swamp = RGB(86, 120, 96),
 	ice = RGB(210, 224, 244),
+	crystal = RGB(150, 130, 190),
 }
 
 local DIRS = {
@@ -245,6 +257,9 @@ local function desiredBiome(): string?
 		if pl and BIOME_FX[pl.biome] then
 			return pl.biome
 		end
+	end
+	if mission and mission.faction == "LUMEN" then
+		return "crystal"
 	end
 	return if mission and mission.faction == "BROOD" then "swamp" else "desert"
 end

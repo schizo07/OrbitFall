@@ -3,7 +3,8 @@
 --   cyan  = objective completions
 -- (UI/WarFeed is the war-map community feed on the ship; this one is the live mission feed.)
 -- API: build(parent, touch) / push(text, color, kind?) / route(notifyText, color, kind) -> handled / setVisible / clear / tick.
--- Touch: the feed (plus a one-line resource summary) sits behind a small FEED button on the left edge, auto-closes after 8 s.
+-- Touch: the feed (plus a one-line resource summary) sits behind a FEED button in the top row (right of the compass),
+-- auto-closes after 8 s.
 local Store = require(script.Parent.Parent.Store)
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
@@ -16,7 +17,11 @@ local LIFE = 8 -- seconds a line stays before it fades
 local FADE = 0.6
 local MAX_CHARS = 38
 local OPEN_FOR = 8 -- touch popup auto-close
-local FEED_X = Style.MARGIN + 210 + 66 + 8 -- touch: just right of the own card (HUD: HP_BAR_W 210 + 66 wide)
+local FEED_X = Style.MARGIN + 210 + 66 + 8 -- touch, "old" layout: just right of the own card (HUD: HP_BAR_W 210 + 66 wide)
+-- Touch FEED button, default layout: top row, just right of the compass (Compass: centred, 0.34 of the content width),
+-- so it is out of the left thumbstick zone and big enough to tap; the popup opens under the compass, left of the button.
+local COMPASS_RIGHT = 0.67
+local FEED_W, FEED_H = 76, 40
 
 local ui: { [string]: any } = {}
 local lines: { any } = {}
@@ -39,6 +44,28 @@ local function setOpen(on: boolean)
 	ui.holder.Visible = want and (not touch or open)
 	if ui.btnLabel then
 		ui.btnLabel.TextColor3 = if open then Style.Amber else Style.White
+	end
+end
+
+-- Studio A/B "PHONE HUD" (Feel_PhoneHud): nil = FEED button in the top row; "old" = button + popup bottom-left
+-- beside the own card (inside the thumbstick zone, 62 x 24 content px)
+local function placeTouch()
+	local holder, btn = ui.holder, ui.button
+	if not holder or not btn then
+		return
+	end
+	if workspace:GetAttribute("Feel_PhoneHud") == "old" then
+		holder.AnchorPoint = Vector2.new(0, 1)
+		holder.Position = UDim2.new(0, FEED_X, 1, -(Style.MARGIN + 28))
+		btn.AnchorPoint = Vector2.new(0, 1)
+		btn.Position = UDim2.new(0, FEED_X, 1, -Style.MARGIN)
+		btn.Size = UDim2.fromOffset(62, 24)
+	else
+		btn.AnchorPoint = Vector2.new(0, 0)
+		btn.Position = UDim2.new(COMPASS_RIGHT, 12, 0, Style.MARGIN)
+		btn.Size = UDim2.fromOffset(FEED_W, FEED_H)
+		holder.AnchorPoint = Vector2.new(1, 0)
+		holder.Position = UDim2.new(COMPASS_RIGHT, 4, 0, Style.MARGIN + FEED_H + 4)
 	end
 end
 
@@ -170,6 +197,8 @@ function EventFeed.build(parent: Instance, isTouch: boolean)
 			Parent = btn,
 		})
 		ui.button = btn
+		placeTouch()
+		workspace:GetAttributeChangedSignal("Feel_PhoneHud"):Connect(placeTouch)
 		btn.Activated:Connect(function()
 			setOpen(not open)
 			Theme.sfx("UIClick")

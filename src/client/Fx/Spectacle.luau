@@ -900,6 +900,13 @@ local function onSourceOpen(id: number, rec: SourceRec)
 		-- pod / shard incoming: a puff of dust and a low rumble from the ground
 		blastDustS.emit(rec.g, qn(8))
 		snd("WarnRumble", rec.g, { volume = 0.7, pitch = 1.1, priority = 3 })
+		if rec.f == "LUMEN" then
+			-- the rift shard rises out of a light tear in the ground (Fx/LumenFx.luau)
+			local okD, desc = pcall(function()
+				return IT.Sources.descent.LUMEN
+			end)
+			Fx.handle("RiftGate", { p = rec.g, r = 5, t = (if okD and type(desc) == "number" then desc else 1.5) + 0.8 })
+		end
 	end
 end
 
@@ -933,6 +940,9 @@ local function onSourceClose(id: number, rec: SourceRec, why: string)
 			Fx.debris(rec.g + V3(0, 1, 0), { n = 8, style = "rock", palette = rec.pal, speed = 16, up = 0.7, scale = 1.4, life = 1.8 })
 		end
 		snd("Breach", rec.g, { volume = 0.7, pitch = 0.55, priority = 3 })
+		if rec.f == "LUMEN" and Fx.lumenShatter then
+			Fx.lumenShatter(rec.g + V3(0, 5, 0), 3)
+		end
 		if d < 70 then
 			Juice.shake(0.4 + 0.4 * (1 - d / 70), 0.45)
 		end

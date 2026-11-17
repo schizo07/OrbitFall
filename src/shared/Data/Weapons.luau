@@ -31,6 +31,9 @@ export type Weapon = {
 	salvage: number?, -- armory price
 	rank: number?,
 	desc: string,
+	modes: { string }?, -- fire modes, cycled in play (first = default): "auto" | "burst" | "semi". nil = one mode from kind
+	burst: number?, -- rounds per burst (default 3)
+	burstGap: number?, -- extra pause after a burst before the next one, seconds (default 0.22)
 }
 
 local W: { [string]: Weapon } = {
@@ -120,7 +123,35 @@ local W: { [string]: Weapon } = {
 	},
 }
 
+-- fire modes (client/WeaponController cycles them with the FireMode action; server/WeaponService checks the rate per mode)
+W.PR7.modes = { "auto", "burst", "semi" }
+W.SM2.modes = { "auto", "burst" }
+W.VR1.modes = { "auto", "semi" }
+W.P3.modes = { "semi", "burst" }
+W.P3.burstGap = 0.3
+
 local Weapons = { byId = W }
+
+Weapons.BURST = 3
+Weapons.BURST_GAP = 0.22
+
+-- the weapon's fire modes, first = default
+function Weapons.modes(w: Weapon): { string }
+	return w.modes or { if w.kind == "auto" then "auto" else "semi" }
+end
+
+-- `mode` if the weapon has it, else its default mode
+function Weapons.validMode(w: Weapon, mode: any): string
+	local list = Weapons.modes(w)
+	if type(mode) == "string" then
+		for _, m in list do
+			if m == mode then
+				return m
+			end
+		end
+	end
+	return list[1]
+end
 
 function Weapons.get(id: string): Weapon?
 	return W[id]

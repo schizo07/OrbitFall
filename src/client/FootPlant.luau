@@ -91,7 +91,7 @@ local function rotateAbout(cf: CFrame, pivot: Vector3, r: CFrame): CFrame
 	return CFrame.new(pivot) * r * CFrame.new(-pivot) * cf
 end
 
-type Leg = { hip: any, knee: any, ankle: any, foot: BasePart, lift: number, tilt: CFrame? }
+type Leg = { hip: any, knee: any, ankle: any, joints: { any }, foot: BasePart, lift: number, tilt: CFrame? }
 local rig: { root: BasePart, rootJ: any, hum: Humanoid, char: Model, legs: { Leg } }? = nil
 
 local function build(c: Model)
@@ -117,7 +117,7 @@ local function build(c: Model)
 		if not (isJoint(hip) and isJoint(knee) and isJoint(ankle) and ft) then
 			return
 		end
-		table.insert(legs, { hip = hip, knee = knee, ankle = ankle, foot = ft :: BasePart, lift = 0 })
+		table.insert(legs, { hip = hip, knee = knee, ankle = ankle, joints = { hip, knee, ankle }, foot = ft :: BasePart, lift = 0 })
 	end
 	rig = { root = root, rootJ = rootJ, hum = hum, char = c, legs = legs }
 end
@@ -164,6 +164,34 @@ local function groundHit(p: Vector3, from: number): RaycastResult?
 end
 local MAX_TILT = math.rad(40) -- foot follows the slope up to this angle
 local CORNERS = { { -0.8, -0.8 }, { 0.8, -0.8 }, { -0.8, 0.8 }, { 0.8, 0.8 } }
+-- Studio A/B Feel_Perf ("PERF": "touch" = phones only, "all" = everywhere): heel and toe only (6 rays a frame, not 10)
+local CORNERS_PERF = { { 0, -0.8 }, { 0, 0.8 } }
+local IS_STUDIO = RunService:IsStudio()
+local UserInputService = game:GetService("UserInputService")
+
+-- ray filter: assigned only when the character, camera or Enemies folder changes (each assignment copies the list)
+local filterChar: Instance? = nil
+local filterCam: Instance? = nil
+local filterEnemies: Instance? = nil
+local function refreshFilter(char: Model)
+	local cam = workspace.CurrentCamera
+	local en = filterEnemies
+	if not (en and en.Parent == workspace) then
+		en = workspace:FindFirstChild("Enemies")
+	end
+	if char == filterChar and cam == filterCam and en == filterEnemies then
+		return
+	end
+	filterChar, filterCam, filterEnemies = char, cam, en
+	local ex: { Instance } = { char }
+	if cam then
+		table.insert(ex, cam)
+	end
+	if en then
+		table.insert(ex, en)
+	end
+	rayParams.FilterDescendantsInstances = ex
+end
 
 local function step(dt: number)
 	local r = rig
@@ -178,12 +206,14 @@ local function step(dt: number)
 		softFor = 0
 	end
 	lastOn = on
-	local ex ={ r.char, workspace.CurrentCamera }
-	local en = workspace:FindFirstChild("Enemies")
-	if en then
-		table.insert(ex, en)
+	refreshFilter(r.char)
+	local corners = CORNERS
+	if IS_STUDIO then
+		local perf = workspace:GetAttribute("Feel_Perf")
+		if perf == "all" or (perf == "touch" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) then
+			corners = CORNERS_PERF
+		end
 	end
-	rayParams.FilterDescendantsInstances = ex
 
 	local ltCF = child(r.root.CFrame, r.rootJ)
 	local castFrom = r.root.Position.Y -- rays start at hip height: anything higher is a wall, not ground
@@ -209,7 +239,7 @@ local function step(dt: number)
 				end
 			end
 			local tilted = tilt * ftCF.Rotation + ftCF.Position
-			for _, k in CORNERS do
+			for _, k in corners do
 				local bottom = (tilted * CFrame.new(k[1] * half.X, -half.Y, k[2] * half.Z)).Position
 				local hit = groundHit(bottom, castFrom)
 				if hit then
@@ -227,7 +257,7 @@ local function step(dt: number)
 		if leg.lift < 0.005 then
 			leg.lift = 0
 			-- hand back any correction still sitting on a joint nobody else rewrote
-			for _, j in { leg.hip, leg.knee, leg.ankle } do
+			for _, j in leg.joints do
 				local w = written[j]
 				if w then
 					if j.Transform == w.mine then
@@ -307,7 +337,9 @@ function FootPlant.init(movement: any)
 		task.spawn(build, player.Character)
 	end
 	RunService.PreSimulation:Connect(function(dt)
+		debug.profilebegin("FootPlant") -- MicroProfiler label
 		local ok, err = pcall(step, dt)
+		debug.profileend()
 		if not ok then
 			warn("[FootPlant] " .. tostring(err))
 			rig = nil

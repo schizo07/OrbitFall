@@ -189,6 +189,28 @@ local BIOMES: { [string]: Biome } = {
 			envDiffuse = 0.3, shadowSoft = 0.15,
 		},
 	},
+	crystal = { -- Lumen Concord worlds: pale chalky ground, lavender crystal outcrops, cool violet light
+		terrain = {
+			[M.Salt] = RGB(206, 200, 218), [M.Limestone] = RGB(178, 172, 196), [M.Ground] = RGB(150, 144, 170),
+			[M.Slate] = RGB(112, 104, 140), [M.Rock] = RGB(96, 88, 124), [M.Glacier] = RGB(176, 160, 232),
+			[M.Sand] = RGB(196, 190, 210), [M.Sandstone] = RGB(160, 150, 186), [M.Basalt] = RGB(58, 50, 82),
+			[M.Mud] = RGB(120, 110, 150), [M.Grass] = RGB(150, 144, 170),
+		},
+		rocks = { RGB(176, 170, 196), RGB(150, 142, 178), RGB(206, 200, 222) },
+		rockMat = M.Limestone,
+		crystal = RGB(170, 140, 255),
+		wall = { RGB(186, 180, 204), RGB(164, 158, 186), RGB(140, 134, 166) },
+		plant = { RGB(120, 106, 160), RGB(150, 136, 190) },
+		smoke = RGB(120, 110, 150),
+		mood = { -- cold morning light through violet haze; the glow lives on crystals and Lumen cores
+			clock = 7.4, elev = 0.17, bright = 2.6, expo = 0.0, amb = RGB(58, 52, 80), out = RGB(98, 92, 128),
+			top = RGB(214, 206, 255), bottom = RGB(120, 96, 176),
+			atmDensity = 0.38, atmOffset = 0.1, haze = 2.0, glare = 1.6, atm = RGB(170, 150, 230), decay = RGB(110, 80, 170),
+			tint = RGB(236, 232, 255), sat = -0.08, contrast = 0.3, bloom = 0.55, rays = 0.12, sun = 9, stars = 400,
+			cloudCover = 0.55, cloudDensity = 0.5, cloudColor = RGB(170, 160, 210),
+			envDiffuse = 0.35, shadowSoft = 0.15,
+		},
+	},
 }
 -- gritty pass for the non-desert planets (desert is authored dark above): terrain ~25% darker, props ~20%, hue identity kept
 do
@@ -197,7 +219,7 @@ do
 	end
 	for name, b in BIOMES do
 		if name ~= "desert" then
-			local tk = if name == "swamp" then 0.9 else 0.75 -- swamp already sits at dusk; full dimming made it murky
+			local tk = if name == "swamp" or name == "crystal" then 0.9 else 0.75 -- swamp already sits at dusk; full dimming made it murky (crystal: pale ground)
 			for mat, col in b.terrain do
 				if mat ~= M.CrackedLava then
 					b.terrain[mat] = dim(col, tk)
@@ -444,6 +466,20 @@ local function pickMat(x: number, z: number, h: number, slope: number): Enum.Mat
 			return M.Glacier
 		end
 		return M.Snow
+	elseif biomeName == "crystal" then
+		if high or slope > 0.95 then
+			return M.Slate
+		elseif slope > 0.5 then
+			return strata(h, M.Limestone, M.Slate)
+		elseif slope > 0.3 then
+			return M.Limestone
+		end
+		if n < -0.3 then
+			return M.Ground
+		elseif n > 0.4 then
+			return M.Glacier -- glassy lavender patches
+		end
+		return M.Salt
 	end
 	-- desert
 	if high or slope > 0.95 then
@@ -953,6 +989,11 @@ local function cover(parent: Instance, x: number, z: number, yaw: number, factio
 		if m or skipped then
 			return
 		end
+	elseif faction == "LUMEN" then
+		-- Lumen: a boulder with a small crystal growth on it (unlit)
+		rock(parent, x, z, rng:NextNumber(1.2, 1.9))
+		crystals(parent, x + rng:NextNumber(-1.5, 1.5), z + rng:NextNumber(-1.5, 1.5), rng:NextNumber(0.5, 0.8), nil, true)
+		return
 	else
 		local m, skipped = placeMesh(parent, "env_cog_barricade", x, z, { scale = rng:NextNumber(1, 1.3), yaw = yaw, sink = 0.06, collide = true, align = 0.5 })
 		if m or skipped then
@@ -1999,7 +2040,7 @@ local function natureSet(props: Instance, dressing: Instance)
 			end
 			glowPods(dressing, x, z, i % 2 == 0)
 		end
-	elseif biomeName == "ice" then
+	elseif biomeName == "ice" or biomeName == "crystal" then
 		for _ = 1, 10 do
 			local x, z = laneEdgeSpot(255)
 			crystals(props, x, z, rng:NextNumber(0.7, 1.9), nil, true)
@@ -2201,6 +2242,8 @@ local function dressSite(parent: Instance, name: string, faction: string)
 			local a, rr = a0 + k * math.pi + rng:NextNumber(-0.5, 0.5), rng:NextNumber(11, 14)
 			if bugs then
 				eggCluster(parent, c.X + math.cos(a) * rr, c.Y + math.sin(a) * rr)
+			elseif faction == "LUMEN" then
+				crystals(parent, c.X + math.cos(a) * rr, c.Y + math.sin(a) * rr, rng:NextNumber(0.9, 1.3))
 			else
 				scrapHeap(parent, c.X + math.cos(a) * rr, c.Y + math.sin(a) * rr)
 			end
@@ -2339,6 +2382,49 @@ local function dressBrood(parent: Instance)
 	end
 	-- (the flat box "ribs" are gone: tusks, egg clusters and resin webs on the lane edges instead)
 	hiveSet(parent)
+end
+
+-- Lumen Concord: crystal outcrops, leaning ceramic monolith shards with a light seam, glassy rift scars in the ground.
+-- Simple part placeholders (no Lumen env meshes yet).
+local function dressLumen(parent: Instance)
+	local shell = RGB(200, 192, 214)
+	local glow = RGB(170, 140, 255)
+	local terrain = Workspace.Terrain
+	-- crystal outcrops off the lanes: one big lit cluster + 1-3 smaller ones around it
+	for i = 1, 10 do
+		local x, z = wildSpot(44, 18, 255)
+		crystals(parent, x, z, rng:NextNumber(1.6, 2.6), glow, i > 4)
+		for _ = 1, rng:NextInteger(1, 3) do
+			local a, d = rng:NextNumber(0, TAU), rng:NextNumber(5, 12)
+			crystals(parent, x + math.cos(a) * d, z + math.sin(a) * d, rng:NextNumber(0.6, 1.2), glow, true)
+		end
+		maybeYield()
+	end
+	-- monolith shards: tall leaning wedges planted deep, a thin light seam up one face
+	for _ = 1, 8 do
+		local x, z = wildSpot(50, 22, 250)
+		local h = rng:NextNumber(14, 26)
+		local w = rng:NextNumber(3, 5)
+		local base = Vector3.new(x, lowestGround(x, z, w) - 2, z)
+		local cf = CFrame.new(base) * CFrame.Angles(math.rad(rng:NextNumber(-14, 14)), rng:NextNumber(0, TAU), math.rad(rng:NextNumber(-14, 14))) * CFrame.new(0, h / 2, 0)
+		wedge(parent, Vector3.new(w, h, w * 1.4), cf, shell, Enum.Material.SmoothPlastic, true)
+		decor(parent, Vector3.new(0.3, h * 0.5, 0.3), cf * CFrame.new(w * 0.52, -h * 0.2, 0), glow, Enum.Material.Neon, { CastShadow = false }) -- on the flat side face, low half (the wedge narrows toward the top)
+		maybeYield()
+	end
+	-- rift scars: zig-zag chains of glassy terrain (Glacier is tinted lavender on this biome)
+	for _ = 1, 6 do
+		local x, z = wildSpot(50, 20, 250)
+		local dir = rng:NextNumber(0, TAU)
+		for _ = 1, 4 do
+			local len = rng:NextNumber(8, 15)
+			local g = groundY(x, z)
+			terrain:FillBlock(CFrame.new(x, g - 1, z) * CFrame.Angles(0, -dir, 0), Vector3.new(len, 2.4, rng:NextNumber(1.4, 2.6)), Enum.Material.Glacier)
+			x += math.cos(dir) * len * 0.85
+			z += math.sin(dir) * len * 0.85
+			dir += math.rad(rng:NextNumber(-35, 35))
+		end
+		maybeYield()
+	end
 end
 
 -- ---------------------------------------------------------------- landmarks (60-200 studs, far ring)
@@ -2756,6 +2842,45 @@ local function iceCrystals(parent: Instance, x: number, z: number, _yaw: number)
 	spire(parent, g.X + 30, g.Z - 26, 3, B.rocks[3])
 end
 
+-- Lumen Concord landmark (the COG foundryTower / Brood hiveSpire slot): a giant crystal spire on a pale ceramic plinth, a
+-- floating light ring and leaning shards around it. Simple part placeholder.
+local function crystalSpire(parent: Instance, x: number, z: number, yaw: number)
+	local g = surfaceAt(x, z)
+	local base = CFrame.new(g) * CFrame.Angles(0, yaw, 0)
+	local shell = RGB(196, 188, 212)
+	local deep = RGB(70, 58, 104)
+	local glow = RGB(170, 140, 255)
+	-- foundation sunk below the surface + ragged skirt
+	part(parent, Vector3.new(56, 40, 56), base * CFrame.new(0, -22, 0), deep, Enum.Material.Slate)
+	rockSkirt(parent, g, 8, 40, 12, 9, shell, Enum.Material.Limestone)
+	-- the spire: two stacked crossed wedge pairs (knife-edge silhouette), glowing core shaft inside
+	local h = 120
+	for i = 0, 1 do
+		local cf = base * CFrame.new(0, h / 2 - 4, 0) * CFrame.Angles(0, i * math.pi / 2, 0)
+		wedge(parent, Vector3.new(14, h, 18), cf * CFrame.new(5, 0, 0) * CFrame.Angles(0, math.pi / 2, 0), shell, Enum.Material.SmoothPlastic)
+		wedge(parent, Vector3.new(14, h, 18), cf * CFrame.new(-5, 0, 0) * CFrame.Angles(0, -math.pi / 2, 0), shell, Enum.Material.SmoothPlastic)
+	end
+	local core = decor(parent, Vector3.new(4, h * 0.8, 4), base * CFrame.new(0, h * 0.45, 0), glow, Enum.Material.Neon, { Transparency = 0.2, CastShadow = false })
+	pointLight(core, glow, 80, 1.6)
+	-- floating rings
+	for i, hh in { 70, 104 } do
+		local d = 34 - i * 8
+		decor(parent, Vector3.new(1.2, d, d), base * CFrame.new(0, hh, 0) * CFrame.Angles(0, 0, math.pi / 2), glow, Enum.Material.Neon, { Shape = Enum.PartType.Cylinder, Transparency = 0.5, CastShadow = false })
+	end
+	-- leaning shards around the foot
+	for i = 1, 7 do
+		local a = i / 7 * TAU + rng:NextNumber(-0.2, 0.2)
+		local sh = rng:NextNumber(26, 48)
+		local cf = base * CFrame.new(math.cos(a) * 28, sh / 2 - 6, math.sin(a) * 28) * CFrame.Angles(0, -a, 0) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(12, 22)))
+		wedge(parent, Vector3.new(5, sh, 7), cf, if i % 2 == 0 then shell else deep, Enum.Material.SmoothPlastic, false)
+	end
+	for _ = 1, 4 do
+		local a, d = rng:NextNumber(0, TAU), rng:NextNumber(36, 50)
+		crystals(parent, g.X + math.cos(a) * d, g.Z + math.sin(a) * d, rng:NextNumber(4, 6), glow, true)
+	end
+	maybeYield()
+end
+
 -- landmark slots in the far ring (rim top) + which landmark per biome
 local LANDMARK_SLOTS = { Vector2.new(55, 292), Vector2.new(292, -55), Vector2.new(0, -292), Vector2.new(-292, 60) }
 local BIOME_LANDMARKS: { [string]: { (Instance, number, number, number) -> () } } = {
@@ -2763,10 +2888,11 @@ local BIOME_LANDMARKS: { [string]: { (Instance, number, number, number) -> () } 
 	ash = { crashedCruiser, spireGroup },
 	swamp = { mesaArch, spireGroup },
 	ice = { iceCrystals, crashedCruiser },
+	crystal = { iceCrystals, spireGroup },
 }
 
 local function buildLandmarks(parent: Instance, faction: string)
-	local list: { (Instance, number, number, number) -> () } = { if faction == "BROOD" then hiveSpire else foundryTower }
+	local list: { (Instance, number, number, number) -> () } = { if faction == "BROOD" then hiveSpire elseif faction == "LUMEN" then crystalSpire else foundryTower }
 	for _, f in BIOME_LANDMARKS[biomeName] or BIOME_LANDMARKS.desert do
 		table.insert(list, f)
 	end
@@ -2938,8 +3064,8 @@ local function applyLighting(faction: string, biome: string)
 	-- spectacle pass: dustier, warmer air in every biome (density floor 0.35, +haze, atmosphere colour nudged toward warm dust);
 	-- the biome colour still dominates (swamp / ice only get a light nudge)
 	local DUST_WARM = RGB(214, 170, 124)
-	local HAZE_WARM = { desert = 0.2, ash = 0.14, swamp = 0.12, ice = 0.1 }
-	local HAZE_EXTRA = { desert = 0.9, ash = 0.9, swamp = 1.0, ice = 0.8 }
+	local HAZE_WARM = { desert = 0.2, ash = 0.14, swamp = 0.12, ice = 0.1, crystal = 0.06 }
+	local HAZE_EXTRA = { desert = 0.9, ash = 0.9, swamp = 1.0, ice = 0.8, crystal = 0.8 }
 	local atm = Instance.new("Atmosphere")
 	atm.Density = math.max(m.atmDensity, 0.35)
 	atm.Offset = m.atmOffset
@@ -3020,7 +3146,7 @@ function MapBuilder.applyBiomeLook(biome: string?, faction: string?)
 	biomeName = if biome and BIOMES[biome] then biome else "desert"
 	B = BIOMES[biomeName]
 	setTerrainColors()
-	applyLighting(if faction == "BROOD" then "BROOD" else "COG", biomeName)
+	applyLighting(if faction == "BROOD" or faction == "LUMEN" then faction else "COG", biomeName)
 end
 
 function MapBuilder.clear()
@@ -3037,7 +3163,7 @@ function MapBuilder.clear()
 end
 
 function MapBuilder.build(faction: string?, biome: string?): any
-	local fac = if faction == "BROOD" then "BROOD" else "COG"
+	local fac = if faction == "BROOD" or faction == "LUMEN" then faction else "COG"
 	MapBuilder.clear()
 	partCount, opsSinceYield, lightCount, crystalCount = 0, 0, 0, 0
 	blinkers = {}
@@ -3045,7 +3171,7 @@ function MapBuilder.build(faction: string?, biome: string?): any
 	local t0 = os.clock()
 
 	-- biome: planet hint, else faction default
-	biomeName = if biome and BIOMES[biome] then biome else (if fac == "BROOD" then "swamp" else "desert")
+	biomeName = if biome and BIOMES[biome] then biome else (if fac == "BROOD" then "swamp" elseif fac == "LUMEN" then "crystal" else "desert")
 	B = BIOMES[biomeName]
 
 	-- make sure the meshes had their chance (normally long finished); anything still missing uses the part fallbacks
@@ -3228,6 +3354,8 @@ function MapBuilder.build(faction: string?, biome: string?): any
 
 	if fac == "BROOD" then
 		dressBrood(dressing)
+	elseif fac == "LUMEN" then
+		dressLumen(dressing)
 	else
 		dressCog(dressing)
 	end

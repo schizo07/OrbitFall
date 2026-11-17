@@ -15,11 +15,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Weapons = require(Shared:WaitForChild("Data"):WaitForChild("Weapons"))
 local Store = require(script.Parent.Parent:WaitForChild("Store"))
+local Sway = require(script.Parent.Parent:WaitForChild("Sway")) -- weapon sway: added to the grip offset below
 
 local GunFeel = {}
 GunFeel.offset = CFrame.identity -- current recoil/reload offset in gun space (read by CombatPose)
 GunFeel.reloadBlend = 0
 GunFeel.lastShot = 0
+GunFeel.hand = 1 -- local smoothed hand, +1 right .. -1 left shoulder (written by CombatPose)
 GunFeel.external = false -- true once CombatPose drives the grip weld (then GunFeel never writes it)
 
 local Fx: any = nil
@@ -284,8 +286,11 @@ local function ejectCasing(w: any, handle: BasePart)
 	local cf = handle.CFrame
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local inherit = if root then root.AssemblyLinearVelocity * 0.85 else Vector3.zero
-	local pos = (cf * CFrame.new(0.12, 0.18, -0.55)).Position
-	local vel = cf.RightVector * rng:NextNumber(7, 11) + cf.UpVector * rng:NextNumber(5, 9) + cf.LookVector * rng:NextNumber(-3, 1) + inherit
+	-- gun in the left hand (left shoulder): brass goes out to the left, away from the face. Studio A/B "LEFT HAND"
+	-- (Feel_LeftCasings): nil = follow the hand, "port" = always the gun's right (its ejection port)
+	local hs = if (GunFeel.hand or 1) < 0 and workspace:GetAttribute("Feel_LeftCasings") ~= "port" then -1 else 1
+	local pos = (cf * CFrame.new(0.12 * hs, 0.18, -0.55)).Position
+	local vel = cf.RightVector * hs * rng:NextNumber(7, 11) + cf.UpVector * rng:NextNumber(5, 9) + cf.LookVector * rng:NextNumber(-3, 1) + inherit
 	addBit(part, pos, vel, 2, true)
 end
 
@@ -597,6 +602,12 @@ local function update(dt: number)
 			local wob = math.sin(now * 9) * 0.05 * rb
 			off = off * CFrame.new(0, -0.25 * rb, 0.1 * rb) * CFrame.Angles(-0.36 * rb + wob, 0, 0.5 * rb)
 		end
+	end
+	-- weapon sway (client/Sway.luau): drift + breathing, the same motion that moves the aim point while aiming
+	local sway = Sway.model()
+	if sway ~= CFrame.identity then
+		off = off * sway
+		active = true
 	end
 	GunFeel.offset = off -- gun-space recoil/reload offset; CombatPose applies it when it drives the gun
 	GunFeel.reloadBlend = reloadBlend

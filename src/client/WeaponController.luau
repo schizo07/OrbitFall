@@ -1,6 +1,7 @@
 -- Local shooting with prediction (tracers, muzzle flash, recoil, sounds) + server Fire remote.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Net = require(Shared.Net)
 local Weapons = require(Shared.Data.Weapons)
@@ -16,6 +17,7 @@ local Juice = require(script.Parent.Juice)
 local Cam = require(script.Parent.CameraController)
 local GunFeel = require(script.Parent.Fx.GunFeel)
 local CombatPose = require(script.Parent.CombatPose)
+local Sway = require(script.Parent.Sway)
 
 local WeaponController = {}
 local player = Players.LocalPlayer
@@ -43,9 +45,20 @@ local spin = 0
 local sprinting = false
 local reloadSeenUntil = 0
 local reloadTotal = 1
+-- fire modes (shared/Data/Weapons `modes`): picked per weapon id, kept across respawns; sent with every shot
+local modeById: { [string]: string } = {}
+local burstLeft = 0 -- shots still to come in the current burst
+local burstEndAt = -100 -- os.clock() of the last shot of the last burst
+local burstSlot = 0 -- slot the running burst belongs to (a swap cancels it)
 
 function WeaponController.setHUD(h)
 	HUD = h
+	if not h then
+		return
+	end
+	h.fireModeTap = function()
+		WeaponController.cycleFireMode()
+	end
 end
 
 local function me()
@@ -111,9 +124,16 @@ local function excludes(): { Instance }
 	return list
 end
 
--- Crosshair ray -> world point (+ the RaycastResult if anything was hit)
-function WeaponController.aimPoint(maxRange: number, spreadDeg: number?): (Vector3, RaycastResult?)
+-- Crosshair ray -> world point (+ the RaycastResult if anything was hit). sway = add the weapon sway (client/Sway.luau,
+-- only non-zero while aiming): gun shots and the barrel reticle use it, pings and grenades do not.
+function WeaponController.aimPoint(maxRange: number, spreadDeg: number?, sway: boolean?): (Vector3, RaycastResult?)
 	local o, d = Cam.aimRay()
+	if sway then
+		local sp, sy = Sway.aim()
+		if sp ~= 0 or sy ~= 0 then
+			d = (CFrame.lookAt(Vector3.zero, d) * CFrame.Angles(sp, sy, 0)).LookVector
+		end
+	end
 	if spreadDeg and spreadDeg > 0 then
 		local s = math.rad(spreadDeg)
 		local cf = CFrame.lookAt(Vector3.zero, d) * CFrame.Angles((math.random() - 0.5) * s, (math.random() - 0.5) * s, 0)
@@ -206,7 +226,12 @@ local function predictResult(res: RaycastResult?, w): (string, string)
 	return "pen", "ground"
 end
 
+local function fireModeOf(w): string
+	return Weapons.validMode(w, modeById[w.id])
+end
+
 local function shoot(w, slot: number)
+	local mode = fireModeOf(w)
 	local aim = Input.isDown("Aim")
 	local spread = (w.spread or 1) * (aim and 0.45 or 1) * (1 + bloom) * (sprinting and 1.6 or 1)
 	local mPos, mAtt = muzzle()
@@ -217,10 +242,10 @@ local function shoot(w, slot: number)
 	end
 	seq += 1
 	if w.pellets then
-		local centre = WeaponController.aimPoint(w.range or 120, 0)
-		fireEv:FireServer(slot, centre, seq)
+		local centre = WeaponController.aimPoint(w.range or 120, 0, true)
+		fireEv:FireServer(slot, centre, seq, mode)
 		for i = 1, math.min(w.pellets, 6) do
-			local p, res = WeaponController.aimPoint(w.range or 120, w.spread * 1.0)
+			local p, res = WeaponController.aimPoint(w.range or 120, w.spread * 1.0, true)
 			p, res = barrelTrace(p, res, w.range or 400)
 			Fx.tracer(mPos, p, w.tracer or Color3.new(1, 0.8, 0.4), 0.12)
 			if res and i <= 3 then
@@ -229,8 +254,8 @@ local function shoot(w, slot: number)
 			end
 		end
 	else
-		local p, res = WeaponController.aimPoint(w.range or 400, spread)
-		fireEv:FireServer(slot, p, seq)
+		local p, res = WeaponController.aimPoint(w.range or 400, spread, true)
+		fireEv:FireServer(slot, p, seq, mode)
 		p, res = barrelTrace(p, res, w.range or 400) -- the server traces from the barrel too: show where it really lands
 		Fx.tracer(mPos, p, w.tracer or Color3.new(1, 0.8, 0.4), w.kind == "rail" and 0.5 or w.kind == "rocket" and 0.6 or 0.14)
 		if res then
@@ -265,7 +290,10 @@ local function tryReload()
 	local c = player.Character
 	local pack = c and c:GetAttribute("AmmoPack")
 	local hasPack = not w.perShellReload and type(pack) == "number" and pack > 0 and c:GetAttribute("AmmoPackFor") == ws.id
-	if (ws.spare <= 0 and not hasPack) or (localMag[slot] or ws.mag) >= (w.mag or 0) then
+	-- MAGS "pool": loose rounds left over from earlier reloads (server/WeaponService player attribute)
+	local loose = player:GetAttribute("AmmoLoose" .. slot)
+	local hasLoose = type(loose) == "number" and loose > 0
+	if (ws.spare <= 0 and not hasPack and not hasLoose) or (localMag[slot] or ws.mag) >= (w.mag or 0) then
 		return
 	end
 	actionEv:FireServer("reload")
@@ -291,10 +319,42 @@ local function onMe(m)
 	if HUD and HUD.setLocalMag then
 		HUD.setLocalMag(localMag)
 	end
+	if HUD and HUD.setFireMode then
+		HUD.setFireMode(if w then fireModeOf(w) else nil, w ~= nil and #Weapons.modes(w) > 1, false)
+	end
 end
 
 function WeaponController.localMag(slot: number): number?
 	return localMag[slot]
+end
+
+-- fire mode of the held weapon ("auto" | "burst" | "semi"), and whether it has more than one
+function WeaponController.fireMode(): (string?, boolean)
+	local w = current()
+	if not w then
+		return nil, false
+	end
+	return fireModeOf(w), #Weapons.modes(w) > 1
+end
+
+-- FireMode action (X / D-pad Down / tap on the HUD mode label): next mode of the held weapon
+function WeaponController.cycleFireMode()
+	local w = current()
+	if not w or blocked() then
+		return
+	end
+	local list = Weapons.modes(w)
+	if #list < 2 then
+		return
+	end
+	local i = table.find(list, fireModeOf(w)) or 1
+	local nextMode = list[i % #list + 1]
+	modeById[w.id] = nextMode
+	burstLeft = 0
+	Audio.play2D("UIClick")
+	if HUD and HUD.setFireMode then
+		HUD.setFireMode(nextMode, true, true)
+	end
 end
 
 -- Gatling barrels: the mesh gun carries a Motor6D "BarrelSpin" (Handle -> Barrels, rotation about the gun's Z axis).
@@ -399,6 +459,18 @@ function WeaponController.init()
 			semiLatch = false
 		end
 	end)
+	-- fire mode: X (Input.luau), gamepad D-pad Down while the Uplink dial (LB) is not held (the dial uses the D-pad for
+	-- codes), touch: tap the mode label next to the ammo (UI/HUD calls fireModeTap)
+	Input.on("FireMode", function(d)
+		if d then
+			WeaponController.cycleFireMode()
+		end
+	end)
+	UserInputService.InputBegan:Connect(function(io)
+		if io.KeyCode == Enum.KeyCode.DPadDown and not Input.isDown("Dial") then
+			WeaponController.cycleFireMode()
+		end
+	end)
 
 	Net.event("HitConfirm").OnClientEvent:Connect(function(result, pos, killed, weak, armor)
 		if HUD and HUD.hitmarker then
@@ -424,6 +496,7 @@ function WeaponController.init()
 
 	RunService.RenderStepped:Connect(function(dt)
 		bloom = math.max(0, bloom - dt * 2.2)
+		Sway.step(dt)
 		-- (WalkSpeed is owned by client/Movement.luau: stance, aim, sprint, limp, carry. Writing it here too made the
 		-- prone crawl jump to 16 on some frames, 2026-11-16)
 		local w, ws, slot = current()
@@ -450,7 +523,7 @@ function WeaponController.init()
 		-- when cover sits between the barrel and what the crosshair is on.
 		if HUD and HUD.setBarrelReticle then
 			if w and w.kind ~= "melee" and not blocked() then
-				local p, res = WeaponController.aimPoint(w.range or 400, 0)
+				local p, res = WeaponController.aimPoint(w.range or 400, 0, true)
 				local hitP, _, isBlocked = barrelTrace(p, res, w.range or 400)
 				local sp, onScreen = workspace.CurrentCamera:WorldToViewportPoint(hitP)
 				HUD.setBarrelReticle(if onScreen then Vector2.new(sp.X, sp.Y) else nil, isBlocked)
@@ -493,11 +566,16 @@ function WeaponController.init()
 			end
 			return
 		end
-		if not firing or reloading then
+		-- a started burst finishes after the trigger is let go, unless something stops the gun
+		if burstLeft > 0 and (reloading or blocked() or slot ~= burstSlot) then
+			burstLeft = 0
+		end
+		if not (firing or burstLeft > 0) or reloading then
 			return
 		end
 		if (localMag[slot] or 0) <= 0 then
-			if not semiLatch then
+			burstLeft = 0
+			if firing and not semiLatch then
 				semiLatch = true
 				Audio.play2D("DryFire")
 				tryReload()
@@ -512,7 +590,18 @@ function WeaponController.init()
 		if t - lastFireAt < interval then
 			return
 		end
-		if w.kind ~= "auto" then
+		local mode = fireModeOf(w)
+		if burstLeft > 0 then
+			burstLeft -= 1
+		elseif mode == "burst" then
+			-- one burst per trigger press; the next one waits interval + burstGap after the last burst (server checks it)
+			if semiLatch or t - burstEndAt < interval + (w.burstGap or Weapons.BURST_GAP) then
+				return
+			end
+			semiLatch = true
+			burstLeft = (w.burst or Weapons.BURST) - 1
+			burstSlot = slot
+		elseif mode == "semi" then
 			if semiLatch then
 				return
 			end
@@ -520,6 +609,9 @@ function WeaponController.init()
 		end
 		lastFireAt = t
 		shoot(w, slot)
+		if mode == "burst" and burstLeft == 0 then
+			burstEndAt = t
+		end
 	end)
 end
 

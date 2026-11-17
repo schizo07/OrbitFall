@@ -14,6 +14,8 @@
 --   ContextPrompt.hide(id)
 --   ContextPrompt.isShowing(id) -> bool   (true while it is queued, even when a higher one covers it)
 --   ContextPrompt.setVisible(on)          HUD hides the whole layer outside combat
+--   ContextPrompt.setProgress(id, frac?)  a fill bar under the prompt while `id` is the one showing (nil = no bar);
+--                                         used by the stim hold (Fx/VitalsFx)
 -- Wired by: HUD (empty magazine -> reload), Fx/VitalsFx (critical health -> stim, heavy fire -> prone, stim denials).
 
 local UserInputService = game:GetService("UserInputService")
@@ -41,7 +43,7 @@ local ACTIONS: { [string]: { kb: string, pad: string, touch: string } } = {
 
 local H = 30 -- row height (virtual px)
 
-type Entry = { id: string, text: string, key: string, until_: number?, priority: number, serial: number }
+type Entry = { id: string, text: string, key: string, until_: number?, priority: number, serial: number, progress: number? }
 
 local entries: { [string]: Entry } = {}
 local serial = 0
@@ -103,6 +105,16 @@ local function build()
 	ui.holder = holder
 	ui.scale = scale
 	ui.parts = {}
+	-- hold progress (stim hold): a fixed-width bar just under the prompt, outside the holder's list layout
+	ui.progress = Style.bar({
+		Name = "PromptProgress",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 1, (if touch then -52 else -60) + 3),
+		Size = UDim2.fromOffset(180, 5),
+		Color = Style.Green,
+		Parent = root,
+	})
+	ui.progress.back.Visible = false
 end
 
 local function clearParts()
@@ -193,6 +205,10 @@ local function refresh(force: boolean?)
 	local e = top()
 	local on = visible and e ~= nil
 	ui.holder.Visible = on
+	ui.progress.back.Visible = on and e ~= nil and e.progress ~= nil
+	if e and e.progress then
+		ui.progress.set(e.progress)
+	end
 	if not e then
 		shownId, shownSig = nil, ""
 		return
@@ -240,6 +256,20 @@ end
 
 function ContextPrompt.isShowing(id: string): boolean
 	return entries[id] ~= nil
+end
+
+function ContextPrompt.setProgress(id: string, frac: number?)
+	local e = entries[id]
+	if not e then
+		return
+	end
+	e.progress = if frac then math.clamp(frac, 0, 1) else nil
+	if built and top() == e then
+		ui.progress.back.Visible = visible and e.progress ~= nil
+		if e.progress then
+			ui.progress.set(e.progress)
+		end
+	end
 end
 
 function ContextPrompt.setVisible(on: boolean)

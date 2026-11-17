@@ -587,6 +587,9 @@ function ObjectiveService.start(map: any, cfg: any)
 	local counts: { [string]: number } = {}
 	local nestIdx = 0
 	for _, kind in cfg.sides or {} do
+		if faction == "LUMEN" and (kind == "FOUNDRY" or kind == "RADAR") then
+			kind = "WRECK" -- COG-built sites (drone foundry, COG radar): a Lumen planet gets a crashed-ship data site instead
+		end
 		counts[kind] = (counts[kind] or 0) + 1
 		local c
 		if kind == "NEST" then

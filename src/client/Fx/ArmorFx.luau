@@ -441,9 +441,11 @@ local function update(dt: number)
 	local low = alive and frac < 0.3
 
 	if visor and visor.Parent then
-		local col = visorBase:Lerp(Color3.new(1, 1, 1), 0.03 + 0.03 * math.sin(now * 1.3)) -- very slow idle pulse (the visor is dark glass now)
+		-- pulse clock stepped at 20 Hz: the colour write happens 20x a second, not every frame
+		local pt = math.floor(now * 20) / 20
+		local col = visorBase:Lerp(Color3.new(1, 1, 1), 0.03 + 0.03 * math.sin(pt * 1.3)) -- very slow idle pulse (the visor is dark glass now)
 		if low then
-			local blink = 0.5 + 0.5 * math.sin(now * 3.2)
+			local blink = 0.5 + 0.5 * math.sin(pt * 3.2)
 			col = col:Lerp(RED, 0.25 + 0.7 * blink)
 		end
 		if now < flickerUntil and math.floor(now * 14) % 2 == 0 then

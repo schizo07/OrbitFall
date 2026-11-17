@@ -157,6 +157,11 @@ local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local CAM_EXCLUDE_FOLDERS = { "Enemies", "ClientFx", "CallInObjects" }
+-- the filter is cached and only rebuilt when a character or one of the folders is swapped (checked once a second,
+-- plus on CharacterAdded for every player)
+local filterDirty = true
+local filterCheckAt = 0
+local filterKey: { Instance } = {}
 local function camExclude(): { Instance }
 	local list: { Instance } = {}
 	for _, p in Players:GetPlayers() do
@@ -173,7 +178,66 @@ local function camExclude(): { Instance }
 	return list
 end
 
+local function sameList(a: { Instance }, b: { Instance }): boolean
+	if #a ~= #b then
+		return false
+	end
+	for i, x in a do
+		if b[i] ~= x then
+			return false
+		end
+	end
+	return true
+end
+
+local function refreshFilter()
+	local t = os.clock()
+	if not filterDirty and t - filterCheckAt < 1 then
+		return
+	end
+	filterCheckAt = t
+	local list = camExclude()
+	if filterDirty or not sameList(list, filterKey) then
+		filterKey = list
+		rayParams.FilterDescendantsInstances = list
+	end
+	filterDirty = false
+end
+
+local function watchPlayer(p: Player)
+	p.CharacterAdded:Connect(function()
+		filterDirty = true
+	end)
+	p.CharacterRemoving:Connect(function()
+		filterDirty = true
+	end)
+end
+
 function CameraController.init()
+	for _, p in Players:GetPlayers() do
+		watchPlayer(p)
+	end
+	Players.PlayerAdded:Connect(watchPlayer)
+	Players.PlayerRemoving:Connect(function()
+		filterDirty = true
+	end)
+	workspace.ChildAdded:Connect(function(ch)
+		if table.find(CAM_EXCLUDE_FOLDERS, ch.Name) then
+			filterDirty = true
+		end
+	end)
+	local padOn = UserInputService:GetGamepadConnected(Enum.UserInputType.Gamepad1)
+	UserInputService.GamepadConnected:Connect(function(g)
+		if g == Enum.UserInputType.Gamepad1 then
+			padOn = true
+		end
+	end)
+	UserInputService.GamepadDisconnected:Connect(function(g)
+		if g == Enum.UserInputType.Gamepad1 then
+			padOn = false
+		end
+	end)
+
 	camera.CameraType = Enum.CameraType.Scriptable
 
 	Input.on("Shoulder", function(isDown)
@@ -252,11 +316,13 @@ function CameraController.init()
 		local lx, ly = Input.takeLook()
 		yaw -= lx * CameraController.touchSens * scopeSens
 		pitch -= ly * CameraController.touchSens * scopeSens
-		local state = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
-		for _, io in state do
-			if io.KeyCode == Enum.KeyCode.Thumbstick2 and io.Position.Magnitude > 0.15 then
-				yaw -= io.Position.X * CameraController.padSens * dt * scopeSens
-				pitch += io.Position.Y * CameraController.padSens * dt * 0.7 * scopeSens
+		if padOn then
+			local state = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
+			for _, io in state do
+				if io.KeyCode == Enum.KeyCode.Thumbstick2 and io.Position.Magnitude > 0.15 then
+					yaw -= io.Position.X * CameraController.padSens * dt * scopeSens
+					pitch += io.Position.Y * CameraController.padSens * dt * 0.7 * scopeSens
+				end
 			end
 		end
 		pitch = math.clamp(pitch, -1.25, 1.2)
@@ -358,7 +424,7 @@ function CameraController.init()
 		shoulder = Vector3.new(shoulder.X * sideBlend, shoulder.Y - dip, shoulder.Z)
 		local desired = CFrame.new(focus) * rot * CFrame.new(shoulder + Vector3.new(0, 0, wantDist))
 		-- collision: pull in toward focus
-		rayParams.FilterDescendantsInstances = camExclude()
+		refreshFilter()
 		local fromP = (CFrame.new(focus) * rot * CFrame.new(shoulder.X * 0.4, shoulder.Y, 0)).Position
 		-- the shoulder start point sits ~1.8 studs above the focus: under a low roof / arch it can start inside or above
 		-- the geometry, so first clamp it along focus -> start

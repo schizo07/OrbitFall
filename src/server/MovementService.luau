@@ -157,10 +157,20 @@ function MovementService.init(s, playerService)
 	end)
 	-- which shoulder the gun is on (+1 right, -1 left): other clients' CombatPose and the bullet / grenade origin
 	-- (shared/Aim.origin) read the character attribute Hand; missing = +1
+	-- rate-limited (V spam): a dropped change is re-sent by the client 0.5 s later while the attribute disagrees
+	local lastHand: { [Player]: number } = {}
+	game:GetService("Players").PlayerRemoving:Connect(function(p)
+		lastHand[p] = nil
+	end)
 	S.Actions.on("hand", function(p: Player, hand: any)
 		if typeof(hand) ~= "number" or hand ~= hand then
 			return
 		end
+		local t = os.clock()
+		if t - (lastHand[p] or 0) < 0.1 then
+			return
+		end
+		lastHand[p] = t
 		local c = p.Character
 		if c then
 			c:SetAttribute("Hand", if hand < 0 then -1 else 1)

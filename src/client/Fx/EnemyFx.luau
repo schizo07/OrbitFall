@@ -282,7 +282,11 @@ end
 
 local function ensureConn()
 	if not conn then
-		conn = RunService.RenderStepped:Connect(step)
+		conn = RunService.RenderStepped:Connect(function(dt) -- MicroProfiler label "EnemyFx.step"
+			debug.profilebegin("EnemyFx.step")
+			step(dt)
+			debug.profileend()
+		end)
 	end
 end
 

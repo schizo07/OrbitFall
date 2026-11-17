@@ -29,6 +29,15 @@ function PickupToast.build(parent: Instance, isTouch: boolean)
 	holder.Size = UDim2.fromOffset(if touch then 190 else 230, if touch then 90 else 110)
 	holder.Visible = false
 	holder.Parent = parent
+	if touch then
+		-- Studio A/B "PHONE HUD" (Feel_PhoneHud): nil = centre at y 36 % (reference phone 800 x 380: one row at about
+		-- y 128-146, clear of the kill streak skull at y 78-112 above it); "old" = y 30 % (85-143, under the skull)
+		local function place()
+			holder.Position = UDim2.fromScale(0.5, if workspace:GetAttribute("Feel_PhoneHud") == "old" then 0.3 else 0.36)
+		end
+		place()
+		workspace:GetAttributeChangedSignal("Feel_PhoneHud"):Connect(place)
+	end
 	Theme.list(
 		holder,
 		Enum.FillDirection.Vertical,

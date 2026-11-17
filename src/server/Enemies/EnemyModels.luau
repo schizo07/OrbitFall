@@ -416,6 +416,18 @@ local BUILDERS: { [string]: (Ctx) -> () } = {
 	BASTION = buildBastion,
 }
 
+-- LUMEN CONCORD: placeholder Part bodies live in LumenModels (no meshes yet), plugged in like the fallbacks above
+local LumenModels = require(script.Parent.LumenModels)
+for kind, build in LumenModels.BUILDERS do
+	BUILDERS[kind] = build
+end
+for kind, o in LumenModels.Offsets do
+	EnemyModels.Offsets[kind] = o
+end
+for kind, h in LumenModels.height do
+	EnemyModels.height[kind] = h
+end
+
 -- MESH PATH --------------------------------------------------------------------------
 -- Manifest role -> zone. weak = the kind's weak-spot zone, armor = armour zone, everything else = "body".
 -- Per-part overrides cover the zones that have their own geometry in the new models.

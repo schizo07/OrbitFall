@@ -39,6 +39,7 @@ Config.Stims = {
 	Duration = 1.0, -- seconds the heal is spread over
 	Critical = 0.3, -- health share below which the HUD bar turns red and the "use stim" prompt shows
 	Sprint = 5, -- seconds of unlimited stamina after a stim (server/MovementService.boost; Studio A/B Feel_StimSprint, 0 = off)
+	Hold = 0.8, -- seconds the stim key is held before the stim goes in (shared/Downed.stimHold; Studio A/B Feel_StimHold, 0 = tap)
 }
 -- Downed state (server/Downed.luau, client/DownedFx.luau, rules in shared/Downed.luau). A hit that would kill you puts
 -- you on the ground instead: a small health pool that bleeds out; at 0 you die as before (a life, reinforce).

@@ -6,6 +6,7 @@
 -- Store keys read: profile, mission (menus auto-close when the mission leaves "Ship").
 
 local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -21,6 +22,7 @@ local Weapons = require(Shared:WaitForChild("Data"):WaitForChild("Weapons"))
 local CallIns = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
 local Bonds = require(Shared:WaitForChild("Data"):WaitForChild("Bonds"))
 local Store = require(script.Parent.Parent.Store)
+local Input = require(script.Parent.Parent.Input)
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
 
@@ -380,6 +382,72 @@ local function card(parent: Instance, p: { [string]: any }): TextButton
 		Theme.label({ Text = p.Badge, Font = "Black", TextSize = 12, Color = C.Dark, NoStroke = true, Size = UDim2.fromScale(1, 1), Parent = b })
 	end
 	return btn
+end
+
+-- Gamepad focus ---------------------------------------------------------------------------------------------------------
+-- With a gamepad nothing is selected when a menu opens unless we pick something, so the player would have to know to
+-- press Select first. Each render selects a button of the page: the same position (reading order) as before a re-render
+-- of the same page, else the first one. Taps and mouse clicks are left alone.
+local padIdx = 1
+local padPage: string? = nil
+
+local function shownIn(d: GuiObject, top: Instance): boolean
+	local p: Instance? = d
+	while p and p ~= top do
+		if p:IsA("GuiObject") and not p.Visible then
+			return false
+		end
+		p = p.Parent
+	end
+	return p == top
+end
+
+local function pageButtons(): { GuiButton }
+	local list = {}
+	if not content then
+		return list
+	end
+	for _, d in content:GetDescendants() do
+		if d:IsA("GuiButton") and d.Selectable and d.AbsoluteSize.X > 0 and shownIn(d, content) then
+			table.insert(list, d)
+		end
+	end
+	table.sort(list, function(a, b)
+		local ay, by = a.AbsolutePosition.Y, b.AbsolutePosition.Y
+		if math.abs(ay - by) > 4 then
+			return ay < by
+		end
+		return a.AbsolutePosition.X < b.AbsolutePosition.X
+	end)
+	return list
+end
+
+-- before a page is torn down for a re-render: remember where the selection was
+local function rememberPadFocus(name: string)
+	if padPage ~= name then
+		padPage = name
+		padIdx = 1
+		return
+	end
+	local sel = GuiService.SelectedObject
+	if sel and content and sel:IsDescendantOf(content) then
+		padIdx = table.find(pageButtons(), sel :: any) or padIdx
+	end
+end
+
+local function padFocus()
+	if not openName or not gui or not gui.Enabled or not Input.isGamepad() then
+		return
+	end
+	local sel = GuiService.SelectedObject
+	if sel and sel:IsDescendantOf(gui) and sel:IsA("GuiObject") and shownIn(sel, gui) then
+		return
+	end
+	local list = pageButtons()
+	local b: GuiObject? = if #list > 0 then list[math.clamp(padIdx, 1, #list)] else tabButtons[openName]
+	if b then
+		GuiService.SelectedObject = b
+	end
 end
 
 -- Tab button ------------------------------------------------------------------------------------------------------------
@@ -1105,6 +1173,7 @@ end
 local FACTIONS = {
 	{ id = "COG", name = "Cogwork Legion", shape = "cog", color = C.Accent, desc = "Armoured robots that fight at range. Shoot the glowing red eyes." },
 	{ id = "BROOD", name = "Skitter Brood", shape = "star", color = Color3.fromHex("8cff3a"), desc = "Swarming bugs with fast melee. Goo sacs pop big." },
+	{ id = "LUMEN", name = "Lumen Concord", shape = "diamond", color = Color3.fromHex("c060ff"), desc = "Crystal constructs of hard light. Dodge the charged beams, shoot the violet cores." },
 }
 local OBJECTIVES = {
 	{ id = "MISSILE", name = "Missile Launch", shape = "up", desc = "Find the codes, power the generator, set the trajectory, open the silo, launch." },
@@ -1248,6 +1317,7 @@ render = function()
 	if old and old:IsA("ScrollingFrame") then
 		scrollMemory[name] = old.CanvasPosition
 	end
+	rememberPadFocus(name)
 	for _, c in content:GetChildren() do
 		c:Destroy()
 	end
@@ -1274,6 +1344,14 @@ render = function()
 			end
 		end)
 	end
+	-- gamepad: select a button once the new page has its layout (two frames: AutomaticSize / list layouts settle)
+	task.defer(function()
+		RunService.RenderStepped:Wait()
+		RunService.RenderStepped:Wait()
+		if my == renderToken then
+			padFocus()
+		end
+	end)
 end
 
 local function build()
@@ -1410,8 +1488,28 @@ local function bindClose(on: boolean)
 			end
 			return Enum.ContextActionResult.Sink
 		end, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.ButtonB, Enum.KeyCode.Backspace)
+		-- gamepad LB / RB: previous / next tab (the Mission tab opens the war map, so it is skipped here)
+		ContextActionService:BindActionAtPriority(name .. "Tabs", function(_, state, io)
+			if state ~= Enum.UserInputState.Begin or not openName then
+				return Enum.ContextActionResult.Sink
+			end
+			local tabs = {}
+			for _, n in NAMES do
+				if n ~= "Mission" then
+					table.insert(tabs, n)
+				end
+			end
+			local i = table.find(tabs, openName) or 1
+			local step = if io.KeyCode == Enum.KeyCode.ButtonL1 then -1 else 1
+			local nextName = tabs[(i - 1 + step) % #tabs + 1]
+			GuiService.SelectedObject = nil -- the new page picks its own first button
+			Theme.sfx("UIClick")
+			Screens.open(nextName)
+			return Enum.ContextActionResult.Sink
+		end, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.ButtonL1, Enum.KeyCode.ButtonR1)
 	else
 		ContextActionService:UnbindAction(name)
+		ContextActionService:UnbindAction(name .. "Tabs")
 	end
 end
 
@@ -1468,6 +1566,10 @@ function Screens.close()
 		gui.Enabled = false
 	end
 	bindClose(false)
+	local sel = GuiService.SelectedObject
+	if sel and gui and sel:IsDescendantOf(gui) then
+		GuiService.SelectedObject = nil
+	end
 	Store.set("menuOpen", false)
 	if loadoutThread then
 		-- flush a pending loadout change immediately
@@ -1506,6 +1608,12 @@ function Screens.init()
 		local m = Store.get("mission")
 		if openName and m and m.state and m.state ~= "Ship" then
 			Screens.close()
+		end
+	end)
+	-- picking up a gamepad while a menu is open: select something right away
+	UserInputService.LastInputTypeChanged:Connect(function()
+		if openName then
+			padFocus()
 		end
 	end)
 end

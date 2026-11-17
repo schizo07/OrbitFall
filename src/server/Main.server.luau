@@ -50,11 +50,12 @@ S.Ping = try("PingService", function() return root.PingService end) -- squad pin
 S.Explosions = try("Explosions", function() return root.Explosions end) -- blast entry point + onBlast listeners (no init needed)
 S.Jammers = try("Jammers", function() return root.Jammers end) -- call-in jam areas (no init needed)
 S.Weather = try("WeatherService", function() return root.WeatherService end) -- dust storm phases (workspace Weather attrs)
+S.MissionStats = try("MissionStats", function() return root.MissionStats end) -- per-player mission numbers -> after-action report
 
 local ORDER = {
 	"Assets", "Actions", "Fx", "State", "Save", "Progress", "Shop", "Enemies", "Projectiles", "Director",
 	"CallIns", "Map", "Ship", "Objectives", "Extraction", "Players", "Weapons", "War", "Hazards", "LootRunner", "Mission", "TestArena", "DevTools", "Ping",
-	"Weather",
+	"Weather", "MissionStats",
 }
 
 for _, name in ORDER do
@@ -110,7 +111,7 @@ hook.OnInvoke = function(cmd: string, a: any, b: any, c: any)
 		-- no planet given: build the DESERT map for any faction (Studio only, see Mission.start `quickBiome`).
 		-- Pass `biome = "swamp"` etc., or a `planet`, to override.
 		if not a.planet and not a.quickBiome then
-			a.quickBiome = a.biome or "desert"
+			a.quickBiome = a.biome or (if a.faction == "LUMEN" then "crystal" else "desert")
 		end
 		if not a.planet and not a.quickBiome and S.War then -- pick a playable planet of the requested faction
 			for id, st in S.War.state() do

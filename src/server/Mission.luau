@@ -380,7 +380,7 @@ function Mission.start(p: Player?, args)
 	elseif p ~= nil and S.War then
 		return false, "Pick a planet on the war map"
 	end
-	Mission.faction = (args.faction == "BROOD") and "BROOD" or "COG"
+	Mission.faction = if args.faction == "BROOD" or args.faction == "LUMEN" then args.faction else "COG"
 	Mission.objective = if args.objective == "UPLINK" or args.objective == "HAUL" then args.objective else "MISSILE"
 	Mission.difficulty = math.clamp(math.floor(tonumber(args.difficulty) or 1), 1, 5)
 	Mission.kills = {}
@@ -472,7 +472,7 @@ function Mission.beginArena(faction: string?): (boolean, string?)
 	end
 	token += 1
 	Mission.planet = nil
-	Mission.faction = if faction == "BROOD" then "BROOD" else "COG"
+	Mission.faction = if faction == "BROOD" or faction == "LUMEN" then faction else "COG"
 	Mission.objective = "TEST ARENA"
 	Mission.difficulty = 1
 	Mission.kills = {}

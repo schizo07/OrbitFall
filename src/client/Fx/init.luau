@@ -1371,6 +1371,9 @@ local function death(d)
 	if dist > 400 then
 		return
 	end
+	if style == "shard" then
+		return -- LUMEN: Fx/LumenFx.luau draws the crystal shatter
+	end
 	if d.fodder == true then
 		fodderGib(p, style, pal, if typeof(d.dir) == "Vector3" then d.dir else nil, dist)
 		return

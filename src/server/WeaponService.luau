@@ -463,6 +463,77 @@ function WeaponService.spawnAmmoPack(parent: Instance, cf: CFrame)
 	end)
 end
 
+-- MAGAZINES ------------------------------------------------------------------------------
+-- Reserve ammo is whole magazines: ws.spare = magazines in the pouch (per-shell loaders, SG-4 / HS-3: ws.spare = shells).
+-- Studio A/B "MAGS" (Feel_Mags, mirrored to the server by Variants):
+--   nil    = drop: a reload throws the magazine in the gun away together with the rounds left in it
+--   "keep" = the part-used magazine goes back in the pouch (ws.partials, counted in ws.spare); a reload takes a full
+--            magazine first, then the fullest part-used one. A resupply replaces them with full ones.
+--   "pool" = pooled rounds: leftover rounds go to ws.loose, nothing is lost
+-- The HUD reads the player attributes AmmoLoose<slot> (pool: loose rounds) and AmmoParts<slot> (keep: part-used mags).
+local function magsMode(): string
+	local v = workspace:GetAttribute("Feel_Mags")
+	if v == "keep" or v == "pool" then
+		return v
+	end
+	return "drop"
+end
+
+-- index and rounds of the fullest part-used magazine ("keep")
+local function bestPartial(ws: any): (number?, number)
+	local idx, best = nil, 0
+	for i, n in ws.partials or {} do
+		if n > best then
+			idx, best = i, n
+		end
+	end
+	return idx, best
+end
+
+-- can this weapon state reload right now (ammo-wise)?
+local function canReload(p: Player, r: any, ws: any, w: any): boolean
+	if not w or not w.mag or ws.mag >= w.mag then
+		return false
+	end
+	if w.perShellReload then
+		return ws.spare > 0
+	end
+	if packFor(p, r, ws) then
+		return true
+	end
+	local mode = magsMode()
+	if mode == "pool" then
+		return ws.spare > 0 or (ws.loose or 0) > 0
+	elseif mode == "keep" then
+		local nParts = if ws.partials then #ws.partials else 0
+		if ws.spare > nParts then
+			return true
+		end
+		local _, best = bestPartial(ws)
+		return best > ws.mag
+	end
+	return ws.spare > 0
+end
+
+local function syncAmmoAttrs(p: Player)
+	local r = S.Players.get(p)
+	if not r then
+		return
+	end
+	local mode = magsMode()
+	for i = 1, 3 do
+		local ws = r.weapons[i]
+		local loose = if ws and mode == "pool" and (ws.loose or 0) > 0 then ws.loose else nil
+		local parts = if ws and mode == "keep" and ws.partials and #ws.partials > 0 then #ws.partials else nil
+		if p:GetAttribute("AmmoLoose" .. i) ~= loose then
+			p:SetAttribute("AmmoLoose" .. i, loose)
+		end
+		if p:GetAttribute("AmmoParts" .. i) ~= parts then
+			p:SetAttribute("AmmoParts" .. i, parts)
+		end
+	end
+end
+
 local function materialFor(inst: Instance): string
 	local enemyId = inst:GetAttribute("EnemyId")
 	if enemyId then
@@ -538,6 +609,9 @@ local function traceShot(p: Player, w, origin: Vector3, dir: Vector3, pierceLeft
 			if hr then
 				if report then
 					hitConfirm:FireClient(p, hr.result, endPos, hr.killed, hr.weak, hr.armor)
+					if S.MissionStats then
+						S.MissionStats.hit(p)
+					end
 				end
 				S.Fx.except(p, "Impact", { p = endPos, n = res.Normal, r = hr.result, m = mat }, true)
 				if w.arc and hr.result ~= "deflect" then
@@ -581,7 +655,7 @@ local function traceShot(p: Player, w, origin: Vector3, dir: Vector3, pierceLeft
 	return endPos
 end
 
-local function onFire(p: Player, slot: any, aimPoint: any, _seq: any)
+local function onFire(p: Player, slot: any, aimPoint: any, _seq: any, mode: any)
 	if typeof(aimPoint) ~= "Vector3" or typeof(slot) ~= "number" then
 		return
 	end
@@ -612,13 +686,28 @@ local function onFire(p: Player, slot: any, aimPoint: any, _seq: any)
 	end
 	-- fire-rate leaky bucket (tolerant of latency jitter)
 	local interval = 60 / (w.rpm or 600)
+	-- fire mode (client sends it with every shot; one the gun doesn't have falls back to its default). Burst: at most
+	-- `burst` shots in a run, then a pause of interval + burstGap (half of the gap is tolerated as jitter).
+	local fireMode = Weapons.validMode(w, mode)
+	if fireMode == "burst" then
+		if t - r.lastShot >= interval + (w.burstGap or Weapons.BURST_GAP) * 0.5 then
+			r.burstRun = 0
+		end
+		if (r.burstRun or 0) >= (w.burst or Weapons.BURST) then
+			return
+		end
+	end
 	r.shotBudget = math.min(3, r.shotBudget + (t - r.lastShot) / interval)
 	r.lastShot = t
 	if r.shotBudget < 0.7 then
 		return
 	end
 	r.shotBudget -= 1
+	r.burstRun = if fireMode == "burst" then (r.burstRun or 0) + 1 else 0
 	ws.mag -= 1
+	if S.MissionStats then
+		S.MissionStats.shot(p)
+	end
 
 	local origin = muzzleOrigin(p)
 	if not origin then
@@ -652,7 +741,7 @@ local function onFire(p: Player, slot: any, aimPoint: any, _seq: any)
 		local e = traceShot(p, w, origin, dir, w.pierce or 0, true)
 		S.Fx.except(p, "Tracer", { a = origin, b = e, c = color, w = w.id, u = p.UserId }, true)
 	end
-	if ws.mag <= 0 and (ws.spare > 0 or packFor(p, r, ws)) then
+	if ws.mag <= 0 and canReload(p, r, ws, w) then
 		WeaponService.reload(p)
 	end
 	S.Players.publish(p)
@@ -668,9 +757,8 @@ function WeaponService.reload(p: Player)
 		return
 	end
 	local w = Weapons.get(ws.id)
-	-- the ammo pack only feeds whole-magazine reloads
-	local hasPack = w ~= nil and not w.perShellReload and packFor(p, r, ws) ~= nil
-	if not w or not w.mag or ws.mag >= w.mag or (ws.spare <= 0 and not hasPack) then
+	-- (the ammo pack only feeds whole-magazine reloads: canReload ignores it for per-shell loaders)
+	if not w or not w.mag or not canReload(p, r, ws, w) then
 		return
 	end
 	local t = now()
@@ -702,6 +790,9 @@ function WeaponService.reload(p: Player)
 			ws.mag += need
 			ws.spare -= need
 		else
+			local mode = magsMode()
+			local leftover = ws.mag
+			local newMag: number? = nil
 			local pack = packFor(p, r, ws)
 			if pack then
 				pack.mags -= 1
@@ -710,14 +801,53 @@ function WeaponService.reload(p: Player)
 					S.State.notify(p, "Ammo pack empty", nil, "callin")
 				end
 				packVisual(p.Character, r.ammoPack)
+				newMag = w.mag
+			elseif mode == "pool" then
+				local total = ws.spare * w.mag + (ws.loose or 0) + leftover
+				newMag = math.min(w.mag, total)
+				local rest = total - (newMag :: number)
+				ws.spare = rest // w.mag
+				ws.loose = rest % w.mag
+				leftover = 0
+			elseif mode == "keep" then
+				local parts = ws.partials or {}
+				ws.partials = parts
+				if ws.spare > #parts then
+					ws.spare -= 1
+					newMag = w.mag
+				else
+					local idx, best = bestPartial(ws)
+					if idx and best > leftover then
+						table.remove(parts, idx)
+						ws.spare -= 1
+						newMag = best
+					end
+				end
 			elseif ws.spare > 0 then
 				ws.spare -= 1
-			else
+				newMag = w.mag
+			end
+			if not newMag then
 				r.reloadUntil = 0
 				S.Players.publish(p)
 				return
 			end
-			ws.mag = w.mag
+			-- the magazine that was in the gun: back in the pouch ("keep"), into the loose pool ("pool"), or dropped
+			if leftover > 0 then
+				if mode == "keep" then
+					ws.partials = ws.partials or {}
+					table.insert(ws.partials, leftover)
+					ws.spare += 1
+				elseif mode == "pool" then
+					ws.loose = (ws.loose or 0) + leftover
+					if ws.loose >= w.mag then
+						ws.spare += ws.loose // w.mag
+						ws.loose %= w.mag
+					end
+				end
+			end
+			ws.mag = newMag
+			syncAmmoAttrs(p)
 		end
 		r.reloadUntil = 0
 		S.Players.publish(p)
@@ -846,6 +976,15 @@ function WeaponService.init(s)
 	S.Actions.on("reload", WeaponService.reload)
 	S.Actions.on("swap", onSwap)
 	S.Actions.on("grenade", onGrenade)
+	-- magazine HUD attributes: also catches weapon states replaced elsewhere (resupply, respawn, MAGS preset switch)
+	task.spawn(function()
+		while true do
+			task.wait(0.5)
+			for _, pl in Players:GetPlayers() do
+				syncAmmoAttrs(pl)
+			end
+		end
+	end)
 	S.Actions.on("dropSupport", function(p)
 		local r = S.Players.get(p)
 		if r and r.weapons[3] then

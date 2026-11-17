@@ -690,6 +690,9 @@ local function frame(dt: number)
 		return
 	end
 	localHand += (wantedHand() - localHand) * (1 - exp(-dt * HAND_RATE))
+	if GunFeel then
+		GunFeel.hand = localHand -- casing throw side
+	end
 	local camPos = cam.CFrame.Position
 	for _, plr in Players:GetPlayers() do
 		local c = plr.Character

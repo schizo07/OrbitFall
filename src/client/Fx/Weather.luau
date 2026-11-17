@@ -1,7 +1,7 @@
 --!nonstrict
 -- Weather and colour grade (client only, local effects):
 --   * colour grade: a ColorCorrectionEffect "BiomeGrade" in Lighting on top of the map's own grade, per biome
---     (desert warm, ash grey-red and contrasty, swamp green, ice cool and bright). Removed on the ship.
+--     (desert warm, ash grey-red and contrasty, swamp green, ice cool and bright, crystal cool lavender). Removed on the ship.
 --   * dust storms (desert, ash): server/WeatherService.luau sets workspace Weather / WeatherAt / WeatherEnd so the whole
 --     squad gets the same storm. During a storm the Atmosphere thickens (fog closes in), wind-blown dust sheets and grit
 --     stream past the camera, the Wind loop swells, the grade turns dusty, and the compass shows a STORM tag.
@@ -33,6 +33,7 @@ local GRADE = {
 	ash = { tint = RGB(255, 232, 222), sat = -0.12, contrast = 0.12, bright = -0.02 },
 	swamp = { tint = RGB(232, 255, 236), sat = 0.08, contrast = 0.04, bright = 0 },
 	ice = { tint = RGB(232, 244, 255), sat = -0.06, contrast = 0.05, bright = 0.03 },
+	crystal = { tint = RGB(236, 234, 255), sat = 0.05, contrast = 0.08, bright = 0.01 }, -- Lumen Concord: cool lavender
 }
 local GRADE_STRONG = 1.9
 
@@ -378,6 +379,9 @@ local function desiredBiome(): string?
 		return nil
 	end
 	local b = map:GetAttribute("Biome")
+	if b == nil and mission and mission.faction == "LUMEN" then
+		return "crystal"
+	end
 	return if type(b) == "string" and GRADE[b] then b else nil
 end
 

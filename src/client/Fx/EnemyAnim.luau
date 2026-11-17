@@ -36,6 +36,7 @@ local rad, sin, cos, abs, max, min, clamp = math.rad, math.sin, math.cos, math.a
 local PI = math.pi
 local CF = CFrame.new
 local IDENT = CFrame.new()
+local IS_STUDIO = RunService:IsStudio()
 
 local function rx(a: number): CFrame
 	return CFrame.Angles(a, 0, 0)
@@ -101,6 +102,7 @@ local ATK: { [string]: { tail: number, shots: number?, gap: number? } } = {
 	spit = { tail = 0.55 },
 	charge = { tail = 1.8 },
 	summon = { tail = 1.4 },
+	screech = { tail = 0.9 }, -- ENEMY TACTICS: wounded Charger / Titan rears up and screeches (server EnemyAI startScreech)
 }
 local ATK_DEFAULT = { tail = 0.5 }
 
@@ -334,6 +336,8 @@ end
 -- Hit flash: one Highlight per model, toggled for 0.06 s and released after a quiet second. Roblox allows 31 Highlights
 -- per client (the player's own armour flash uses one), so only enemies within 80 studs flash and at most HL_MAX at once.
 local HL_MAX = 20
+local HL_MAX_PERF = 6 -- Studio A/B Feel_Perf ("PERF"): fewer concurrent hit Highlights (each enabled one is a render pass)
+local hlCap = HL_MAX -- set once per frame in step
 local hlLive = 0
 
 local function flashEnemy(e: Entry)
@@ -343,7 +347,7 @@ local function flashEnemy(e: Entry)
 	end
 	local hl = e.hl
 	if not hl then
-		if hlLive >= HL_MAX then
+		if hlLive >= hlCap then
 			return
 		end
 		hl = Instance.new("Highlight")
@@ -403,7 +407,7 @@ local function addImpulse(e: Entry, dirW: Vector3?, mag: number, weak: boolean, 
 		hx, hz = lv.X / len, lv.Z / len
 	end
 	local k = mag * (if weak then 1.35 else 1) * IMPULSE
-	if RunService:IsStudio() then -- Studio-only A/B multiplier (Variants.luau "ENEMY HIT")
+	if IS_STUDIO then -- Studio-only A/B multiplier (Variants.luau "ENEMY HIT")
 		local f = Workspace:GetAttribute("Feel_EnemyFlinch")
 		if type(f) == "number" then
 			k *= f
@@ -1101,6 +1105,12 @@ local function poseHex(e: Entry, c: Ctx)
 		elseif c.ak == "melee" then
 			ram = rad(12) * c.pre - rad(26) * c.kick - rad(10) * c.post
 			z -= 0.5 * c.post
+		elseif c.ak == "screech" then
+			-- rear up, head high, shudder while it screams
+			local s2 = c.pre + c.post
+			pitch += rad(9) * s2
+			ram = rad(20) * s2
+			y += sin(t * 30) * 0.06 * c.post
 		end
 		setBody(e, c, y, z, pitch, yaw, roll)
 		setM(e, "Ram", rx(ram + sin(t * 1.1) * rad(0.8) * idle))
@@ -1110,7 +1120,7 @@ local function poseHex(e: Entry, c: Ctx)
 		if c.ak == "spit" then
 			headUp = rad(16) * c.pre - rad(10) * c.kick
 			pitch += rad(4) * c.pre
-		elseif c.ak == "summon" then
+		elseif c.ak == "summon" or c.ak == "screech" then
 			headUp = rad(20) * (c.pre + c.post)
 			abd -= rad(10) * (c.pre + c.post)
 			y += sin(t * 32) * 0.08 * (c.pre + c.post) -- shudder
@@ -1120,7 +1130,7 @@ local function poseHex(e: Entry, c: Ctx)
 		setBody(e, c, y, z, pitch, yaw, roll)
 		setM(e, "Head", rx(headUp))
 		setM(e, "Abdomen", rx(abd))
-		local open = if c.ak == "summon" then c.pre + c.post elseif c.ak == "spit" then max(c.pre * 0.7, c.post) else 0
+		local open = if c.ak == "summon" or c.ak == "screech" then c.pre + c.post elseif c.ak == "spit" then max(c.pre * 0.7, c.post) else 0
 		mandibles(e, t, open)
 	end
 end
@@ -1166,7 +1176,7 @@ end
 
 -- Main loop -------------------------------------------------------------------------
 local poseCtx: Ctx = { t = 0, dt = 0, amp = 0, ph = 0, vf = 0, fw = 1, pre = 0, kick = 0, post = 0, ak = nil, fsx = 0, fsz = 0, fyaw = 0, stag = 0, fs = 1 }
-local function step(_dt: number)
+local function stepBody()
 	frame += 1
 	local cam = Workspace.CurrentCamera
 	if not cam then
@@ -1175,11 +1185,16 @@ local function step(_dt: number)
 	local camPos = cam.CFrame.Position
 	local camLook = cam.CFrame.LookVector
 	local now = os.clock()
-	local maxDist = if quality < 0.5 then 100 else 160
+	local touchOnly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	-- PERF (Studio A/B Feel_Perf "touch" = phones only, "all" = everywhere): the low-quality 100-stud range also covers
+	-- quality == 0.5 (phones on Automatic graphics), and at most HL_MAX_PERF hit Highlights at once
+	local perfMode = if IS_STUDIO then Workspace:GetAttribute("Feel_Perf") else nil
+	local perf = perfMode == "all" or (perfMode == "touch" and touchOnly)
+	hlCap = if perf then HL_MAX_PERF else HL_MAX
+	local maxDist = if quality < 0.5 or (perf and quality <= 0.5) then 100 else 160
 	-- perf saver: on by default for phones / tablets (2026-11-15). Studio A/B Feel_PerfSaver "off" / "all" override it.
-	local mode = if RunService:IsStudio() then Workspace:GetAttribute("Feel_PerfSaver") else nil
-	local saver = mode == "all"
-		or (mode ~= "off" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
+	local mode = if IS_STUDIO then Workspace:GetAttribute("Feel_PerfSaver") else nil
+	local saver = mode == "all" or (mode ~= "off" and touchOnly)
 	for model, e in entries do
 		if not model.Parent then
 			for _, c in e.conns do
@@ -1318,7 +1333,7 @@ local function step(_dt: number)
 			local svx, svz, svyaw = clamp(e.svx, -70, 70), clamp(e.svz, -70, 70), clamp(e.svyaw, -40, 40)
 			local sx, sz, syaw = e.sx, e.sz, e.syaw
 			local maxDisp = MAX_DISP
-			if RunService:IsStudio() then -- a bigger A/B flinch also needs room to swing
+			if IS_STUDIO then -- a bigger A/B flinch also needs room to swing
 				local f = Workspace:GetAttribute("Feel_EnemyFlinch")
 				if type(f) == "number" and f > 1 then
 					maxDisp = MAX_DISP * f
@@ -1370,6 +1385,13 @@ local function step(_dt: number)
 			poseHex(e, c)
 		end
 	end
+end
+
+-- MicroProfiler label "EnemyAnim.step"
+local function step(_dt: number)
+	debug.profilebegin("EnemyAnim.step")
+	stepBody()
+	debug.profileend()
 end
 
 local function start(Fx: any)

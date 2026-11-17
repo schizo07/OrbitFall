@@ -38,6 +38,9 @@ local KEYS: { [Enum.KeyCode]: string } = {
 -- Stim (client/Fx/VitalsFx): F. Gamepad D-pad Left is read by VitalsFx itself and only while the Uplink dial (LB) is
 -- NOT held, because the D-pad types call-in codes while LB is held. Touch: MobileControls STIM button.
 KEYS[Enum.KeyCode.F] = "Stim"
+-- Fire mode (client/WeaponController): X. Gamepad D-pad Down (read there, only while the dial is not held); touch: tap
+-- the mode label next to the ammo counter (UI/HUD).
+KEYS[Enum.KeyCode.X] = "FireMode"
 -- Default Roblox controls sink these (gameProcessed = true) but we still need to see them (mantle, stand up).
 local PASS_GP: { [string]: boolean } = { Jump = true }
 local MOUSE: { [Enum.UserInputType]: string } = {
@@ -150,11 +153,62 @@ local function hookPrompts()
 	end)
 end
 
+-- Gamepad sprint. Studio A/B "PAD SPRINT" (Feel_PadSprint):
+--   nil    = an L3 click toggles sprint; it switches off on the next click, or once the left stick has been let go
+--            (centred) for 0.25 s, so the stick does not have to stay pressed in while steering
+--   "hold" = hold L3 (old)
+local padSprint = false
+local padSprintAt = 0
+local stickIdleSince: number? = nil
+local function padSprintToggle(): boolean
+	return workspace:GetAttribute("Feel_PadSprint") ~= "hold"
+end
+local function setPadSprint(on: boolean)
+	padSprint = on
+	padSprintAt = os.clock()
+	stickIdleSince = nil
+	Input.set("Sprint", on)
+end
+local function stepPadSprint()
+	if not padSprint then
+		return
+	end
+	if down.Sprint ~= true then
+		padSprint = false -- something else let go of Sprint (keyboard Shift, focus loss)
+		return
+	end
+	local moving = false
+	for _, s in UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1) do
+		if s.KeyCode == Enum.KeyCode.Thumbstick1 and s.Position.Magnitude >= 0.2 then
+			moving = true
+		end
+	end
+	local t = os.clock()
+	if moving or t - padSprintAt < 0.4 then
+		stickIdleSince = nil
+		return
+	end
+	stickIdleSince = stickIdleSince or t
+	if t - (stickIdleSince :: number) > 0.25 then
+		setPadSprint(false)
+	end
+end
+
 function Input.init()
 	hookPrompts()
+	game:GetService("RunService").Heartbeat:Connect(stepPadSprint)
+	workspace:GetAttributeChangedSignal("Feel_PadSprint"):Connect(function()
+		if padSprint then
+			setPadSprint(false)
+		end
+	end)
 	UserInputService.InputBegan:Connect(function(io, gp)
 		local a = MOUSE[io.UserInputType] or KEYS[io.KeyCode]
 		if not a then
+			return
+		end
+		if io.KeyCode == Enum.KeyCode.ButtonL3 and padSprintToggle() then
+			setPadSprint(not padSprint)
 			return
 		end
 		if io.KeyCode == Enum.KeyCode.ButtonX and not padInteractDpad() and promptUp() then
@@ -168,12 +222,16 @@ function Input.init()
 		Input.set(a, true)
 	end)
 	UserInputService.InputEnded:Connect(function(io)
+		if io.KeyCode == Enum.KeyCode.ButtonL3 and padSprintToggle() then
+			return -- toggled: releasing L3 keeps sprinting
+		end
 		local a = MOUSE[io.UserInputType] or KEYS[io.KeyCode]
 		if a then
 			Input.set(a, false)
 		end
 	end)
 	UserInputService.WindowFocusReleased:Connect(function()
+		padSprint = false
 		for a, v in down do
 			if v then
 				Input.set(a, false)

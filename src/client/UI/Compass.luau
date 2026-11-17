@@ -281,7 +281,12 @@ function Compass.step(cam: Camera, markers: { [string]: any })
 		local rel = wrap180(it.dir - ang)
 		pip.Visible = math.abs(rel) <= SPAN / 2 + 6
 		pip.Position = UDim2.fromScale(Theme.clamp(0.5 + rel / SPAN, 0, 1), 0.5)
-		Style.tint(pip, if it.state == "build" and not it.extract then Style.Amber else Style.Red)
+		-- tint (a GetDescendants walk) only when the colour changes, not every frame
+		local tint = if it.state == "build" and not it.extract then Style.Amber else Style.Red
+		if pip:GetAttribute("TintShown") ~= tint then
+			pip:SetAttribute("TintShown", tint)
+			Style.tint(pip, tint)
+		end
 	else
 		pip.Visible = false
 	end

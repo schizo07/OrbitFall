@@ -28,6 +28,9 @@ local holdingSince = 0
 local openMode: string? = nil -- "codes" | "slot" while the dial key is down
 local arrowsBound = false
 local lastServerHolding: string? = nil
+local padPtr: Vector2? = nil -- last right-stick dial direction (gamepad)
+local padPtrAt = 0
+local PAD_PTR_KEEP = 0.2 -- s the last stick direction stays selected after the stick is released
 
 local ARROW_ACTION = "OrbitUplinkCodes"
 local ARROW_KEYS: { [Enum.KeyCode]: string } = {
@@ -92,8 +95,20 @@ local function typeHint(): string
 	return if Input.isGamepad() then "Hold [LB] + D-pad: type a code" else "Hold [Q] + WASD / arrows: type a code"
 end
 
+-- How to open the uplink at all (HUD mission-start banner reads Store "dialHint")
+local function dialHint(): string
+	if Input.isTouch() then
+		return "Tap UPLINK to call the sky down"
+	end
+	if codesMode() then
+		return typeHint()
+	end
+	return if Input.isGamepad() then "Hold [LB] for the Uplink Dial" else "Hold [Q] for the Uplink Dial"
+end
+
 local function refreshHints()
 	Store.set("throwHint", throwHint())
+	Store.set("dialHint", dialHint())
 	if Codes.isOpen() then
 		local id = heldId()
 		if id then
@@ -206,18 +221,36 @@ local function closeCodes()
 end
 
 -- Slot + Sync (radial dial) ------------------------------------------------------------------------------------------------------
+-- The right stick points at the dial slot, so it must not also turn the camera while the dial is open. CameraController
+-- reads padSens every frame; hold it at 0 while open and put it back on close.
+local savedPadSens: number? = nil
+local function holdStickLook(hold: boolean)
+	if hold then
+		if savedPadSens == nil then
+			savedPadSens = Cam.padSens
+			Cam.padSens = 0
+		end
+	elseif savedPadSens ~= nil then
+		Cam.padSens = savedPadSens
+		savedPadSens = nil
+	end
+end
+
 local function openDial()
 	if not Dial or Dial.isOpen() then
 		return
 	end
 	openMode = "slot"
+	padPtr = nil
 	Dial.open()
 	Store.set("dialOpen", true)
 	Cam.setFreeMouse(not Input.isTouch())
+	holdStickLook(true)
 	Audio.play2D("DialOpen")
 end
 
 local function closeDial()
+	holdStickLook(false)
 	if not Dial or not Dial.isOpen() then
 		return
 	end
@@ -259,6 +292,7 @@ end
 local function abortAny()
 	local mode = openMode
 	openMode = nil
+	holdStickLook(false)
 	if mode == "codes" then
 		closeCodes()
 	elseif Dial and Dial.isOpen() then
@@ -363,9 +397,14 @@ function CallInController.init(dialModule, aimPoint: (number, number?) -> Vector
 			for _, io in pad do
 				if io.KeyCode == Enum.KeyCode.Thumbstick2 and io.Position.Magnitude > 0.4 then
 					ptr = Vector2.new(io.Position.X, -io.Position.Y).Unit
+					padPtr, padPtrAt = ptr, os.clock()
 				end
 			end
-			if not ptr then
+			if not ptr and padPtr and os.clock() - padPtrAt < PAD_PTR_KEEP then
+				ptr = padPtr -- the stick sprang back a frame or two before LB was released: keep the choice
+			end
+			-- the mouse only when the last input was not a gamepad (on a console GetMouseLocation is not the centre)
+			if not ptr and not Input.isGamepad() then
 				local cam = workspace.CurrentCamera
 				local centre = cam.ViewportSize / 2
 				local mp = UserInputService:GetMouseLocation()

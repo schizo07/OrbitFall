@@ -4,7 +4,7 @@
 --                           built on the DESERT biome (planet-less test mission, see Mission.start `quickBiome`)
 --                  "arena"  enter the test arena (World/TestArena.luau)
 --                  empty    normal game (ship lobby)
---   QuickStartFaction  "COG" | "BROOD" (default COG)
+--   QuickStartFaction  "COG" | "BROOD" | "LUMEN" (default COG; LUMEN slices build the crystal biome)
 --   QuickStartGod      bool: god mode for the first player (re-applied on every respawn)
 --   DevSpawn           RemoteEvent in ReplicatedStorage.Remotes (created only in Studio), fired by client/DebugKeys.luau with an op name.
 --   S.DevTools.run(player, op)   the same ops for the DebugHook (`arenaop`):
@@ -74,6 +74,11 @@ local OPS: { [string]: (Player) -> any } = {
 	bastion = pack("BASTION", 1), -- COG static emplacement
 	bulwark = pack("BULWARK", 1), -- COG heavy
 	charger = pack("CHARGER", 1), -- Brood heavy
+	shardling = pack("SHARDLING", 1), -- Lumen regular / medium / heavy / behemoth / swarm
+	warden = pack("WARDEN", 1),
+	lancer = pack("LANCER", 1),
+	spire = pack("SPIRE", 1),
+	shardswarm = pack("SHARDLING_SWARM", 6),
 	clear = function()
 		return S.TestArena.clear()
 	end,
@@ -140,12 +145,13 @@ local function quickStart(p: Player)
 	if god then
 		DevTools.setGod(p, true)
 	end
-	local faction = if workspace:GetAttribute("QuickStartFaction") == "BROOD" then "BROOD" else "COG"
+	local qf = workspace:GetAttribute("QuickStartFaction")
+	local faction = if qf == "BROOD" or qf == "LUMEN" then qf else "COG"
 	mode = string.lower(mode)
 	if mode == "slice" then
 		-- QuickStartObjective "UPLINK" | "HAUL" picks another main objective (default MISSILE)
 		local objective = workspace:GetAttribute("QuickStartObjective")
-		local ok, why = S.Mission.start(p, { faction = faction, objective = if type(objective) == "string" then objective else "MISSILE", difficulty = 1, quickBiome = "desert" })
+		local ok, why = S.Mission.start(p, { faction = faction, objective = if type(objective) == "string" then objective else "MISSILE", difficulty = 1, quickBiome = if faction == "LUMEN" then "crystal" else "desert" })
 		print("[QuickStart] slice", faction, ok, why)
 	elseif mode == "arena" then
 		local ok, why = S.TestArena.enter(faction)

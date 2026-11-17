@@ -24,6 +24,8 @@ local Net = require(Shared.Net)
 local Input = require(script.Parent.Input)
 local Store = require(script.Parent.Store)
 local BodyDebug = require(script.Parent.BodyDebug) -- Studio readout (DebugKeys N); mark() is a no-op while it is off
+local DownedRules = require(Shared.Downed)
+local DownedPose = require(script.Parent.DownedPose) -- downed lying poses + push-up get-up (body via poseStep)
 
 local M = Config.Move
 local Movement = {}
@@ -111,6 +113,8 @@ local publishedExhausted = false
 -- stim sprint: server time until which stamina stays full (server MovementService.boost, sent in `me` as sprintBoostEnd)
 local boostEnd = 0
 local boosted = false
+local kneeling = false -- crouched by the revive kneel (stand back up when it ends)
+local getUpToken = 0 -- push-up get-up after the downed state (a newer one cancels the pending stand)
 
 -- prone / dive body facing: the legs (root) keep their heading, the upper body twists toward the camera
 local twistOn = false -- the body is currently in "legs fixed, torso follows the camera" mode (also while easing out)
@@ -661,6 +665,19 @@ local function step(dt: number)
 			setStance("prone")
 		end
 	end
+	-- reviving a squadmate (server sets character attribute Reviving while the revive prompt is held): kneel, and stand
+	-- back up afterwards if the kneel is what crouched us
+	if c:GetAttribute(DownedRules.REVIVING) == true and mode == "none" and not isDowned() then
+		if not kneeling and stance == "stand" then
+			kneeling = true
+			setStance("crouch")
+		end
+	elseif kneeling then
+		kneeling = false
+		if stance == "crouch" and mode == "none" and not isDowned() then
+			standUp()
+		end
+	end
 	-- crouch held long enough -> prone
 	if crouchDownAt and mode == "none" and t - crouchDownAt >= M.ProneHoldTime then
 		crouchDownAt = nil
@@ -771,6 +788,7 @@ local function step(dt: number)
 		and not firing
 		and not exhausted
 		and not carrying
+		and Store.get("stimHold") == nil -- holding the stim key (Fx/VitalsFx): walk, no sprint
 	boosted = boostEnd > 0 and workspace:GetServerTimeNow() < boostEnd
 	if boosted then
 		-- stim sprint: stamina pinned full, sprint never runs out (the server does the same)
@@ -871,7 +889,21 @@ end
 
 -- ── procedural poses (every character) ──────────────────────────────────────────────────────────────────────────
 type Joint = { m: Motor6D, base: CFrame }
-type Rig = { root: Joint, joints: { [string]: Joint }, p: number, d: number, b: number, active: boolean }
+-- y = roll about the spine, h = extra thigh lift (downed lying poses, client/DownedPose); tp = target pitch;
+-- wasDown / upAt: the push-up get-up after the downed state ends
+type Rig = {
+	root: Joint,
+	joints: { [string]: Joint },
+	p: number,
+	d: number,
+	b: number,
+	y: number,
+	h: number,
+	tp: number,
+	active: boolean,
+	wasDown: boolean,
+	upAt: number,
+}
 local rigs: { [Model]: Rig } = {}
 
 -- Motor6D name -> part that holds it (R15). R6 gets the root tilt only.
@@ -910,7 +942,19 @@ local function buildRig(c: Model): Rig?
 	if not rootM then
 		return nil
 	end
-	local rig: Rig = { root = { m = rootM, base = rootM.C0 }, joints = {}, p = 0, d = 0, b = 0, active = false }
+	local rig: Rig = {
+		root = { m = rootM, base = rootM.C0 },
+		joints = {},
+		p = 0,
+		d = 0,
+		b = 0,
+		y = 0,
+		h = 0,
+		tp = 0,
+		active = false,
+		wasDown = false,
+		upAt = -99,
+	}
 	for name, part in JOINTS do
 		local m = findMotor(c, part, name)
 		if m then
@@ -982,29 +1026,55 @@ local function poseStep(dt: number)
 			rigs[c] = rig
 		end
 		local r = rig :: Rig
-		local target = POSES[name]
+		local target: any = POSES[name]
+		-- downed: the chosen lying pose (client/DownedPose; nil = plain prone)
+		if name == "prone" then
+			target = DownedPose.bodyPose(c) or target
+		end
+		-- got up from downed (stim / squadmate): hold the push-up pose briefly before the crouch -> stand
+		local downNow = c:GetAttribute(DownedRules.ATTR) == true
+		if r.wasDown and not downNow and hum and hum.Health > 0 and DownedPose.pushUp() then
+			r.upAt = os.clock()
+		end
+		r.wasDown = downNow
+		if os.clock() - r.upAt < DownedPose.PUSH_TIME then
+			target = DownedPose.PUSH
+		end
 		local k = 1 - math.exp(-dt * (if name == "dive" then 16 else 11))
+		local tRoll, tHip = target.roll or 0, target.hip or 0
+		r.tp = target.p
 		r.p += (target.p - r.p) * k
 		r.d += (target.d - r.d) * k
 		r.b += (target.b - r.b) * k
-		if target.p == 0 and math.abs(r.p) < 0.003 and math.abs(r.d) < 0.003 and math.abs(r.b) < 0.003 then
+		r.y += (tRoll - r.y) * k
+		r.h += (tHip - r.h) * k
+		if
+			target.p == 0
+			and tRoll == 0
+			and tHip == 0
+			and math.abs(r.p) < 0.003
+			and math.abs(r.d) < 0.003
+			and math.abs(r.b) < 0.003
+			and math.abs(r.y) < 0.003
+			and math.abs(r.h) < 0.003
+		then
 			if r.active then
 				restore(r)
 				r.active = false
 			end
-			r.p, r.d, r.b = 0, 0, 0
+			r.p, r.d, r.b, r.y, r.h = 0, 0, 0, 0, 0
 			continue
 		end
 		if not r.active then
 			capture(r)
 			r.active = true
 		end
-		setC0(r.root.m, CFrame.new(0, r.d, 0) * CFrame.Angles(-r.p, 0, 0) * r.root.base)
+		setC0(r.root.m, CFrame.new(0, r.d, 0) * CFrame.Angles(-r.p, 0, 0) * CFrame.Angles(0, r.y, 0) * r.root.base)
 		if BodyDebug.on then
 			BodyDebug.mark(r.root.m, "C0", "Pose")
 		end
 		-- legs: thigh forward / shin back relative to the tilted pelvis, feet flat
-		local hip = (CROUCH_A + r.p) * r.b
+		local hip = (CROUCH_A + r.p) * r.b + r.h
 		local knee = (CROUCH_B - CROUCH_A) * r.b
 		local ankle = -CROUCH_B * r.b
 		setJ(r, "LeftHip", hip)
@@ -1027,7 +1097,8 @@ end
 
 poseSettled = function(c: Model): boolean
 	local r = rigs[c]
-	return r ~= nil and r.active and math.abs(r.p - POSES.prone.p) < 0.03
+	-- the lying pose has finished turning (plain prone, or a downed lying pose with its own target pitch)
+	return r ~= nil and r.active and math.abs(r.tp) > 0.5 and math.abs(r.p - r.tp) < 0.03
 end
 
 -- ── upper-body twist (every character) ──────────────────────────────────────────────────────────────────────────
@@ -1348,6 +1419,8 @@ local function resetLocal()
 	getupFrom, downBlend, downFor = nil, 0, M.KnockdownTime
 	proneRest = nil
 	speedWanted = nil
+	kneeling = false
+	getUpToken += 1
 end
 
 function Movement.init()
@@ -1400,12 +1473,28 @@ function Movement.init()
 		end
 	end
 	player.CharacterAdded:Connect(resetLocal)
-	-- revived (squadmate / stim): get up on your own (canStand falls back to crouch under a low ceiling)
+	-- revived (squadmate / stim): get up on your own (canStand falls back to crouch under a low ceiling). With the
+	-- push-up get-up (DownedPose, Studio A/B GET UP) the body pushes up onto hands and knees, crouches, then stands.
 	player:GetAttributeChangedSignal("Downed"):Connect(function()
-		if not isDowned() and stance == "prone" and mode == "none" then
-			standUp()
+		if isDowned() or stance ~= "prone" or mode ~= "none" then
+			return
 		end
+		local _, hum = chr()
+		if not DownedPose.pushUp() or not hum or hum.Health <= 0 then
+			standUp()
+			return
+		end
+		getUpToken += 1
+		local my = getUpToken
+		setStance("crouch")
+		task.delay(DownedPose.PUSH_TIME + 0.18, function()
+			if my == getUpToken and not isDowned() and (stance :: string) == "crouch" and mode == "none" then
+				standUp()
+			end
+		end)
 	end)
+	-- left-arm elbow prop of downed bodies: must connect before CombatPose.init (runs after its arm solve, see DownedPose)
+	DownedPose.init()
 	RunService.PreSimulation:Connect(step)
 	-- PreSimulation handlers run last-connected-first: connect this one after every module has finished init
 	-- (CombatPose, FootPlant, ...) so it runs ahead of CombatPose and the arm solver sees this frame's twisted chest

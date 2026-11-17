@@ -24,6 +24,32 @@ export type Attack = {
 	interval: number?, -- "needle": seconds between shots of a volley
 	spread: number?, -- "needle": cone (degrees) of a volley
 	unit: string?, -- "rift": kind id that warps in
+	-- ENEMY TACTICS: tactic = only used while tactics are on (Feel_EnemyTactics ~= "off"); chance = odds the attack is taken when
+	-- it becomes eligible (a miss waits half a cooldown); minRange = "leap": closest centre distance it jumps from
+	tactic: boolean?,
+	chance: number?,
+	minRange: number?,
+}
+-- ENEMY TACTICS (server/Enemies/EnemyAI.luau). Every field optional; a unit without `tactics` behaves as before.
+--   hold: { min, max } fractions of keepDistance: back off (side-stepping) below min, advance above max, side-step / plant in
+--         between (missing = Tactics.holdDefault)
+--   callout: radius (studs). On spotting a new target, idle squadmates of the same faction in the radius are told and move in.
+--   flank: chance (0..1) per new target to first walk to a point flankAngle degrees off to the side of the target, then hold
+--   retreatAt / retreatMul: below this hp fraction the unit holds retreatMul x further back
+--   push: hold-range multiplier (< 1 = walks the squad down)
+--   spread: degrees. Melee swarms bend their approach by up to this angle (fading out near the target) so they arrive from
+--           several sides
+--   screech: below `at` hp fraction (once): a screech that speeds up Brood regulars within `radius` by x`speed` for `dur` s
+export type Tactics = {
+	hold: { number }?,
+	callout: number?,
+	flank: number?,
+	flankAngle: number?,
+	retreatAt: number?,
+	retreatMul: number?,
+	push: number?,
+	spread: number?,
+	screech: { at: number, radius: number, speed: number, dur: number }?,
 }
 export type Enemy = {
 	id: string,
@@ -65,6 +91,7 @@ export type Enemy = {
 	-- loot = a kill bursts into a resupply (LootRunner) and the Director leaves it alone
 	behavior: string?,
 	loot: boolean?,
+	tactics: Tactics?, -- ENEMY TACTICS (see the Tactics type above)
 }
 -- base: spread when the target is first acquired (or comes back out of cover); min: spread after `tighten` s of steady aim.
 -- rangeMul: extra spread per Enemies.Aim.rangeRef studs beyond Enemies.Aim.rangeFrom; moveMul: extra spread for a target
@@ -85,6 +112,7 @@ local E: { [string]: Enemy } = {
 		aim = { base = 9, min = 2.2, tighten = 2.5, rangeMul = 0.5, moveMul = 0.6, warnShots = 2 },
 		keepDistance = 30, salvage = 2, xp = 2,
 		desc = "Cheap biped bot. Eye pops with one good shot.",
+		tactics = { hold = { 0.75, 1.05 }, callout = 60, flank = 0.3, flankAngle = 70 },
 	},
 	RIVET = {
 		id = "RIVET", name = "Rivet Trooper", faction = "COG", class = "medium",
@@ -100,6 +128,7 @@ local E: { [string]: Enemy } = {
 		keepDistance = 35, salvage = 6, xp = 6,
 		desc = "Front riot shield. Flank it or shoot the eye over the rim.",
 		wreck = true,
+		tactics = { hold = { 0.7, 1.05 }, callout = 70, flank = 0.15, flankAngle = 60, retreatAt = 0.45, retreatMul = 1.35 },
 	},
 	BULWARK = {
 		id = "BULWARK", name = "Bulwark", faction = "COG", class = "heavy",
@@ -114,6 +143,7 @@ local E: { [string]: Enemy } = {
 		keepDistance = 30, salvage = 20, xp = 20,
 		desc = "Armoured tank-bot. A rocket in the eye turns it into scrap.",
 		stages = true, wreck = true,
+		tactics = { hold = { 0.5, 0.95 }, push = 0.6, callout = 80 },
 	},
 	-- Fortified gun block (footage spec §3.3 turret siege): never moves, two red cannon eyes flare 0.8 s before each slow heavy
 	-- shot at a trooper in line of sight. Body armour 5: support weapons, explosives or call-ins. Rear heat vent is the soft spot.
@@ -162,6 +192,7 @@ local E: { [string]: Enemy } = {
 		attacks = { { kind = "bite", damage = 12, range = 5, cooldown = 1.2, windup = 0.3 } },
 		salvage = 1, xp = 1,
 		desc = "Fast little biter. Comes in packs.",
+		tactics = { spread = 40 },
 	},
 	SPITTER = {
 		id = "SPITTER", name = "Spitter", faction = "BROOD", class = "medium",
@@ -189,6 +220,7 @@ local E: { [string]: Enemy } = {
 		salvage = 22, xp = 22,
 		desc = "Armoured front, soft rear. Dodge the charge, shoot its back.",
 		stages = true, wreck = true,
+		tactics = { screech = { at = 0.5, radius = 45, speed = 1.4, dur = 4 } },
 	},
 	TITAN = {
 		id = "TITAN", name = "Hive Titan", faction = "BROOD", class = "behemoth",
@@ -206,6 +238,7 @@ local E: { [string]: Enemy } = {
 		salvage = 90, xp = 90,
 		desc = "Towering hive beast. The glowing throat sac is the way in.",
 		stages = true, wreck = true,
+		tactics = { screech = { at = 0.5, radius = 60, speed = 1.4, dur = 5 } },
 	},
 
 	-- THE LUMEN CONCORD -------------------------------------------------------------
@@ -302,6 +335,11 @@ E.TINKER_SWARM = fodder("TINKER", "TINKER_SWARM", "Scrap Swarmer", 1.15,
 E.TINKER_SWARM.aim = { base = 12, min = 4, tighten = 3, rangeMul = 0.6, moveMul = 0.8, warnShots = 1 }
 E.SKITTER_SWARM = fodder("SKITTER", "SKITTER_SWARM", "Skitterling Swarm", 1.05,
 	{ kind = "bite", damage = 8, range = 4.5, cooldown = 1.2, windup = 0.3 }, nil)
+-- ENEMY TACTICS: approach from several sides, and sometimes jump the last few studs (0.4 s crouch = the tell; lands on the spot
+-- the trooper was at, so stepping aside during the hop dodges it)
+E.SKITTER_SWARM.tactics = { spread = 50 }
+table.insert(E.SKITTER_SWARM.attacks,
+	{ kind = "leap", damage = 8, range = 9, minRange = 5, cooldown = 3, windup = 0.4, chance = 0.35, tactic = true })
 E.SHARDLING_SWARM = fodder("SHARDLING", "SHARDLING_SWARM", "Shard Swarmer", 1.1,
 	{ kind = "needle", damage = 5, range = 50, cooldown = 1.7, speed = 140, count = 1, interval = 0.1, spread = 4 }, 18)
 
@@ -386,6 +424,21 @@ Enemies.Aim = {
 	harshSpread = 0.65, harshTighten = 0.6,
 	-- Feel_EnemyAim "old": the previous fixed cones, no warning shots
 	oldBolt = 2.5, oldBurst = 3,
+}
+
+-- ENEMY TACTICS shared numbers (per-unit fields: the Tactics type at the top). Studio A/B Feel_EnemyTactics (Variants "ENEMY
+-- TACTICS"): "strong" multiplies flank / leap chances, approach spread and callout radius by `strong`; "off" = none of it.
+Enemies.Tactics = {
+	holdDefault = { 0.5, 0.95 }, -- keepDistance band when a unit has tactics but no `hold`
+	step = { 0.5, 1.1 }, -- side-step: seconds moving sideways ...
+	pause = { 0.4, 0.9 }, -- ... then seconds planted
+	flankTime = 7, -- give up on the flank point after this many seconds
+	flankReach = 8, -- studs from the flank point that count as there
+	calloutCooldown = 5,
+	spreadNear = 14, -- approach bend fades from full at spreadFar studs to none at spreadNear
+	spreadFar = 45,
+	screechWindup = 0.6, -- the big bug rears up for this long before the screech
+	strong = { flank = 2, leap = 2, spread = 1.3, callout = 1.3 },
 }
 
 -- BLAST REACTIONS (EnemyService.explode -> EnemyAI.fling). power = falloff (0..1) x clamp((dmg / ref) ^ 0.5, min, max).

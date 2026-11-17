@@ -358,11 +358,11 @@ function LumenAI.update(e: any, dt: number, now: number)
 		return
 	end
 	local stunned = e.status.stun ~= nil and e.status.stun.untilT > now
-	-- frozen (call-in hook, model attribute FrozenUntil, read like EnemyAI.think): no blinking, nodes hold their state
-	local fz = e.model:GetAttribute("FrozenUntil")
-	local frozen = type(fz) == "number" and fz > now
+	-- frozen (call-in hook, model attribute FrozenUntil, cached by EnemyAI.think as e.frozenUntil): no blinking, nodes hold their state
+	local fz: number? = e.frozenUntil
+	local frozen = fz ~= nil and fz > now
 	if frozen and L.nodeNext then
-		L.nodeNext = math.max(L.nodeNext, fz)
+		L.nodeNext = math.max(L.nodeNext, fz :: number)
 	end
 
 	-- hard-light shield drops while stunned (EnemyService.resolveZone already lets shots through)

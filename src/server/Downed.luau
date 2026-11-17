@@ -2,7 +2,8 @@
 -- A hit that would kill a trooper puts them down instead: Health becomes a small pool (Config.Downed.Pool of max) that
 -- bleeds out over BleedTime; hits while down do HitMult damage. Health 0 = the normal death (PlayerService Died handler:
 -- a life, reinforce). Getting up: a squadmate holds the revive prompt on the body, or the trooper uses a stim
--- (PlayerService.useStim -> Downed.revive(p, "stim")).
+-- (PlayerService.useStim -> Downed.revive(p, "stim"), after the stim hold). While a squadmate holds the prompt the
+-- downed Player gets ReviveBy / ReviveStart and the reviver's character Reviving (shared/Downed.luau).
 -- Studio A/B: workspace attribute Feel_Downed = "long" | "off" (mirrored from the client by the "studioFeel" action).
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -17,7 +18,7 @@ local PS: any = nil
 local IS_STUDIO = RunService:IsStudio()
 local D = Config.Downed
 
-type DRec = { at: number, rate: number, prompt: ProximityPrompt?, slot: number? }
+type DRec = { at: number, rate: number, prompt: ProximityPrompt?, slot: number?, reviver: Player? }
 local downs: { [Player]: DRec } = {}
 
 local function now()
@@ -58,12 +59,30 @@ local function publishEnd(p: Player, h: Humanoid)
 	end
 end
 
+-- reviver feedback: the downed trooper's client shows "NAME is reviving you" + a bar, the reviver's client kneels
+local function setReviver(p: Player, d: DRec, by: Player?)
+	local old = d.reviver
+	if old == by then
+		return
+	end
+	if old and old.Character then
+		old.Character:SetAttribute(Rules.REVIVING, nil)
+	end
+	d.reviver = by
+	p:SetAttribute(Rules.REVIVE_BY, if by then by.UserId else nil)
+	p:SetAttribute(Rules.REVIVE_START, if by then now() else nil)
+	if by and by.Character then
+		by.Character:SetAttribute(Rules.REVIVING, true)
+	end
+end
+
 -- forget the downed state without touching health (death, respawn, leaving)
 function Downed.clear(p: Player)
 	local d = downs[p]
 	if not d then
 		return
 	end
+	setReviver(p, d, nil)
 	downs[p] = nil
 	if d.prompt then
 		d.prompt:Destroy()
@@ -93,6 +112,9 @@ function Downed.revive(p: Player, by: Player | string)
 	if typeof(by) == "Instance" then
 		h.Health = math.max(h.Health, h.MaxHealth * D.ReviveHealth)
 		S.State.notify(nil, by.DisplayName .. " got " .. p.DisplayName .. " back up!", Config.Colors.Friendly)
+		if S.MissionStats then
+			S.MissionStats.revived(by, p)
+		end
 		S.Fx.play("Stim", { u = p.UserId, p = root and root.Position, t = 0.6 })
 	end
 	S.Fx.play("Sound", { k = "Pickup", p = root and root.Position })
@@ -109,22 +131,35 @@ local function makePrompt(p: Player, root: BasePart): ProximityPrompt
 	pp.RequiresLineOfSight = false
 	pp.KeyboardKeyCode = Enum.KeyCode.E
 	pp:SetAttribute("ReviveFor", p.UserId) -- the downed trooper's own client hides it (client/DownedFx)
+	local function canRevive(by: Player): boolean
+		if by == p or not PS.isAlive(by) or downs[by] then
+			return false
+		end
+		local br = PS.getRoot(by)
+		return br ~= nil and (br.Position - root.Position).Magnitude <= D.ReviveRange + 6
+	end
 	local function handle(by: Player, force: boolean?)
 		if not downs[p] then
 			return
 		end
-		if not force then
-			if by == p or not PS.isAlive(by) or downs[by] then
-				return
-			end
-			local br = PS.getRoot(by)
-			if not br or (br.Position - root.Position).Magnitude > D.ReviveRange + 6 then
-				return
-			end
+		if not force and not canRevive(by) then
+			return
 		end
 		Downed.revive(p, by)
 	end
 	pp.Triggered:Connect(handle)
+	pp.PromptButtonHoldBegan:Connect(function(by)
+		local d = downs[p]
+		if d and canRevive(by) then
+			setReviver(p, d, by)
+		end
+	end)
+	pp.PromptButtonHoldEnded:Connect(function(by)
+		local d = downs[p]
+		if d and d.reviver == by then
+			setReviver(p, d, nil)
+		end
+	end)
 	-- test hook: Main's DebugHook "trigger" (ActionText substring "revive") fires this, skipping range / hold / self
 	local dbg = Instance.new("BindableEvent")
 	dbg.Name = "DebugTrigger"
@@ -187,6 +222,15 @@ function Downed.step(dt: number)
 			Downed.clear(p)
 			continue
 		end
+		-- a reviver who died, went down, left or walked off without the hold-ended event: drop the feedback
+		local rv = d.reviver
+		if rv then
+			local rr = PS.getRoot(rv)
+			local mr = PS.getRoot(p)
+			if not rv.Parent or not PS.isAlive(rv) or downs[rv] or not rr or not mr or (rr.Position - mr.Position).Magnitude > D.ReviveRange + 8 then
+				setReviver(p, d, nil)
+			end
+		end
 		local hp = h.Health - d.rate * dt
 		if hp <= 0 then
 			h.Health = 0 -- Died -> PlayerService handler (clears us)
@@ -199,6 +243,10 @@ end
 function Downed.init(s: any, ps: any)
 	S, PS = s, ps
 	Players.PlayerRemoving:Connect(function(p)
+		local d = downs[p]
+		if d then
+			setReviver(p, d, nil) -- un-kneel the squadmate who was reviving
+		end
 		downs[p] = nil
 	end)
 end

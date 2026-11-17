@@ -10,6 +10,7 @@ local Weapons = require(Shared.Data.Weapons)
 local TrooperArmor = require(script.Parent.TrooperArmor)
 local Movement = require(script.Parent.MovementService) -- stamina + stance (does not require us back)
 local Downed = require(script.Parent.Downed) -- downed / bleed-out / revive (does not require us back)
+local DownedRules = require(Shared.Downed) -- stim hold time (shared with the client)
 
 local PlayerService = {}
 local S
@@ -36,6 +37,8 @@ export type Rec = {
 	stimStart: number, -- server time the heal starts
 	stimEnd: number, -- server time the heal ends (no second stim before this)
 	stimAsk: number, -- os.clock of the last stim request (spam guard)
+	stimHoldAt: number?, -- os.clock of the "stimstart" of the running stim hold (nil = not holding)
+	stimHoldDown: boolean?, -- the hold started while downed (a hold begun standing can't revive)
 }
 
 local recs: { [Player]: Rec } = {}
@@ -196,11 +199,16 @@ function PlayerService.refill(p: Player, opts: { grenades: number? }?)
 		if w then
 			local fresh = newWeapon(w.id)
 			if fresh then
-				local rounds = (fresh.mag + fresh.spare) - (w.mag + w.spare)
 				local def = Weapons.get(w.id)
-				local per = math.max(def and def.mag or 1, 1)
-				if rounds > 0 then
-					magsAdded += math.ceil(rounds / per)
+				if def and def.perShellReload then
+					-- spare counts shells: report whole mags' worth
+					local rounds = (fresh.mag + fresh.spare) - (w.mag + w.spare)
+					if rounds > 0 then
+						magsAdded += math.ceil(rounds / math.max(def.mag or 1, 1))
+					end
+				else
+					-- spare counts whole mags
+					magsAdded += math.max(fresh.spare - w.spare, 0)
 				end
 				r.weapons[i] = fresh
 			end
@@ -591,13 +599,38 @@ function PlayerService.init(s)
 	Players.CharacterAutoLoads = false
 	Movement.init(s, PlayerService)
 	-- stim (client/Fx/VitalsFx: F, gamepad D-pad Left, touch STIM button). Denials go back so the client can say why.
+	-- Hold to stim (DownedRules.stimHold s, Config.Stims.Hold): the client sends "stimstart" on press, "stimcancel" on an
+	-- early release and "stim" when its fill completes; "stim" only goes through once the hold time has passed here
+	-- (small allowance for network jitter) and the downed state still matches the one the hold began in.
 	Downed.init(S, PlayerService)
+	S.Actions.on("stimstart", function(p)
+		local r = recs[p]
+		if r then
+			r.stimHoldAt = os.clock()
+			r.stimHoldDown = Downed.isDowned(p)
+		end
+	end)
+	S.Actions.on("stimcancel", function(p)
+		local r = recs[p]
+		if r then
+			r.stimHoldAt = nil
+		end
+	end)
 	S.Actions.on("stim", function(p)
 		local r = recs[p]
 		if not r then
 			return
 		end
 		local c = os.clock()
+		local hold = DownedRules.stimHold()
+		if hold > 0 then
+			local at = r.stimHoldAt
+			r.stimHoldAt = nil
+			if not at or c - at < hold - 0.15 or (r.stimHoldDown == true) ~= Downed.isDowned(p) then
+				S.Fx.to(p, "StimDenied", { why = "hold" })
+				return
+			end
+		end
 		if c - (r.stimAsk or 0) < 0.2 then
 			return
 		end

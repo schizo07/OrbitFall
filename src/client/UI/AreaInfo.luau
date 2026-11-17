@@ -27,6 +27,7 @@ local BIOME_NAMES: { [string]: string } = {
 	ash = "ASH FIELDS",
 	swamp = "SPORE MARSH",
 	ice = "ICE SHELF",
+	crystal = "CRYSTAL FLATS",
 }
 
 local THREAT: { [string]: { text: string, color: Color3 } } = {

@@ -34,6 +34,10 @@ local KEYMAP: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.O] = "charger",
 	[Enum.KeyCode.P] = "longwatch", -- scoped MR-9 for the SCOPE A/B
 	[Enum.KeyCode.M] = "selfhit", -- downed test: god off + a 60 hp hit
+	[Enum.KeyCode.Comma] = "shardling", -- Lumen Concord units (swarm: DebugHook arenaop "shardswarm")
+	[Enum.KeyCode.Period] = "warden",
+	[Enum.KeyCode.Semicolon] = "lancer",
+	[Enum.KeyCode.Quote] = "spire",
 }
 
 local function onOff(v: any): string
@@ -56,6 +60,7 @@ local function helpText(): string
 		"U Bastion  I Bulwark  O Charger",
 		"P MR-9 Longwatch (scope)",
 		"M Take a 60 hp hit (downed test)",
+		", Shardling  . Warden  ; Lancer  ' Spire",
 		"N Body readout",
 	}, "\n")
 end

@@ -61,6 +61,22 @@ local lastFilter = 0
 local lastScreech = 0
 local beat = 0 -- Heartbeat counter for the perf saver's 30 Hz far-enemy moves
 local SAVER_FAR = 120 -- studs from every alive player
+-- Studio A/B Feel_Perf (Variants "PERF", mirrored): non-fodder re-snap to the ground every PERF_SNAP studs instead of 0.25
+local perfOn = false
+local PERF_SNAP = 0.9
+-- ENEMY TACTICS (per-unit def.tactics + attacks marked `tactic`, numbers in EnemyData.Tactics). Studio A/B Feel_EnemyTactics
+-- (Variants "ENEMY TACTICS", mirrored): nil = on, "strong" = more flanking / leaps / spread, "off" = the old straight-in AI.
+-- Live games always run "on". Read once per frame in stepBody.
+local TAC = EnemyData.Tactics
+local tacMode = "on"
+
+-- Separation grid: every alive enemy bucketed by its flat position once per frame (EnemyAI.step), so `separation` only
+-- looks at the cells around it instead of the whole snapshot. Cell lists are pooled.
+local GRID_CELL = 8
+local GRID_SLACK = 2 -- studs a neighbour may have moved since the grid was built this frame
+local grid: { [number]: { any } } = {}
+local gridPool: { { any } } = {}
+local gridMaxSize = 0
 
 local envParams = RaycastParams.new() -- world only (no enemies, no characters)
 envParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -939,6 +955,39 @@ FIRE.summon = function(e, a, atk, now)
 	e.act = nil
 end
 
+-- ENEMY TACTICS screech: a wounded big bug (def.tactics.screech) rears up for TAC.screechWindup (AtkKind "screech" = the client
+-- pose), then screeches (BugScreech sound): Brood regulars / fodder within the radius run x speed for dur seconds and join in.
+-- Not one of def.attacks (a.idx = nil); started from think via startScreech.
+FIRE.screech = function(e, a, _atk, now)
+	local sc = e.def.tactics and e.def.tactics.screech
+	e.act = nil
+	if not sc then
+		return
+	end
+	sendAttackFx(e, "screech", 0)
+	local r = sc.radius
+	for _, o in snapshot do
+		if o ~= e and o.alive and o.pos and o.faction == "BROOD" and o.class == "regular" and o.def.behavior ~= "flee" then
+			if flat(o.pos - e.pos).Magnitude < r then
+				o.rallyUntil = now + sc.dur
+				o.rallyMul = sc.speed
+				o.aggro = true
+				o.crossUntil = nil
+			end
+		end
+	end
+end
+
+local function startScreech(e: any, now: number)
+	local w = TAC.screechWindup
+	e.act = { kind = "screech", phase = "windup", t0 = now, fireAt = now + w, windup = w, noMove = true }
+	e.gcd = now + w + 0.35
+	e.model:SetAttribute("AtkKind", "screech")
+	e.model:SetAttribute("AtkWindup", w)
+	e.atkSeq = (e.atkSeq or 0) + 1
+	e.model:SetAttribute("AtkSeq", e.atkSeq)
+end
+
 -- the bolt wind-up exists so clients can show the eye charge-up telegraph (client/Fx/EnemyAnim windupGlow); its cooldown
 -- overlaps the wind-up (see startAttack) so the rate of fire is unchanged
 local DEFAULT_WINDUP = { bolt = 0.3, burst = 0.25, melee = 0.3, summon = 1.0, leap = 0.25, bite = 0.3, stomp = 0.8, charge = 0.9 }
@@ -1027,7 +1076,7 @@ local function eligible(e: any, atk: any, dist: number, aimErr: number, los: boo
 	elseif k == "bite" then
 		return edist <= atk.range and aimErr < 0.7
 	elseif k == "leap" then
-		return dist <= atk.range + 0.5 and dist >= 1.5 and aimErr < 0.8
+		return dist <= atk.range + 0.5 and dist >= (atk.minRange or 1.5) and aimErr < 0.8
 	elseif k == "spit" then
 		return dist <= atk.range and dist >= 8
 	elseif k == "charge" then
@@ -1152,17 +1201,29 @@ local function separation(e: any): Vector3
 		e.sepAt = c + 0.3 + rng:NextNumber(0, 0.15)
 	end
 	local push = Vector3.zero
-	for _, o in snapshot do
-		if o ~= e and o.alive then
-			local delta = flat(e.pos - o.pos)
-			local d = delta.Magnitude
-			local minD = (e.def.size + o.def.size) * 0.9
-			if d < minD then
-				if d < 0.05 then
-					delta = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1))
-					d = 0.05
+	-- only the grid cells within reach of the largest neighbour (same result as scanning every enemy)
+	local p = e.pos
+	local reach = (e.def.size + gridMaxSize) * 0.9 + GRID_SLACK
+	local cx0, cx1 = math.floor((p.X - reach) / GRID_CELL), math.floor((p.X + reach) / GRID_CELL)
+	local cz0, cz1 = math.floor((p.Z - reach) / GRID_CELL), math.floor((p.Z + reach) / GRID_CELL)
+	for cx = cx0, cx1 do
+		for cz = cz0, cz1 do
+			local list = grid[(cx + 32768) * 65536 + (cz + 32768)]
+			if list then
+				for _, o in list do
+					if o ~= e and o.alive then
+						local delta = flat(p - o.pos)
+						local d = delta.Magnitude
+						local minD = (e.def.size + o.def.size) * 0.9
+						if d < minD then
+							if d < 0.05 then
+								delta = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1))
+								d = 0.05
+							end
+							push += delta / d * ((minD - d) / minD)
+						end
+					end
 				end
-				push += delta / d * ((minD - d) / minD)
 			end
 		end
 	end
@@ -1314,6 +1375,107 @@ local function fleeThink(e: any, now: number)
 	setWish(e, dir, if nearest > 90 then 0.5 else 1)
 end
 
+-- ENEMY TACTICS ---------------------------------------------------------------------------
+local function strongMul(key: string): number
+	return if tacMode == "strong" then TAC.strong[key] or 1 else 1
+end
+
+-- Callout: idle squadmates of the same faction within def.tactics.callout studs are pointed at the spotted trooper and think
+-- right away. O(n) once per callout (rate-limited per unit), never per frame.
+local function callout(e: any, t: Target, radius: number, now: number)
+	e.calloutAt = now + TAC.calloutCooldown
+	local r = radius * strongMul("callout")
+	for _, o in snapshot do
+		if o ~= e and o.alive and o.pos and o.target == nil and o.faction == e.faction and not o.def.static and o.def.behavior ~= "flee" then
+			if flat(o.pos - e.pos).Magnitude < r then
+				o.aggro = true
+				o.crossUntil = nil
+				o.goal = t.pos
+				o.goalSpeed = 1
+				o.goalRefresh = now + 4
+				o.nextThink = math.min(o.nextThink, now + rng:NextNumber(0.05, 0.3))
+			end
+		end
+	end
+end
+
+-- On a new target: callout, maybe pick a flank side, re-roll the swarm approach bend.
+local function tacticsNewTarget(e: any, tac: any, t: Target, dir: Vector3, dist: number, now: number)
+	e.flankVec = nil
+	e.spreadAng = nil
+	if t.decoy then
+		return
+	end
+	if tac.callout and now >= (e.calloutAt or 0) then
+		callout(e, t, tac.callout, now)
+	end
+	local kd = e.def.keepDistance
+	if tac.flank and kd and dist > kd * 0.6 and rng:NextNumber() < tac.flank * strongMul("flank") then
+		local side = if rng:NextNumber() < 0.5 then 1 else -1
+		-- bearing fixed now (from the target towards this unit, swung to one side); the point follows the target's position
+		e.flankVec = CFrame.Angles(0, math.rad(tac.flankAngle or 70) * side, 0) * -dir
+		e.flankUntil = now + TAC.flankTime
+	end
+end
+
+-- Ranged hold (keepDistance units with tactics): flank point first, then keep inside the hold band; inside it, side-step for a
+-- moment and plant to shoot. Wounded units hold further back (retreatAt), pushers hold closer (push).
+local function tacticalRanged(e: any, tac: any, t: Target, dist: number, dir: Vector3, kd: number, now: number): (Vector3?, number)
+	local pref = kd * (tac.push or 1)
+	if tac.retreatAt and e.maxHp and e.maxHp > 0 and e.hp / e.maxHp <= tac.retreatAt then
+		pref *= tac.retreatMul or 1.3
+	end
+	local fv = e.flankVec
+	if fv then
+		if now < (e.flankUntil or 0) then
+			local goal = clampMap(t.pos + fv * pref)
+			local to = flat(goal - e.pos)
+			if to.Magnitude > TAC.flankReach then
+				return to, 1
+			end
+		end
+		e.flankVec = nil
+	end
+	local hold = tac.hold or TAC.holdDefault
+	local side = Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir
+	if not e.los or dist > pref * hold[2] then
+		return dir, 1
+	elseif dist < pref * hold[1] then
+		return -dir + side * 0.5, 0.85
+	end
+	if now >= e.strafeUntil then
+		if e.stepMoving then
+			e.stepMoving = false
+			e.strafeUntil = now + rng:NextNumber(TAC.pause[1], TAC.pause[2])
+		else
+			e.stepMoving = true
+			e.strafeUntil = now + rng:NextNumber(TAC.step[1], TAC.step[2])
+			if rng:NextNumber() < 0.6 then
+				e.strafeDir = -e.strafeDir
+			end
+		end
+	end
+	if e.stepMoving then
+		return Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir, 0.8
+	end
+	return nil, 0
+end
+
+-- Swarm approach: bend the straight-in heading by up to def.tactics.spread degrees (fading to none near the target), so a pack
+-- spirals in and arrives from several sides. One sign + size per unit per target.
+local function spreadApproach(e: any, tac: any, dir: Vector3, dist: number): Vector3
+	local ang = e.spreadAng
+	if not ang then
+		ang = math.rad(tac.spread) * rng:NextNumber(0.45, 1) * (if rng:NextNumber() < 0.5 then 1 else -1)
+		e.spreadAng = ang
+	end
+	local k = math.clamp((dist - TAC.spreadNear) / (TAC.spreadFar - TAC.spreadNear), 0, 1)
+	if k <= 0 then
+		return dir
+	end
+	return CFrame.Angles(0, ang * k * strongMul("spread"), 0) * dir
+end
+
 local function think(e: any, now: number)
 	local def = e.def
 
@@ -1401,6 +1563,7 @@ local function think(e: any, now: number)
 	if not t then
 		e.seenT = 0
 		e.aimAt = nil -- next sighting starts the aim over (EnemyData.Aim)
+		e.tacKey = nil -- ENEMY TACTICS: next sighting is a new target (callout / flank roll)
 		e.faceDir = nil
 		e.slot = nil
 		e.circling = nil
@@ -1510,11 +1673,27 @@ local function think(e: any, now: number)
 		e.aimHidden = nil
 	end
 
+	-- ENEMY TACTICS: new-target callout / flank roll, and the wounded big bug's screech
+	local tac = if tacMode ~= "off" then def.tactics else nil
+	if tac then
+		if e.tacKey ~= aimKey then
+			e.tacKey = aimKey
+			tacticsNewTarget(e, tac, t, dir, dist, now)
+		end
+		local sc = tac.screech
+		if sc and not e.screeched and not e.act and e.maxHp and e.maxHp > 0 and e.hp / e.maxHp <= sc.at then
+			e.screeched = true
+			startScreech(e, now)
+		end
+	end
+
 	-- movement decision ---------------------------------------------------------------
 	local moveDir: Vector3? = nil
 	local moveSpeed = 0
 	local kd = def.keepDistance
-	if kd then
+	if kd and tac and (tac.hold or tac.push or tac.flank or tac.retreatAt) then
+		moveDir, moveSpeed = tacticalRanged(e, tac, t, dist, dir, kd, now)
+	elseif kd then
 		-- ranged units close in tighter (advance beyond 0.95 kd instead of 1.15, back off only inside 0.5 kd) and strafe
 		-- faster, so they keep pressure on the squad instead of plinking from max range
 		if not e.los or dist > kd * 0.95 then
@@ -1546,6 +1725,10 @@ local function think(e: any, now: number)
 			moveDir = Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir
 			moveSpeed = 0.7
 		end
+	end
+	-- ENEMY TACTICS: swarms bend their straight-in approach (only while heading straight at the target)
+	if tac and tac.spread and moveDir == dir and not t.decoy then
+		moveDir = spreadApproach(e, tac, dir, dist)
 	end
 	-- convoy walkers (side objective): keep marching along the route while shooting back
 	if e.routeTo then
@@ -1581,7 +1764,15 @@ local function think(e: any, now: number)
 	local far: { { idx: number, atk: any } } = {}
 	for i, atk in def.attacks do
 		local gated = e.meleeGate and not e.slot and not t.decoy and MELEE_KINDS[atk.kind] -- no slot on this player: no melee / leap
-		if not gated and now >= e.cd[i] and eligible(e, atk, dist, aimErr, e.los, now) then
+		local ok = not gated and now >= e.cd[i] and not (atk.tactic and tacMode == "off") and eligible(e, atk, dist, aimErr, e.los, now)
+		if ok and atk.chance then
+			-- ENEMY TACTICS: "sometimes" attacks (fodder leap) roll once per eligible window; a miss waits half a cooldown
+			if rng:NextNumber() >= atk.chance * strongMul("leap") then
+				ok = false
+				e.cd[i] = now + atk.cooldown * 0.5
+			end
+		end
+		if ok then
 			if MELEE_KINDS[atk.kind] and atk.kind ~= "charge" then
 				table.insert(close, { idx = i, atk = atk })
 			else
@@ -1599,7 +1790,8 @@ end
 -- Per-frame update -------------------------------------------------------------------
 local function snapGround(e: any, dt: number, force: boolean)
 	local moved = flat(e.pos - e.lastSnap).Magnitude
-	if not force and moved < e.snapDist then
+	local coarse = e.fodder or perfOn -- PERF A/B: non-fodder snap as rarely as PERF_SNAP and close the gap like fodder
+	if not force and moved < (if perfOn and not e.fodder then PERF_SNAP else e.snapDist) then
 		return
 	end
 	e.lastSnap = e.pos
@@ -1611,7 +1803,7 @@ local function snapGround(e: any, dt: number, force: boolean)
 			e.pos = Vector3.new(e.pos.X, gy, e.pos.Z)
 		else
 			-- fodder snaps less often, so each snap closes more of the gap
-			e.pos = Vector3.new(e.pos.X, e.pos.Y + (gy - e.pos.Y) * (if e.fodder then 0.6 else math.min(1, dt * 14)), e.pos.Z)
+			e.pos = Vector3.new(e.pos.X, e.pos.Y + (gy - e.pos.Y) * (if coarse then 0.6 else math.min(1, dt * 14)), e.pos.Z)
 		end
 	end
 end
@@ -1656,6 +1848,14 @@ local function update(e: any, dt: number, now: number)
 			local slow = e.status.slow
 			if slow and slow.untilT > now then
 				mul = 1 - math.clamp(slow.mag or 0.5, 0, 0.9)
+			end
+			local rally = e.rallyUntil -- ENEMY TACTICS: a big bug's screech
+			if rally then
+				if rally > now then
+					mul *= e.rallyMul or 1
+				else
+					e.rallyUntil = nil
+				end
 			end
 			target = e.wish * (def.speed * (e.speedMul or 1) * e.wishSpeed * mul) -- speedMul: elite SWIFT
 		end
@@ -1731,11 +1931,20 @@ local function update(e: any, dt: number, now: number)
 	end
 end
 
+local stepBody: (dt: number, enemies: { [number]: any }) -> ()
+
+-- MicroProfiler / Server Script Performance label "EnemyAI.step" around the whole per-frame pass
 function EnemyAI.step(dt: number, enemies: { [number]: any })
-	local now = workspace:GetServerTimeNow()
 	if not S.Players then
 		return
 	end
+	debug.profilebegin("EnemyAI.step")
+	stepBody(dt, enemies)
+	debug.profileend()
+end
+
+stepBody = function(dt: number, enemies: { [number]: any })
+	local now = workspace:GetServerTimeNow()
 
 	-- cache players once per frame
 	table.clear(targets)
@@ -1771,6 +1980,28 @@ function EnemyAI.step(dt: number, enemies: { [number]: any })
 		table.insert(snapshot, e)
 	end
 
+	-- separation grid (see GRID_CELL): old cell lists back to the pool, then bucket every alive enemy
+	for _, list in grid do
+		table.clear(list)
+		table.insert(gridPool, list)
+	end
+	table.clear(grid)
+	gridMaxSize = 0
+	for _, e in snapshot do
+		local key = (math.floor(e.pos.X / GRID_CELL) + 32768) * 65536 + (math.floor(e.pos.Z / GRID_CELL) + 32768)
+		if e.alive and key == key then -- (key ~= key only for a NaN position, which can't be a table key)
+			local list = grid[key]
+			if not list then
+				list = table.remove(gridPool) or {}
+				grid[key] = list
+			end
+			table.insert(list, e)
+			if e.def.size > gridMaxSize then
+				gridMaxSize = e.def.size
+			end
+		end
+	end
+
 	-- melee slot tally (who holds / waits for a slot on which player)
 	refreshSlotMax(os.clock())
 	table.clear(slotCount)
@@ -1800,6 +2031,10 @@ function EnemyAI.step(dt: number, enemies: { [number]: any })
 	if IS_STUDIO then
 		local mode = workspace:GetAttribute("Feel_PerfSaver")
 		saver = mode == "touch" or mode == "all"
+		local perf = workspace:GetAttribute("Feel_Perf")
+		perfOn = perf == "touch" or perf == "all"
+		local tm = workspace:GetAttribute("Feel_EnemyTactics")
+		tacMode = if tm == "strong" or tm == "off" then tm else "on"
 	end
 	beat += 1
 

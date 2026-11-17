@@ -50,6 +50,12 @@ local inited = false
 local touch = false
 local ui: { [string]: any } = {}
 
+-- Studio A/B "PHONE HUD" (Feel_PhoneHud): nil = phone placements that keep the crosshair-layer widgets off the touch
+-- buttons and the alert bar; "old" = the previous phone placements. PC never changes.
+local function phoneNew(): boolean
+	return touch and workspace:GetAttribute("Feel_PhoneHud") ~= "old"
+end
+
 -- state caches
 local state = "Ship"
 local prevState: string? = nil
@@ -89,6 +95,12 @@ local barrelBlocked = false
 local barrelCallT = -100
 local barrelPos: Vector2? = nil
 local barrelWarn = 0 -- 0 white .. 1 blocked colour (eased)
+-- last values written to the ring (stepBarrel skips unchanged writes); reset when the ring is rebuilt
+local barrelShownRing: Instance? = nil
+local barrelShownPos: Vector2? = nil
+local barrelShownD = -1
+local barrelShownWarn = -1
+local barrelShownStroke: Instance? = nil
 
 local function missionState(): string
 	local m = Store.get("mission")
@@ -185,6 +197,11 @@ local function buildCrosshair()
 	ost.Parent = outline
 	ui.barrel = barrel
 	ui.barrelStroke = bst
+	-- phones: the ring is raw px, so on a 380 px tall screen it is ~3x larger relative to the screen than at 1080p;
+	-- placePhone() sets this to 0.7 there (also scales the UIStroke; AnchorPoint 0.5 keeps the centre)
+	local bscale = Instance.new("UIScale")
+	bscale.Parent = barrel
+	ui.barrelScale = bscale
 
 	-- hitmarker pool
 	for i = 1, 5 do
@@ -294,6 +311,36 @@ local function buildCrosshair()
 		Position = UDim2.fromOffset(0, 30),
 		Parent = prompt,
 	})
+end
+
+-- Phone placement of the raw-px crosshair-layer widgets (beacon prompt, kill streak, barrel ring). Reference phone
+-- 800 x 380, touch cluster at x 514-776 / y 86-364 (computed from MobileControls, not measured):
+--   beacon prompt  old: 320 x 56 at y 270-326, x 240-560 (under UPLINK 514-586 and SIDE 458-506)
+--                  new: 220 x 72 (hint on its own line) at y 258-330, x 290-510: under the RELOADING label (244-258),
+--                       left of UPLINK; the centred text clears SIDE (458-506 from y 316); the pickup toast sits
+--                       above the crosshair, so the prompt stays below it
+--   kill streak    old: centre y 50, 24-76 (on the alert bar, which starts at y ~32)
+--                  new: centre y 95, x0.65 -> 156 x 34 at y 78-112 (pop x1.25: 73-117)
+local function placePhone()
+	local new = phoneNew()
+	local prompt = ui.promptFrame
+	if prompt then
+		prompt.Position = UDim2.new(0.5, 0, 0.5, if new then 68 else 80)
+		prompt.Size = UDim2.fromOffset(if new then 220 else 320, if new then 72 else 56)
+		if ui.promptSub then
+			ui.promptSub.Size = UDim2.new(1, 0, 0, if new then 38 else 20) -- two lines: call-in name, then the hint
+		end
+	end
+	if ui.streakFrame then
+		ui.streakFrame.Position = UDim2.new(0.5, 0, 0.5, if new then -95 else -140)
+	end
+	if ui.barrelScale then
+		ui.barrelScale.Scale = if new then 0.7 else 1
+	end
+end
+
+local function streakK(): number -- kill streak pop size multiplier (phones, new layout)
+	return if phoneNew() then 0.65 else 1
 end
 
 -- Main HUD ----------------------------------------------------------------------------------------------------------
@@ -449,6 +496,31 @@ local function buildOwnCard(parent: Instance)
 		Parent = top,
 	})
 	ui.ammoMagPos = ui.ammoMag.Position
+	-- fire mode (HUD.setFireMode from WeaponController) left of the counter; a button so touch can tap it to switch
+	local fm = Instance.new("TextButton")
+	fm.Name = "FireMode"
+	fm.AutoButtonColor = false
+	fm.BackgroundTransparency = 1
+	fm.BorderSizePixel = 0
+	fm.FontFace = Style.Font
+	fm.TextSize = 13
+	fm.TextColor3 = Style.Grey
+	fm.TextStrokeColor3 = Style.Black
+	fm.TextStrokeTransparency = 0.65
+	fm.TextXAlignment = Enum.TextXAlignment.Right
+	fm.AnchorPoint = Vector2.new(1, 0)
+	-- touch: a taller hit box reaching up over the name line (text stays on the bottom line)
+	fm.Position = UDim2.new(1, -98, 0, if touch then 2 else 17)
+	fm.Size = UDim2.fromOffset(if touch then 64 else 56, if touch then 30 else 15)
+	fm.TextYAlignment = Enum.TextYAlignment.Bottom
+	fm.Text = ""
+	fm.Parent = top
+	fm.Activated:Connect(function()
+		if (HUD :: any).fireModeTap then
+			(HUD :: any).fireModeTap()
+		end
+	end)
+	ui.fireMode = fm
 
 	-- magazine segments
 	local segs = Instance.new("Frame")
@@ -885,6 +957,10 @@ local function buildStreak()
 		Parent = f,
 	})
 	ui.streakCount.TextStrokeTransparency = 0.2
+	placePhone()
+	if touch then
+		workspace:GetAttributeChangedSignal("Feel_PhoneHud"):Connect(placePhone)
+	end
 end
 
 -- skull parts (white / dark frames) fade together with the number
@@ -936,8 +1012,9 @@ local function showStreak(count: number, color: Color3, big: number)
 	ui.streakCount.TextStrokeTransparency = 0.2
 	Style.tint(ui.streakSkull, color)
 	fadeSkull(0, 0)
-	ui.streakScale.Scale = 1.25 * big
-	table.insert(streakTweens, tw(ui.streakScale, 0.2, { Scale = big }, Enum.EasingStyle.Back))
+	local sk = streakK()
+	ui.streakScale.Scale = 1.25 * big * sk
+	table.insert(streakTweens, tw(ui.streakScale, 0.2, { Scale = big * sk }, Enum.EasingStyle.Back))
 	task.delay(STREAK_HOLD, function()
 		if gen ~= streakGen then
 			return
@@ -1037,14 +1114,31 @@ local function stepBarrel(dt: number, combat: boolean)
 	else
 		barrelPos = barrelPos:Lerp(target, 1 - math.exp(-40 * dt)) -- fast lerp: removes jitter, adds no visible lag
 	end
-	barrelWarn += ((if barrelBlocked then 1 else 0) - barrelWarn) * (1 - math.exp(-20 * dt))
-	ring.Position = UDim2.fromOffset(barrelPos.X, barrelPos.Y)
+	local warnTarget = if barrelBlocked then 1 else 0
+	barrelWarn += (warnTarget - barrelWarn) * (1 - math.exp(-20 * dt))
+	if math.abs(barrelWarn - warnTarget) < 0.002 then
+		barrelWarn = warnTarget -- settled: lets the stroke writes below stop
+	end
+	-- each GUI write below only happens when its value changed (a steady aim writes nothing)
+	if ring ~= barrelShownRing then
+		barrelShownRing, barrelShownPos, barrelShownD = ring, nil, -1
+	end
+	if barrelPos ~= barrelShownPos then
+		barrelShownPos = barrelPos
+		ring.Position = UDim2.fromOffset(barrelPos.X, barrelPos.Y)
+	end
 	-- diameter follows the weapon spread a little (the old tick gap), capped
 	local d = BARREL_D + math.min(math.max(gap - 5, 0) * 0.4, 36)
-	ring.Size = UDim2.fromOffset(d, d)
-	ui.barrelStroke.Color = C.White:Lerp(BARREL_BLOCKED, barrelWarn)
-	ui.barrelStroke.Thickness = 2 + barrelWarn
-	ui.barrelStroke.Transparency = 0.15 - 0.1 * barrelWarn
+	if d ~= barrelShownD then
+		barrelShownD = d
+		ring.Size = UDim2.fromOffset(d, d)
+	end
+	if barrelWarn ~= barrelShownWarn or ui.barrelStroke ~= barrelShownStroke then
+		barrelShownWarn, barrelShownStroke = barrelWarn, ui.barrelStroke
+		ui.barrelStroke.Color = C.White:Lerp(BARREL_BLOCKED, barrelWarn)
+		ui.barrelStroke.Thickness = 2 + barrelWarn
+		ui.barrelStroke.Transparency = 0.15 - 0.1 * barrelWarn
+	end
 end
 
 -- Context prompt (UI/ContextPrompt): "TAP [R] TO RELOAD" while the magazine is empty and no reload runs;
@@ -1346,13 +1440,30 @@ local function updateAmmo()
 			ui.ammoMag.TextColor3 = Style.White
 			ui.ammoState.Text = ""
 		end
-		-- spare magazines (whole mags left in reserve). Low = one magazine or less left: amber; none: red.
-		local mags = if maxMag > 0 then math.ceil(spare / math.max(maxMag, 1)) else 0
-		local spareLow = maxMag > 0 and spare <= maxMag
-		ui.cntMags.Text = "MAG " .. tostring(mags)
-		ui.cntMags.TextColor3 = if spare <= 0 then Style.Red elseif spareLow then Style.Amber else Style.White
-		ui.ammoSpare.TextColor3 = if spare <= 0 then Style.Red elseif spareLow then Style.Amber else Style.Grey
-		ammoLastSpare, ammoLastMax = spare, (def and def.mag or 0)
+		-- reserve (server/WeaponService MAGS): `spare` = whole magazines left ("x6"); per-shell loaders count shells;
+		-- MAGS "pool" shows rounds (+ the loose rounds in player attribute AmmoLoose<slot>); "keep" names the part-used
+		-- magazines (AmmoParts<slot>). Low = one magazine or less left: amber; none: red.
+		local slotN = me.weapon or 1
+		local loose = player:GetAttribute("AmmoLoose" .. slotN)
+		local parts = player:GetAttribute("AmmoParts" .. slotN)
+		local empty, spareLow
+		if def and def.perShellReload then
+			ui.ammoSpare.Text = "/ " .. tostring(spare)
+			ui.cntMags.Text = "SHELL " .. tostring(spare)
+			empty, spareLow = spare <= 0, spare <= maxMag
+		elseif type(loose) == "number" then
+			local rounds = spare * maxMag + loose
+			ui.ammoSpare.Text = "/ " .. tostring(rounds)
+			ui.cntMags.Text = "MAG " .. tostring(math.ceil(rounds / math.max(maxMag, 1)))
+			empty, spareLow = rounds <= 0, rounds <= maxMag
+		else
+			ui.ammoSpare.Text = "x" .. tostring(spare)
+			ui.cntMags.Text = "MAG " .. tostring(spare) .. (if type(parts) == "number" and parts > 0 then string.format(" (%d PART)", parts) else "")
+			empty, spareLow = spare <= 0, spare <= 1
+		end
+		ui.cntMags.TextColor3 = if empty then Style.Red elseif spareLow then Style.Amber else Style.White
+		ui.ammoSpare.TextColor3 = if empty then Style.Red elseif spareLow then Style.Amber else Style.Grey
+		ammoLastSpare, ammoLastMax = (if empty then 0 else 1), (def and def.mag or 0)
 	else
 		ammoLastId, ammoLastMax = nil, 0
 	end
@@ -1373,6 +1484,37 @@ function HUD.setLocalMag(t: { [number]: number })
 	localMags = t
 	if inited and ui.ammoMag then
 		updateAmmo()
+	end
+end
+
+-- magazine reserve attributes (server/WeaponService MAGS "pool" / "keep") change without a `me` publish
+for i = 1, 3 do
+	for _, a in { "AmmoLoose", "AmmoParts" } do
+		player:GetAttributeChangedSignal(a .. i):Connect(function()
+			if inited and ui.ammoMag then
+				updateAmmo()
+			end
+		end)
+	end
+end
+
+-- WeaponController: fire mode of the held weapon next to the ammo counter ("AUTO" / "BURST" / "SEMI"). Hidden when
+-- the weapon has only one mode; `flash` = just switched (short white pop).
+local FIRE_MODE_TEXT = { auto = "AUTO", burst = "BURST", semi = "SEMI" }
+local fireModeShown: string? = nil
+function HUD.setFireMode(mode: string?, switchable: boolean, flash: boolean?)
+	local fm = ui.fireMode
+	if not fm then
+		return
+	end
+	local text = if mode and switchable then (FIRE_MODE_TEXT[mode] or string.upper(mode)) else ""
+	if text ~= fireModeShown then
+		fireModeShown = text
+		fm.Text = text
+	end
+	if flash then
+		fm.TextColor3 = Style.White
+		tw(fm, 0.35, { TextColor3 = Style.Grey })
 	end
 end
 
@@ -1759,7 +1901,8 @@ local function updateOverlay()
 			tw(ui.cdNumberScale, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
 			ui.cdNumber.TextColor3 = n <= 3 and C.Accent or C.Text
 			Theme.sfx("DialTick")
-			local f = m.faction == "BROOD" and "Skitter Brood" or (m.faction == "COG" and "Cogwork Legion" or "")
+			local f = m.faction == "BROOD" and "Skitter Brood"
+				or (m.faction == "COG" and "Cogwork Legion" or (m.faction == "LUMEN" and "Lumen Concord" or ""))
 			ui.cdInfo.Text = string.format("%s   -   %s   -   Difficulty %s", m.objectiveName or "Mission", f, tostring(m.difficulty or 1))
 		end
 	elseif state == "Drop" then
@@ -1808,7 +1951,8 @@ local function updatePrompt()
 		ui.promptTitle.TextColor3 = col
 		ui.promptTitle.Text = "THROW BEACON"
 		local hint = touch and "Tap FIRE to throw" or (Store.get("throwHint") or "Left-click or [Q] to throw") -- throwHint: CallInController (arm method + PC/pad)
-		ui.promptSub.Text = (def and string.upper(def.name) or "") .. (h.perfect and "  -  PERFECT SYNC" or "") .. "   " .. hint
+		-- phones (PHONE HUD A): the prompt is 220 px wide, so the hint gets its own line
+		ui.promptSub.Text = (def and string.upper(def.name) or "") .. (h.perfect and "  -  PERFECT SYNC" or "") .. (if phoneNew() then "\n" else "   ") .. hint
 	else
 		ui.promptFrame.Visible = false
 	end
@@ -1999,7 +2143,7 @@ local function onMission()
 		state = new
 		countdownLast = -1
 		if new == "Active" and (prevState == "Drop" or prevState == "Countdown") then
-			HUD.banner(string.upper((m and m.objectiveName) or "MISSION START"), touch and "Tap UPLINK to call the sky down" or "Hold [Q] for the Uplink Dial", C.Accent)
+			HUD.banner(string.upper((m and m.objectiveName) or "MISSION START"), touch and "Tap UPLINK to call the sky down" or (Store.get("dialHint") or "Hold [Q] for the Uplink Dial"), C.Accent) -- dialHint: CallInController (arm method + PC/pad)
 		elseif new == "Extract" then
 			HUD.banner("EXTRACTION INBOUND", "Reach the " .. Config.ShuttleName .. " before the window closes", C.Friendly)
 		end

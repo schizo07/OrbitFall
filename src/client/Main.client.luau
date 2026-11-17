@@ -70,6 +70,12 @@ end
 if WarMap then
 	safeCall("WarMap", WarMap.init)
 end
+do -- mission-end after-action report (client/UI/AfterAction.luau)
+	local AfterAction = UI and safeRequire(UI:FindFirstChild("AfterAction"))
+	if AfterAction then
+		safeCall("AfterAction", AfterAction.init)
+	end
+end
 if Dial and Dial.init then
 	safeCall("UplinkDial", Dial.init)
 end
@@ -120,6 +126,12 @@ if CallIn and Weapon then
 	local Pings = UI and safeRequire(UI:FindFirstChild("Pings"))
 	if Pings then
 		safeCall("Pings", Pings.init, Weapon.aimPoint)
+	end
+end
+do -- first-time hints card (client/UI/Tips.luau, Variants "TIPS")
+	local TipsUI = UI and safeRequire(UI:FindFirstChild("Tips"))
+	if TipsUI then
+		safeCall("Tips", TipsUI.init, Fx)
 	end
 end
 
@@ -176,7 +188,8 @@ end
 -- Jump action for touch buttons
 Input.on("Jump", function(d)
 	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-	if d and hum then
+	-- gamepad A presses the selected menu button; it must not also make the character jump
+	if d and hum and not (Store and Store.get("menuOpen") == true) then
 		hum.Jump = true
 	end
 end)

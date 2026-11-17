@@ -2,7 +2,9 @@
 -- Client side of the downed state (server/Downed.luau, rules shared/Downed.luau, tuning Config.Downed).
 --   * DOWNED panel (centre, a little below the crosshair): title, bleed-out bar + seconds left (Player attribute
 --     DownedEnd = server time the bleed-out finishes at the current rate)
---   * context prompt: "Press [F] to stim back up" while you have stims, else "No stims - crawl to a squadmate"
+--   * context prompt: "Hold [F] to stim back up" while you have stims, else "No stims - crawl to a squadmate"
+--     (the hold itself and its fill bar: Fx/VitalsFx)
+--   * "NAME IS REVIVING YOU" + green bar under the panel while a squadmate holds the revive prompt (ReviveBy / ReviveStart)
 --   * your own body's revive prompt is hidden (only squadmates see "Revive")
 --   Studio A/B: Variants group DOWNED (Feel_Downed, mirrored to the server by Variants)
 -- Movement / gates live elsewhere: client/Movement (forced prone, crawl speed, no stance input), client/CellCarry
@@ -12,6 +14,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Rules = require(Shared.Downed)
+local Config = require(Shared.Config)
 local Store = require(script.Parent.Store)
 
 local DownedFx = {}
@@ -64,9 +67,29 @@ local function build()
 		Color = Style.Red,
 		Parent = holder,
 	})
+	-- a squadmate holding the revive prompt on you: "NAME IS REVIVING YOU" + a green bar (ReviveBy / ReviveStart)
+	local revive = Style.label({
+		Name = "Revive",
+		Text = "",
+		TextSize = 14,
+		Color = Style.Green,
+		XAlign = Enum.TextXAlignment.Center,
+		Position = UDim2.new(0, 0, 1, 6),
+		Size = UDim2.new(1, 0, 0, 16),
+		Visible = false,
+		Parent = holder,
+	})
+	local reviveBar = Style.bar({
+		Name = "ReviveBar",
+		Size = UDim2.new(1, -20, 0, 6),
+		Position = UDim2.new(0, 10, 1, 24),
+		Color = Style.Green,
+		Parent = holder,
+	})
+	reviveBar.back.Visible = false
 	local scale = Instance.new("UIScale")
 	scale.Parent = holder
-	ui = { gui = gui, holder = holder, title = title, sub = sub, bar = bar, scale = scale }
+	ui = { gui = gui, holder = holder, title = title, sub = sub, bar = bar, scale = scale, revive = revive, reviveBar = reviveBar }
 end
 
 local function me(): any
@@ -138,9 +161,23 @@ local function step()
 		txt ..= "  -  squadmates can revive you"
 	end
 	ui.sub.Text = string.upper(txt)
+	-- squadmate reviving you
+	local byId = player:GetAttribute(Rules.REVIVE_BY)
+	local t0 = player:GetAttribute(Rules.REVIVE_START)
+	local by = if type(byId) == "number" then Players:GetPlayerByUserId(byId) else nil
+	if by and type(t0) == "number" then
+		local frac = (workspace:GetServerTimeNow() - t0) / math.max(Config.Downed.ReviveHold, 0.1)
+		ui.revive.Text = string.upper(by.DisplayName) .. " IS REVIVING YOU"
+		ui.revive.Visible = true
+		ui.reviveBar.back.Visible = true
+		ui.reviveBar.set(frac)
+	elseif ui.revive.Visible then
+		ui.revive.Visible = false
+		ui.reviveBar.back.Visible = false
+	end
 	if ContextPrompt then
 		if stims > 0 then
-			ContextPrompt.show("downed", "Press {key} to stim back up", "Stim", nil, 8)
+			ContextPrompt.show("downed", if Rules.stimHold() > 0 then "Hold {key} to stim back up" else "Press {key} to stim back up", "Stim", nil, 8)
 		elseif mates > 0 then
 			ContextPrompt.show("downed", "No stims - crawl to a squadmate", "", nil, 8)
 		else

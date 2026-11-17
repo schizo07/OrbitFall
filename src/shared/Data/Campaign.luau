@@ -6,7 +6,8 @@
 --   planet      Data/Planets id
 --   kind        "liberate"  community must push the planet to 100 % liberation before `ends`
 --               "defend"    a FREE planet is under attack; community must reach 100 % defence before `ends`
---   faction     enemy faction fighting there ("COG" | "BROOD")
+--   faction     enemy faction fighting there ("COG" | "BROOD" | "LUMEN"). Lumen-held planets (Data/Planets owner "LUMEN")
+--               are playable by free-play liberation without any operation.
 --   starts/ends unix seconds (UTC). Use https://www.unixtimestamp.com or os.time{...} in Studio
 --   resist      % per hour the enemy claws back while the operation is live (pressure)
 --   onSuccess   "liberated" (planet becomes FREE) | "held" (defence succeeded, stays FREE)

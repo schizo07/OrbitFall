@@ -1381,7 +1381,7 @@ local function fireCall(c: { e: any, fireAt: number, prev: number, flare: Instan
 	end
 	if S.State and S.State.notify then
 		local f = EnemyData.Factions[factionId]
-		S.State.notify(nil, if factionId == "COG" then "Enemy reinforcements inbound!" else "The Brood is breaching!", f.color, "warning")
+		S.State.notify(nil, if factionId == "COG" then "Enemy reinforcements inbound!" elseif factionId == "LUMEN" then "The Concord is folding in!" else "The Brood is breaching!", f.color, "warning")
 	end
 	-- during a breach the call is answered by the open source nearest the caller: an instant extra burst
 	if istate == "breach" and not legacyWaves then
