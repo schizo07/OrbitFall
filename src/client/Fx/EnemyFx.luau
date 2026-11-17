@@ -12,6 +12,8 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
+local CallInModels = require(script.Parent.Parent:WaitForChild("CallInModels"))
+
 local EnemyFx = {}
 
 local Fx: any
@@ -632,15 +634,41 @@ local function onDropShip(d: any)
 		table.insert(rel, { part = p, off = off })
 		return p
 	end
-	add(Vector3.new(7, 2.4, 16), C3(58, 62, 74), CFrame.new(0, 0, 0))
-	add(Vector3.new(14, 0.6, 5), C3(44, 47, 57), CFrame.new(0, 0.5, 1))
-	add(Vector3.new(2.2, 2.2, 2.2), RED, CFrame.new(-4.6, 0.2, 4), Enum.Material.Neon)
-	add(Vector3.new(2.2, 2.2, 2.2), RED, CFrame.new(4.6, 0.2, 4), Enum.Material.Neon)
-	add(Vector3.new(2.6, 0.6, 2.6), ORANGE, CFrame.new(-4.6, -1.4, 4), Enum.Material.Neon)
-	add(Vector3.new(2.6, 0.6, 2.6), ORANGE, CFrame.new(4.6, -1.4, 4), Enum.Material.Neon)
-	local cargo = add(Vector3.new(5, 3.6, 5), C3(70, 74, 86), CFrame.new(0, -3.4, 0))
-	local cargoOff = CFrame.new(0, -3.4, 0)
-	local stripe = add(Vector3.new(5.2, 0.7, 5.2), C3(196, 108, 44), CFrame.new(0, -3.4, 0))
+	-- Mesh ship (Data/Meshes callin_cog_dropship; nose -Z; Hook_1..4 grip the cargo from above). Its origin is the underside, so
+	-- it is lowered by SHIP_DROP to keep the body centred on the old hover point. Part-built ship as the fallback.
+	local SHIP_DROP = 6.5
+	local meshShip = CallInModels.get("callin_cog_dropship")
+	local hooks: { [Part]: { pivot: Vector3, sign: number } } = {}
+	local cargo: Part
+	local stripe: Part
+	local cargoOff: CFrame
+	if meshShip then
+		local rig = CallInModels.rig(meshShip)
+		local shift = CFrame.new(0, -SHIP_DROP, 0)
+		for name, p in rig.parts do
+			p.CastShadow = false
+			p.Parent = model
+			table.insert(rel, { part = p, off = shift * rig.rel[p] })
+			local n = tonumber(string.match(name, "^Hook_(%d)$"))
+			if n then
+				hooks[p] = { pivot = CallInModels.pivot(rig, "callin_cog_dropship", name) + Vector3.new(0, -SHIP_DROP, 0), sign = if n % 2 == 0 then 1 else -1 }
+			end
+		end
+		meshShip:Destroy()
+		cargoOff = CFrame.new(0, -SHIP_DROP - 1.5, 0.53) -- hangs under the hooks
+		cargo = add(Vector3.new(4.6, 3, 12.6), C3(70, 74, 86), cargoOff)
+		stripe = add(Vector3.new(4.8, 0.8, 12.8), C3(196, 108, 44), cargoOff)
+	else
+		add(Vector3.new(7, 2.4, 16), C3(58, 62, 74), CFrame.new(0, 0, 0))
+		add(Vector3.new(14, 0.6, 5), C3(44, 47, 57), CFrame.new(0, 0.5, 1))
+		add(Vector3.new(2.2, 2.2, 2.2), RED, CFrame.new(-4.6, 0.2, 4), Enum.Material.Neon)
+		add(Vector3.new(2.2, 2.2, 2.2), RED, CFrame.new(4.6, 0.2, 4), Enum.Material.Neon)
+		add(Vector3.new(2.6, 0.6, 2.6), ORANGE, CFrame.new(-4.6, -1.4, 4), Enum.Material.Neon)
+		add(Vector3.new(2.6, 0.6, 2.6), ORANGE, CFrame.new(4.6, -1.4, 4), Enum.Material.Neon)
+		cargo = add(Vector3.new(5, 3.6, 5), C3(70, 74, 86), CFrame.new(0, -3.4, 0))
+		cargoOff = CFrame.new(0, -3.4, 0)
+		stripe = add(Vector3.new(5.2, 0.7, 5.2), C3(196, 108, 44), CFrame.new(0, -3.4, 0))
+	end
 	local cargoParts = { cargo, stripe }
 	for _, c in cargoParts do
 		c.Anchored = true
@@ -771,9 +799,15 @@ local function onDropShip(d: any)
 		local pos = posAt(t)
 		local cf = CFrame.lookAt(pos, pos + flatDir) * CFrame.Angles(0, 0, 0)
 		lastCF = cf
+		local hookU = math.clamp((t - dropT) / 0.4, 0, 1) -- mesh ship: the hooks let go as the cargo drops
 		for _, r in rel do
 			if r.part.Parent and not (dropped and (r.part == cargo or r.part == stripe)) then
-				r.part.CFrame = cf * r.off
+				local hk = hooks[r.part]
+				if hk and hookU > 0 then
+					r.part.CFrame = cf * CallInModels.hinge(hk.pivot, CFrame.Angles(0, 0, hk.sign * math.rad(55) * hookU)) * r.off
+				else
+					r.part.CFrame = cf * r.off
+				end
 			end
 		end
 		-- cargo pod falls to the ground

@@ -1,6 +1,16 @@
 -- Supply Drop: a pod crushes whatever it lands on, then opens into a resupply crate.
+local ModelShare = require(script.Parent.Parent.ModelShare)
+
 local POD_FALL = 1.6
 local CRATE_LIFETIME = 90
+
+-- direction each petal of callin_supply_pod folds out to (model frame, front = -Z)
+local PETAL_OUT = {
+	Petal_1 = Vector3.new(0, 0, -1),
+	Petal_2 = Vector3.new(-1, 0, 0),
+	Petal_3 = Vector3.new(0, 0, 1),
+	Petal_4 = Vector3.new(1, 0, 0),
+}
 
 local function part(props)
 	local p = Instance.new("Part")
@@ -34,28 +44,83 @@ return function(ctx)
 	local cf = CFrame.new(pos + Vector3.new(0, 1.35, 0)) * CFrame.Angles(0, yaw, 0)
 	local model = Instance.new("Model")
 	model.Name = "SupplyCrate"
-	local body = part({
-		Name = "Body", Size = Vector3.new(4.4, 2.7, 3.2), Material = Enum.Material.Metal,
-		Color = Color3.fromRGB(52, 74, 104), CFrame = cf,
-	})
-	body.Parent = model
-	part({
-		Name = "Lid", Size = Vector3.new(4.6, 0.35, 3.4), Material = Enum.Material.SmoothPlastic,
-		Color = Color3.fromRGB(30, 38, 54), CFrame = cf * CFrame.new(0, 1.4, 0), CanCollide = false,
-	}).Parent = model
-	part({
-		Name = "Stripe", Size = Vector3.new(4.5, 0.5, 0.25), Material = Enum.Material.Neon,
-		Color = Color3.fromRGB(47, 139, 255), CFrame = cf * CFrame.new(0, 0.3, 1.65), CanCollide = false,
-	}).Parent = model
-	part({
-		Name = "Stripe2", Size = Vector3.new(4.5, 0.5, 0.25), Material = Enum.Material.Neon,
-		Color = Color3.fromRGB(47, 139, 255), CFrame = cf * CFrame.new(0, 0.3, -1.65), CanCollide = false,
-	}).Parent = model
-	model.PrimaryPart = body
+	local body: BasePart
+	local labelY = 3.6
+	local ammoCF = cf * CFrame.new(3.3, -0.45, 0)
+	local mesh = ModelShare.visual(S, "callin_supply_pod") -- Body, Glow, Thruster, Petal_1..4 (opens like a flower)
+	if mesh and not mesh:FindFirstChild("Body") then
+		mesh:Destroy()
+		mesh = nil
+	end
+	local petalRig: ModelShare.Rig? = nil
+	local meshCF = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
+	if mesh then
+		local rig = ModelShare.rig(mesh)
+		petalRig = rig
+		ModelShare.pose(rig, meshCF)
+		for _, d in mesh:GetChildren() do
+			if d:IsA("BasePart") then
+				d.CanQuery = true
+				d.Parent = model
+			end
+		end
+		mesh:Destroy()
+		body = rig.parts.Body
+		body.CanCollide = true
+		body.Name = "Body"
+		model.PrimaryPart = body
+		labelY = 5.8
+		ammoCF = meshCF * CFrame.new(3.5, 0.9, 3.5) -- between two petals, clear of the open flower
+	else
+		body = part({
+			Name = "Body", Size = Vector3.new(4.4, 2.7, 3.2), Material = Enum.Material.Metal,
+			Color = Color3.fromRGB(52, 74, 104), CFrame = cf,
+		})
+		body.Parent = model
+		part({
+			Name = "Lid", Size = Vector3.new(4.6, 0.35, 3.4), Material = Enum.Material.SmoothPlastic,
+			Color = Color3.fromRGB(30, 38, 54), CFrame = cf * CFrame.new(0, 1.4, 0), CanCollide = false,
+		}).Parent = model
+		part({
+			Name = "Stripe", Size = Vector3.new(4.5, 0.5, 0.25), Material = Enum.Material.Neon,
+			Color = Color3.fromRGB(47, 139, 255), CFrame = cf * CFrame.new(0, 0.3, 1.65), CanCollide = false,
+		}).Parent = model
+		part({
+			Name = "Stripe2", Size = Vector3.new(4.5, 0.5, 0.25), Material = Enum.Material.Neon,
+			Color = Color3.fromRGB(47, 139, 255), CFrame = cf * CFrame.new(0, 0.3, -1.65), CanCollide = false,
+		}).Parent = model
+		model.PrimaryPart = body
+	end
 	if S.Weapons and S.Weapons.spawnAmmoPack then -- big-ammo backpack beside the crate (server/WeaponService)
-		S.Weapons.spawnAmmoPack(model, cf * CFrame.new(3.3, -0.45, 0))
+		S.Weapons.spawnAmmoPack(model, ammoCF)
 	end
 	model.Parent = ctx.folder
+	if petalRig then
+		-- the petals fold out over 0.5 s (the client pod has just landed closed on the same spot)
+		local rig = petalRig
+		task.spawn(function()
+			local t0 = os.clock()
+			while true do
+				local a = math.clamp((os.clock() - t0) / 0.5, 0, 1)
+				local e = 1 - (1 - a) * (1 - a)
+				local motions: { [string]: CFrame } = {}
+				for name, out in PETAL_OUT do
+					local pv = S.Assets.pivot("callin_supply_pod", name)
+					if pv then
+						motions[name] = ModelShare.hinge(pv, CFrame.fromAxisAngle(Vector3.new(0, 1, 0):Cross(out), math.rad(80) * e))
+					end
+				end
+				if not model.Parent then
+					return
+				end
+				ModelShare.pose(rig, meshCF, motions)
+				if a >= 1 then
+					return
+				end
+				task.wait()
+			end
+		end)
+	end
 	ctx.onStop(function()
 		model:Destroy()
 	end)
@@ -65,7 +130,7 @@ return function(ctx)
 
 	local gui = Instance.new("BillboardGui")
 	gui.Size = UDim2.fromOffset(150, 34)
-	gui.StudsOffset = Vector3.new(0, 3.6, 0)
+	gui.StudsOffset = Vector3.new(0, labelY, 0)
 	gui.AlwaysOnTop = true
 	gui.MaxDistance = 80
 	gui.Parent = body

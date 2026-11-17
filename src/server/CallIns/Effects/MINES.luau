@@ -1,10 +1,38 @@
 -- Minefield: 12 proximity mines. Arm after 1 s, trigger on enemies only (never players).
 local Blasts = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Blasts"))
+local ModelShare = require(script.Parent.Parent.ModelShare)
 
 local POD_FALL = 1.2
 local ARM_TIME = 1.0
 local TICK = 0.125
 local TRIGGER = 3.2
+
+-- Mine from the callin_mine mesh (Body + Light; origin on the ground, up = surface normal); nil when unavailable.
+local function makeMeshMine(S: any, parent: Instance, pos: Vector3, normal: Vector3): (Model?, BasePart?)
+	local model = ModelShare.visual(S, "callin_mine")
+	local lamp = model and model:FindFirstChild("Light")
+	local body = model and model:FindFirstChild("Body")
+	if not model or not lamp or not body then
+		if model then
+			model:Destroy()
+		end
+		return nil, nil
+	end
+	for _, d in model:GetChildren() do
+		if d:IsA("BasePart") then
+			d.CastShadow = false
+		end
+	end
+	local ref = if math.abs(normal.Y) > 0.9 then Vector3.xAxis else Vector3.yAxis
+	local right = normal:Cross(ref).Unit
+	model:PivotTo(CFrame.fromMatrix(pos, right, normal, right:Cross(normal)))
+	model.Name = "Mine"
+	model.PrimaryPart = body :: BasePart
+	local l = lamp :: BasePart
+	l.Color = Color3.fromRGB(255, 200, 40)
+	model.Parent = parent
+	return model, l
+end
 
 local function makeMine(parent: Instance, pos: Vector3, normal: Vector3)
 	local model = Instance.new("Model")
@@ -68,7 +96,10 @@ return function(ctx)
 		if n.Y < 0.5 then
 			n = Vector3.yAxis
 		end
-		local model, lamp = makeMine(container, p, n)
+		local model, lamp = makeMeshMine(S, container, p, n)
+		if not model or not lamp then
+			model, lamp = makeMine(container, p, n)
+		end
 		table.insert(mines, { model = model, lamp = lamp, pos = p, armed = false })
 		task.wait(0.04)
 	end

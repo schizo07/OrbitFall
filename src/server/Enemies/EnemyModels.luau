@@ -52,7 +52,9 @@ export type RigEntry = {
 	roll: boolean, -- rotate about Z instead of X
 	lift: number, -- extra angle applied while winding up an attack
 }
-export type Rig = { legs: { RigEntry }, bob: number, mesh: boolean? }
+-- Server-driven joint of a kit mesh (Motor6D, swung by writing C0; Transform is not replicated). Used by the Scrap Courier legs.
+export type MotorEntry = { motor: Motor6D, c0: CFrame, amp: number, phase: number }
+export type Rig = { legs: { RigEntry }, bob: number, mesh: boolean?, motors: { MotorEntry }? }
 
 EnemyModels.Offsets = {
 	TINKER = { muzzle = Vector3.new(1.45, 3.4, -1.9) },
@@ -255,14 +257,18 @@ end
 -- grille bars (zone "vent"). Troopers cannot walk through it: one invisible vertical collision cylinder ("Hull", CanQuery off so
 -- bullets still hit the visible parts) centred on the root, so the slow turn never sweeps a corner into anyone.
 -- The whole block turns slowly to face its target (EnemyAI, def.turn), so the vent swings away from a flanker.
-local function buildBastion(c: Ctx)
-	c.rig.bob = 0
+local function addBastionHull(c: Ctx)
 	local hull = c.add("Hull", V(7.5, 10, 10), CFrame.new(0, 3.75, 0) * CFrame.Angles(0, 0, math.rad(90)), DARKMETAL)
 	hull.Shape = Enum.PartType.Cylinder
 	hull.Transparency = 1
 	hull.CanQuery = false
 	hull.CanCollide = true
 	hull.CastShadow = false
+end
+
+local function buildBastion(c: Ctx)
+	c.rig.bob = 0
+	addBastionHull(c)
 	c.add("Plinth", V(11, 2, 11), at(0, 1, 0), DARKMETAL, SLATE)
 	c.add("Bunker", V(9, 5, 8.4), at(0, 4.5, 0.3), GUNMETAL)
 	c.add("Glacis", V(9, 4.6, 1.2), CFrame.new(0, 4.6, -4.2) * CFrame.Angles(math.rad(22), 0, 0), DARKMETAL)
@@ -521,6 +527,76 @@ local function roleOf(mp: Instance): string
 	return if type(role) == "string" then role else "body"
 end
 
+-- KIT MESHES (Data/Meshes entries with kind = "setpiece": Bastion, Scrap Courier). The template keeps the Blender frame after
+-- tpl:PivotTo(identity), so the manifest `pivots` apply as they are (world = root * pivot) and the root at the origin = ground
+-- centre. Every part hangs off its parent in KIT_PARENT (default Body) on a Motor6D at its manifest pivot, same maths as buildRigged.
+-- The client does not animate these (no Rigged attribute): the server swings the courier legs through rig.motors (EnemyModels.animate).
+local KIT_KEY: { [string]: string } = { BASTION = "bastion_cog", LOOT_COG = "courier_cog" }
+local KIT_PARENT: { [string]: { [string]: string } } = {
+	BASTION = { Heatsink = "Turret", Vent = "Turret", EyeL = "Turret", EyeR = "Turret" },
+}
+local KIT_ZONE: { [string]: { [string]: string } } = {
+	BASTION = { Heatsink = "vent", Vent = "vent", EyeL = "eye", EyeR = "eye" },
+	LOOT_COG = { Crate = "crate" },
+}
+local KIT_SKIP_GLOW_FIX: { [string]: { [string]: boolean } } = { LOOT_COG = { Crate = true } } -- the loot stays gold
+local KIT_LEG_PHASE = { Leg_FL = 0, Leg_RR = 0, Leg_FR = math.pi, Leg_RL = math.pi } -- diagonal pairs swing together
+
+local function buildKit(kindId: string, enemyId: number, tpl: Model, key: string, c: Ctx): (Model, Rig)
+	local def = EnemyData.get(kindId)
+	assert(def, "unknown enemy kind " .. kindId)
+	local model, root = c.model, c.root
+	c.rig.bob = if kindId == "LOOT_COG" then 0.1 else 0
+	if kindId == "BASTION" then
+		addBastionHull(c) -- invisible collision cylinder, same as the part-built one
+	end
+	tpl:PivotTo(CFrame.new())
+	local byName: { [string]: BasePart } = {}
+	for _, d in tpl:GetChildren() do
+		if d:IsA("BasePart") then
+			byName[d.Name] = d
+		end
+	end
+	assert(byName.Body, "kit template has no Body part")
+	local parents = KIT_PARENT[kindId] or {}
+	local zones = KIT_ZONE[kindId] or {}
+	local skip = KIT_SKIP_GLOW_FIX[kindId] or {}
+	local motors: { MotorEntry } = {}
+	for name, part in byName do
+		local role = roleOf(part)
+		if not skip[name] then
+			tuneGlow(kindId, def, part)
+		end
+		prepPart(part, enemyId, zones[name] or zoneFor(kindId, name, role, def))
+		if role == "glow" then
+			part.CanQuery = false -- cosmetic: bullets pass through to the armour behind it
+		end
+		local parentPart: BasePart = root
+		if name ~= "Body" then
+			parentPart = byName[parents[name] or "Body"] or byName.Body
+		end
+		local j = CFrame.new(Assets.pivot(key, name) or Vector3.zero)
+		local m = Instance.new("Motor6D")
+		m.Name = name
+		m.Part0 = parentPart
+		m.Part1 = part
+		m.C0 = parentPart.CFrame:Inverse() * j
+		m.C1 = part.CFrame:Inverse() * j
+		part.Parent = model
+		m.Parent = part
+		c.count += 1
+		local phase = KIT_LEG_PHASE[name]
+		if phase and kindId == "LOOT_COG" then
+			table.insert(motors, { motor = m, c0 = m.C0, amp = 0.55, phase = phase })
+		end
+	end
+	if #motors > 0 then
+		c.rig.motors = motors
+	end
+	tpl:Destroy()
+	return model, c.rig
+end
+
 -- Legacy single-piece mesh: every part welded to the root, client sways the welds.
 local function buildFromMesh(kindId: string, enemyId: number, tpl: Model): (Model, Rig)
 	local def = EnemyData.get(kindId)
@@ -645,6 +721,12 @@ local function scaleBuilt(model: Model, rig: Rig, scale: number)
 		leg.hip = CFrame.new(leg.hip.Position * scale) * leg.hip.Rotation
 		leg.hipLocal = CFrame.new(leg.hipLocal.Position * scale) * leg.hipLocal.Rotation
 	end
+	local motors = rig.motors
+	if motors then
+		for _, m in motors do
+			m.c0 = m.motor.C0 -- ScaleTo already scaled the joint
+		end
+	end
 end
 
 function EnemyModels.build(kindId: string, enemyId: number, scale: number?): (Model, Rig)
@@ -661,6 +743,20 @@ end
 function EnemyModels.buildUnscaled(kindId: string, enemyId: number): (Model, Rig)
 	local builder = BUILDERS[kindId]
 	assert(builder, "EnemyModels: unknown kind " .. tostring(kindId))
+
+	local kitKey = KIT_KEY[kindId]
+	local kitTpl = if kitKey then Assets.get(kitKey) else nil
+	if kitTpl and kitKey then
+		-- the context is built inside the pcall so a failed kit build leaves nothing behind for the part-built fallback
+		local ok, model, rig = pcall(function()
+			return buildKit(kindId, enemyId, kitTpl, kitKey, newCtx(kindId, enemyId))
+		end)
+		if ok then
+			return model, rig
+		end
+		warn("[EnemyModels] kit mesh build failed for", kindId, model)
+		kitTpl:Destroy()
+	end
 
 	local tpl = Assets.get(string.lower(kindId))
 	if tpl then
@@ -691,6 +787,12 @@ function EnemyModels.animate(rig: Rig, rootCF: CFrame, t: number, move: number, 
 		local ang = math.sin(t + e.phase) * e.amp * move + e.lift * windup
 		local rot = if e.roll then CFrame.Angles(0, 0, ang) else CFrame.Angles(ang, 0, 0)
 		e.part.CFrame = rootCF * e.hip * rot * e.hipLocal
+	end
+	local motors = rig.motors
+	if motors then
+		for _, e in motors do
+			e.motor.C0 = e.c0 * CFrame.Angles(math.sin(t + e.phase) * e.amp * move, 0, 0)
+		end
 	end
 end
 

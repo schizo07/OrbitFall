@@ -1,4 +1,7 @@
 -- Shield Dome: a generator drops in and projects a dome that stops enemy projectiles.
+local RunService = game:GetService("RunService")
+local ModelShare = require(script.Parent.Parent.ModelShare)
+
 local POD_FALL = 1.0
 
 return function(ctx)
@@ -15,30 +18,70 @@ return function(ctx)
 	local model = Instance.new("Model")
 	model.Name = "ShieldDome"
 
-	local gen = Instance.new("Part")
-	gen.Name = "Generator"
-	gen.Shape = Enum.PartType.Cylinder
-	gen.Size = Vector3.new(2.4, 2.2, 2.2)
-	gen.Material = Enum.Material.Metal
-	gen.Color = Color3.fromRGB(44, 52, 66)
-	gen.Anchored = true
-	gen.CanCollide = true
-	gen.CanTouch = false
-	gen.CFrame = CFrame.new(pos + Vector3.new(0, 1.2, 0)) * CFrame.Angles(0, 0, math.pi / 2)
-	gen.Parent = model
-	local orb = Instance.new("Part")
-	orb.Name = "Orb"
-	orb.Shape = Enum.PartType.Ball
-	orb.Size = Vector3.new(1.4, 1.4, 1.4)
-	orb.Material = Enum.Material.Neon
-	orb.Color = teal
-	orb.Anchored = true
-	orb.CanCollide = false
-	orb.CanTouch = false
-	orb.CanQuery = false
-	orb.CastShadow = false
-	orb.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
-	orb.Parent = model
+	local gen: BasePart
+	local orb: BasePart
+	local mesh = ModelShare.visual(S, "callin_shield_emitter") -- Body, Head (spins), glowing Emitter + Cells
+	local meshBody = mesh and mesh:FindFirstChild("Body")
+	local meshHead = mesh and mesh:FindFirstChild("Head")
+	local meshEmitter = mesh and mesh:FindFirstChild("Emitter")
+	if mesh and meshBody and meshHead and meshEmitter then
+		local rig = ModelShare.rig(mesh)
+		local base = CFrame.new(pos)
+		ModelShare.pose(rig, base)
+		local pivot = S.Assets.pivot("callin_shield_emitter", "Head") or Vector3.new(-0.265, 2.3, 0)
+		for _, d in mesh:GetChildren() do
+			if d:IsA("BasePart") then
+				d.CastShadow = false
+				d.Parent = model
+			end
+		end
+		mesh:Destroy()
+		gen = meshBody :: BasePart
+		gen.CanCollide = true
+		gen.CanQuery = true
+		orb = meshEmitter :: BasePart
+		orb.Name = "Emitter"
+		local head = meshHead :: BasePart
+		local t0 = os.clock()
+		local spin = RunService.Heartbeat:Connect(function()
+			local m = ModelShare.hinge(pivot, CFrame.Angles(0, (os.clock() - t0) * 1.6, 0))
+			head.CFrame = base * m * rig.rel[head]
+			orb.CFrame = base * m * rig.rel[orb]
+		end)
+		ctx.onStop(function()
+			spin:Disconnect()
+		end)
+	else
+		if mesh then
+			mesh:Destroy()
+		end
+		local g = Instance.new("Part")
+		g.Name = "Generator"
+		g.Shape = Enum.PartType.Cylinder
+		g.Size = Vector3.new(2.4, 2.2, 2.2)
+		g.Material = Enum.Material.Metal
+		g.Color = Color3.fromRGB(44, 52, 66)
+		g.Anchored = true
+		g.CanCollide = true
+		g.CanTouch = false
+		g.CFrame = CFrame.new(pos + Vector3.new(0, 1.2, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+		g.Parent = model
+		gen = g
+		local o = Instance.new("Part")
+		o.Name = "Orb"
+		o.Shape = Enum.PartType.Ball
+		o.Size = Vector3.new(1.4, 1.4, 1.4)
+		o.Material = Enum.Material.Neon
+		o.Color = teal
+		o.Anchored = true
+		o.CanCollide = false
+		o.CanTouch = false
+		o.CanQuery = false
+		o.CastShadow = false
+		o.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+		o.Parent = model
+		orb = o
+	end
 	local light = Instance.new("PointLight")
 	light.Color = teal
 	light.Range = 24

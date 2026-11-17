@@ -11,6 +11,7 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
 local CallInData = require(Shared.Data.CallIns)
 local Throw = require(Shared.Throw)
+local ModelShare = require(script.Parent.ModelShare)
 
 local CallIns = {}
 local S: any = nil
@@ -963,6 +964,7 @@ CallIns.stop = CallIns.stopAll
 function CallIns.init(registry: any)
 	S = registry
 	getFolder()
+	ModelShare.start(S) -- call-in meshes for the client Fx (falling pods, bombs, shells, jet)
 	S.Actions.on("callin_ready", onReady)
 	S.Actions.on("callin_throw", throwBeacon)
 	S.Actions.on("callin_cancel", onCancel)

@@ -8,7 +8,7 @@ return function(ctx)
 	local pos = ctx.groundAt(ctx.pos)
 	local id = ctx.nextId()
 
-	S.Fx.play("Shell", { p = pos, t = FALL, s = 0.7, c = Color3.fromRGB(120, 255, 90) })
+	S.Fx.play("Shell", { p = pos, t = FALL, s = 0.7, c = Color3.fromRGB(120, 255, 90), k = "canister" })
 	task.wait(FALL)
 
 	S.Fx.play("Gas", { id = id, p = pos, r = prm.radius, t = prm.duration })

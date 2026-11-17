@@ -18,6 +18,7 @@
 local Players = game:GetService("Players")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Assets = require(script.Parent.Parent.World.Assets)
 
 local DroneAI = {}
 
@@ -83,13 +84,77 @@ local PURPLE = Color3.fromRGB(110, 62, 140)
 local DARKPURPLE = Color3.fromRGB(58, 34, 82)
 local SPORE = Color3.fromRGB(150, 255, 90)
 
+local GNAT_GLOW = Color3.fromRGB(235, 34, 24) -- same deep red as EnemyModels' COG glow fix (bloom washes lighter reds out)
+local ROTOR_SPIN = 20 -- rad/s; written to the rotor joints, so it replicates: slow enough not to strobe at the network rate
+
+-- Gnat drone from the gnat_cog kit mesh (Blender model frame, root at the origin): Body / Eye / Glow welded, brass RotorL / RotorR on
+-- Motor6Ds at their manifest pivots (the spin is written to C0 in update). Parts are parented only at the end, so a failure leaves
+-- the model untouched for the part-built fallback. Returns the rotor list.
+local function buildGnatMesh(model: Model, root: BasePart, enemyId: number, tpl: Model): { any }
+	local byName: { [string]: BasePart } = {}
+	for _, d in tpl:GetChildren() do
+		if d:IsA("BasePart") then
+			byName[d.Name] = d
+		end
+	end
+	assert(byName.Body and byName.Eye, "gnat_cog is missing Body / Eye")
+	tpl:PivotTo(CFrame.new())
+	local rotors = {}
+	for name, part in byName do
+		local role = part:GetAttribute("Role")
+		part.Anchored = false
+		part.CanCollide = false
+		part.CanTouch = false
+		part.Massless = true
+		part.CanQuery = role ~= "glow"
+		part:SetAttribute("EnemyId", enemyId)
+		part:SetAttribute("Zone", if name == "Eye" then "eye" else "body")
+		if part.Material == Enum.Material.Neon then
+			part.Color = GNAT_GLOW
+		end
+		local parentPart = if name == "Body" then root else byName.Body
+		if string.sub(name, 1, 5) == "Rotor" then
+			local j = CFrame.new(Assets.pivot("gnat_cog", name) or part.Position)
+			local m = Instance.new("Motor6D")
+			m.Name = name
+			m.Part0 = parentPart
+			m.Part1 = part
+			m.C0 = parentPart.CFrame:Inverse() * j
+			m.C1 = part.CFrame:Inverse() * j
+			m.Parent = part
+			table.insert(rotors, { motor = m, c0 = m.C0, dir = if name == "RotorL" then 1 else -1 })
+		else
+			local w = Instance.new("Weld")
+			w.Name = "W_" .. name
+			w.Part0 = parentPart
+			w.Part1 = part
+			w.C0 = parentPart.CFrame:Inverse() * part.CFrame
+			w.C1 = CFrame.new()
+			w.Parent = part
+		end
+	end
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(255, 120, 90)
+	light.Range = 8
+	light.Brightness = 0.9
+	light.Shadows = false
+	light.Parent = byName.Eye
+	for _, part in byName do
+		part.Parent = model
+	end
+	tpl:Destroy()
+	return rotors
+end
+
 function DroneAI.build(kindId: string, enemyId: number): (Model, any)
 	local brood = kindId == "SPOREMITE"
 	local model = Instance.new("Model")
 	model.Name = kindId
 	model:SetAttribute("EnemyId", enemyId)
 	model:SetAttribute("Kind", kindId)
-	model:SetAttribute("Drone", if brood then "BROOD" else "COG")
+	if brood then
+		model:SetAttribute("Drone", "BROOD")
+	end
 
 	local root = Instance.new("Part")
 	root.Name = "Root"
@@ -126,6 +191,20 @@ function DroneAI.build(kindId: string, enemyId: number): (Model, any)
 	end
 	local BALL = Enum.PartType.Ball
 	local CYL = Enum.PartType.Cylinder
+
+	if not brood then
+		-- mesh gnat first; no attribute Drone on it, so the client does not add the old blur discs over the new brass rotors
+		local tpl = Assets.get("gnat_cog")
+		if tpl then
+			local ok, rotors = pcall(buildGnatMesh, model, root, enemyId, tpl)
+			if ok then
+				return model, { legs = {}, bob = 0, rotors = rotors }
+			end
+			warn("[DroneAI] gnat mesh build failed:", rotors)
+			tpl:Destroy()
+		end
+		model:SetAttribute("Drone", "COG")
+	end
 
 	if brood then
 		-- puffy mite: round body, glowing spore sac underneath at the back, dangling legs; Wing* = flutter anchors
@@ -438,6 +517,13 @@ local function update(e: any, dt: number, now: number)
 		local bob = if frozen then 0 else math.sin(now * 3.1 + e.bobPhase) * 0.45
 		local cf = CFrame.new(e.pos + Vector3.new(0, bob, 0)) * CFrame.Angles(0, e.yaw, 0) * CFrame.Angles(pitch, 0, roll)
 		e.model:PivotTo(cf)
+		local rotors = e.rig and e.rig.rotors
+		if rotors and not frozen and e.beat % 2 == 0 then
+			local a = now * ROTOR_SPIN
+			for _, r in rotors do
+				r.motor.C0 = r.c0 * CFrame.Angles(0, a * r.dir, 0)
+			end
+		end
 	end
 end
 

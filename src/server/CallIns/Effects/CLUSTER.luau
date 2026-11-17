@@ -46,7 +46,7 @@ return function(ctx)
 			task.wait(wait)
 		end
 		local p = ctx.groundAt(raw)
-		S.Fx.play("Shell", { p = p, t = FALL, s = 0.35 })
+		S.Fx.play("Shell", { p = p, t = FALL, s = 0.35, k = "bomblet" })
 		ctx.spawn(function()
 			task.wait(FALL)
 			S.Explosions.blast(p, {

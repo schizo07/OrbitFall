@@ -21,7 +21,7 @@ return function(ctx)
 		local ang = rng:NextNumber(0, math.pi * 2)
 		local r = prm.radius * math.sqrt(rng:NextNumber())
 		local p = ctx.groundAt(center + Vector3.new(math.cos(ang) * r, 0, math.sin(ang) * r))
-		S.Fx.play("Shell", { p = p, t = FALL, s = 1 })
+		S.Fx.play("Shell", { p = p, t = FALL, s = 1, k = "barrage" })
 		ctx.spawn(function()
 			task.wait(FALL)
 			S.Explosions.blast(p, {

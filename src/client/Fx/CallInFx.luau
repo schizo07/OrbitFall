@@ -20,6 +20,7 @@ end
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local OverwatchPath = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("OverwatchPath"))
+local CallInModels = require(script.Parent.Parent:WaitForChild("CallInModels"))
 
 local TEX_SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local TEX_SPARK = "rbxasset://textures/particles/sparkles_main.dds"
@@ -226,6 +227,28 @@ local function buildModel(specs: { { [string]: any } }): (Model, Part)
 	model.PrimaryPart = first
 	model.Parent = getFolder()
 	return model, first :: Part
+end
+
+-- Call-in mesh (Data/Meshes callin_*) parented under the Fx folder, or the part-built model from `spec` while the mesh is
+-- unavailable. Returns model, the part to hang trails/sounds on, and whether the mesh was used.
+local function meshOr(key: string, scale: number, spec: { { [string]: any } }): (Model, BasePart, boolean)
+	local m = CallInModels.get(key, scale)
+	local body = m and m:FindFirstChild("Body")
+	if m and body and body:IsA("BasePart") then
+		for _, d in m:GetChildren() do
+			if d:IsA("BasePart") then
+				d.CastShadow = false
+			end
+		end
+		m.PrimaryPart = body
+		m.Parent = getFolder()
+		return m, body, true
+	end
+	if m then
+		m:Destroy()
+	end
+	local model, root = buildModel(spec)
+	return model, root, false
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -615,6 +638,14 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- Bomb (falling bomb), Shell (incoming streak)
 -- ---------------------------------------------------------------------------------------------
+-- Shell Fx payload field k -> mesh (Data/Meshes) and how much it is scaled up for readability
+local SHELL_MESH: { [string]: { key: string, scale: number } } = {
+	barrage = { key = "callin_shell_barrage", scale = 3 },
+	emp = { key = "callin_shell_emp", scale = 3 },
+	canister = { key = "callin_shell_canister", scale = 2.5 },
+	bomblet = { key = "callin_shell_bomblet", scale = 3 },
+}
+
 local function registerFalling(Fx: any)
 	Fx.register("Bomb", function(d)
 		local s: number = d.s or 1
@@ -630,13 +661,13 @@ local function registerFalling(Fx: any)
 			{ size = Vector3.new(2.6 * s, 0.2 * s, 1.4 * s), cf = CFrame.new(0, 0, 2.6 * s), color = dark },
 			{ shape = Enum.PartType.Cylinder, size = Vector3.new(0.5 * s, 2.3 * s, 2.3 * s), cf = CFrame.new(0, 0, -0.8 * s) * CFrame.Angles(0, math.pi / 2, 0), color = Color3.fromRGB(255, 190, 40), material = Enum.Material.Neon },
 		}
-		local model, root = buildModel(spec)
+		local model, root, isMesh = meshOr("callin_bomb_halfton", s, spec) -- mesh: nose -Z, fins at +Z
 		local dir = (to - from).Unit
 		local a0 = Instance.new("Attachment")
-		a0.Position = Vector3.new(0, 0.4 * s, 3 * s)
+		a0.Position = Vector3.new(0, 0.4 * s, (if isMesh then 3.3 else 3) * s)
 		a0.Parent = root
 		local a1 = Instance.new("Attachment")
-		a1.Position = Vector3.new(0, -0.4 * s, 3 * s)
+		a1.Position = Vector3.new(0, -0.4 * s, (if isMesh then 3.3 else 3) * s)
 		a1.Parent = root
 		local trail = Instance.new("Trail")
 		trail.Attachment0 = a0
@@ -664,18 +695,44 @@ local function registerFalling(Fx: any)
 		local fall: number = math.max(d.t or 1.3, 0.1)
 		local col: Color3 = d.c or Color3.fromRGB(255, 190, 110)
 		local dir = (to - from).Unit
-		local streak = mkPart({
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(7 * s, 0.7 * s, 0.7 * s),
-			Color = col,
-			CFrame = CFrame.lookAt(from, from + dir) * CFrame.Angles(0, math.pi / 2, 0),
-		})
-		light(streak, col, 16 * s + 4, 3)
+		-- shell mesh by call-in (server passes k); drawn bigger than life so it reads from 380 studs up. Nose -Z, tail +Z.
+		local meshSpec = SHELL_MESH[d.k]
+		local shellModel: Model? = nil
+		local streak: BasePart
 		local a0 = Instance.new("Attachment")
-		a0.Position = Vector3.new(3.5 * s, 0.35 * s, 0)
-		a0.Parent = streak
 		local a1 = Instance.new("Attachment")
-		a1.Position = Vector3.new(3.5 * s, -0.35 * s, 0)
+		if meshSpec then
+			local m = CallInModels.get(meshSpec.key, meshSpec.scale)
+			local body = m and m:FindFirstChild("Body")
+			if m and body and body:IsA("BasePart") then
+				shellModel = m
+				streak = body
+				for _, p in m:GetChildren() do
+					if p:IsA("BasePart") then
+						p.CastShadow = false
+					end
+				end
+				m.PrimaryPart = body
+				m.Parent = getFolder()
+				m:PivotTo(CFrame.lookAt(from, from + dir))
+				a0.Position = Vector3.new(0, 0.3 * meshSpec.scale * 0.5, 0.75 * meshSpec.scale)
+				a1.Position = Vector3.new(0, -0.3 * meshSpec.scale * 0.5, 0.75 * meshSpec.scale)
+			elseif m then
+				m:Destroy()
+			end
+		end
+		if not shellModel then
+			streak = mkPart({
+				Shape = Enum.PartType.Cylinder,
+				Size = Vector3.new(7 * s, 0.7 * s, 0.7 * s),
+				Color = col,
+				CFrame = CFrame.lookAt(from, from + dir) * CFrame.Angles(0, math.pi / 2, 0),
+			})
+			a0.Position = Vector3.new(3.5 * s, 0.35 * s, 0)
+			a1.Position = Vector3.new(3.5 * s, -0.35 * s, 0)
+		end
+		light(streak, col, 16 * s + 4, 3)
+		a0.Parent = streak
 		a1.Parent = streak
 		local trail = Instance.new("Trail")
 		trail.Attachment0 = a0
@@ -690,9 +747,17 @@ local function registerFalling(Fx: any)
 		snd("ShellWhistle", streak, to)
 		animate(fall, function(a)
 			local pos = from:Lerp(to, a ^ 1.3)
-			streak.CFrame = CFrame.lookAt(pos, pos + dir) * CFrame.Angles(0, math.pi / 2, 0)
+			if shellModel then
+				shellModel:PivotTo(CFrame.lookAt(pos, pos + dir))
+			else
+				streak.CFrame = CFrame.lookAt(pos, pos + dir) * CFrame.Angles(0, math.pi / 2, 0)
+			end
 		end, function()
-			streak:Destroy()
+			if shellModel then
+				shellModel:Destroy()
+			else
+				streak:Destroy()
+			end
 			if s >= 0.5 then
 				local f = mkPart({ Shape = Enum.PartType.Ball, Size = Vector3.new(3, 3, 3) * s, Color = col, Transparency = 0.2, CFrame = CFrame.new(to) })
 				tween(f, 0.25, { Size = Vector3.new(9, 9, 9) * s, Transparency = 1 })
@@ -705,6 +770,8 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- Jet flyover
 -- ---------------------------------------------------------------------------------------------
+local JET_SCALE = 0.55 -- the mesh jet is 32 studs long; scaled to read about like the old part-built one
+
 local function registerJet(Fx: any)
 	Fx.register("Jet", function(d)
 		local a: Vector3, b: Vector3 = d.a, d.b
@@ -725,15 +792,23 @@ local function registerJet(Fx: any)
 			{ shape = Enum.PartType.Cylinder, size = Vector3.new(1.4, 1.1, 1.1), cf = CFrame.new(-0.6, 0, 5.6) * CFrame.Angles(0, math.pi / 2, 0), color = Color3.fromRGB(255, 150, 60), material = Enum.Material.Neon },
 			{ shape = Enum.PartType.Cylinder, size = Vector3.new(1.4, 1.1, 1.1), cf = CFrame.new(0.6, 0, 5.6) * CFrame.Angles(0, math.pi / 2, 0), color = Color3.fromRGB(255, 150, 60), material = Enum.Material.Neon },
 		}
-		local model, root = buildModel(spec)
+		local model, root, isMesh = meshOr("callin_strafe_jet", JET_SCALE, spec) -- mesh: nose -Z, bay doors on the belly
+		local rig = if isMesh then CallInModels.rig(model, JET_SCALE) else nil
+		local pivotL = if rig then CallInModels.pivot(rig, "callin_strafe_jet", "BayDoor_L") else Vector3.zero
+		local pivotR = if rig then CallInModels.pivot(rig, "callin_strafe_jet", "BayDoor_R") else Vector3.zero
 		local dir = (b - a).Unit
 		local engines = {}
 		for _, x in { -0.6, 0.6 } do
+			-- mesh: nozzle is at (0, 2.06, 14.54) in the model frame, Body centre (0, 3.16, -0.57)
+			local ex, ey, ez = x, 0.35, 6.2
+			if isMesh then
+				ex, ey, ez = x * 2.4 * JET_SCALE, -1.1 * JET_SCALE, 15.1 * JET_SCALE
+			end
 			local a0 = Instance.new("Attachment")
-			a0.Position = Vector3.new(x, 0.35, 6.2)
+			a0.Position = Vector3.new(ex, ey + 0.35 * (if isMesh then 1.4 else 1), ez)
 			a0.Parent = root
 			local a1 = Instance.new("Attachment")
-			a1.Position = Vector3.new(x, -0.35, 6.2)
+			a1.Position = Vector3.new(ex, ey - 0.35 * (if isMesh then 1.4 else 1), ez)
 			a1.Parent = root
 			local tr = Instance.new("Trail")
 			tr.Attachment0 = a0
@@ -752,7 +827,18 @@ local function registerJet(Fx: any)
 		animate(dur, function(t)
 			local pos = a:Lerp(b, t)
 			local roll = math.sin(t * math.pi * 2) * 0.12
-			model:PivotTo(CFrame.lookAt(pos, pos + dir) * CFrame.Angles(0, 0, roll))
+			local cf = CFrame.lookAt(pos, pos + dir) * CFrame.Angles(0, 0, roll)
+			if rig then
+				-- belly bay doors swing open around the line centre (bombs / canister are released there) and shut again
+				local open = math.clamp((t - 0.36) / 0.08, 0, 1) - math.clamp((t - 0.58) / 0.08, 0, 1)
+				local ang = math.rad(80) * open
+				CallInModels.pose(rig, cf, {
+					BayDoor_L = CallInModels.hinge(pivotL, CFrame.Angles(0, 0, -ang)),
+					BayDoor_R = CallInModels.hinge(pivotR, CFrame.Angles(0, 0, ang)),
+				})
+			else
+				model:PivotTo(cf)
+			end
 			if not shook and t >= 0.5 then
 				shook = true
 				shake(0.8, 0.8, pos)
@@ -892,11 +978,148 @@ local POD_COLORS: { [string]: Color3 } = {
 
 local craters: { Instance } = {}
 
+-- Mesh drop pods: "player" = the insertion capsule (door opens forward), every friendly call-in pod = the supply pod
+-- (four petals open like a flower). Falls upright with a retro flame underneath. Returns false when the mesh is not
+-- available (and for the hostile COG pod) so the part-built pod runs instead.
+local PETAL_OUT = {
+	Petal_1 = Vector3.new(0, 0, -1),
+	Petal_2 = Vector3.new(-1, 0, 0),
+	Petal_3 = Vector3.new(0, 0, 1),
+	Petal_4 = Vector3.new(1, 0, 0),
+}
+
+local function dropPodMesh(d: any, to: Vector3, fall: number, accent: Color3): boolean
+	if d.kind == "hostile" then
+		return false
+	end
+	local capsule = d.kind == "player"
+	local key = if capsule then "callin_drop_capsule" else "callin_supply_pod"
+	local model = CallInModels.get(key)
+	if not model then
+		return false
+	end
+	local rig = CallInModels.rig(model)
+	for _, p in model:GetChildren() do
+		if p:IsA("BasePart") then
+			p.CastShadow = false
+		end
+	end
+	model.Parent = getFolder()
+
+	local from = to + Vector3.new(rand(-30, 30), 460, rand(-30, 30))
+	local yaw = CFrame.Angles(0, rand(0, math.pi * 2), 0)
+	if capsule then
+		-- door toward the map centre
+		local flat = Vector3.new(-to.X, 0, -to.Z)
+		if flat.Magnitude > 5 then
+			yaw = CFrame.lookAt(Vector3.zero, flat.Unit)
+		end
+	end
+	local topY = if capsule then 12.5 else 8.9
+	local body = rig.parts.Body
+
+	local flame = mkPart({ Size = Vector3.new(1, 1, 1), Transparency = 1, CFrame = CFrame.new(from) }, model)
+	emitter(flame, {
+		Texture = TEX_FIRE,
+		Color = ColorSequence.new(Color3.fromRGB(255, 200, 100), Color3.fromRGB(255, 70, 20)),
+		Size = seq(3, 0.5),
+		Transparency = seq(0, 1),
+		Lifetime = NumberRange.new(0.3, 0.6),
+		Speed = NumberRange.new(2, 6),
+		SpreadAngle = Vector2.new(15, 15),
+		Rate = 120,
+		LightEmission = 1,
+		EmissionDirection = Enum.NormalId.Bottom,
+	})
+	emitter(flame, {
+		Texture = TEX_SMOKE,
+		Color = ColorSequence.new(Color3.fromRGB(190, 190, 195)),
+		Size = seq(2, 6),
+		Transparency = seq(0.4, 1),
+		Lifetime = NumberRange.new(0.8, 1.4),
+		Speed = NumberRange.new(0, 3),
+		SpreadAngle = Vector2.new(25, 25),
+		Rate = 60,
+		EmissionDirection = Enum.NormalId.Top,
+	})
+	local a0 = Instance.new("Attachment")
+	a0.Position = Vector3.new(-0.9, topY / 2, 0)
+	a0.Parent = body
+	local a1 = Instance.new("Attachment")
+	a1.Position = Vector3.new(0.9, topY / 2, 0)
+	a1.Parent = body
+	local tr = Instance.new("Trail")
+	tr.Attachment0 = a0
+	tr.Attachment1 = a1
+	tr.Lifetime = 0.6
+	tr.LightEmission = 0.8
+	tr.Color = ColorSequence.new(Color3.fromRGB(255, 190, 110), Color3.fromRGB(110, 110, 115))
+	tr.Transparency = seq(0.2, 1)
+	tr.Parent = body
+
+	local function place(pos: Vector3, motions: { [string]: CFrame }?)
+		local cf = CFrame.new(pos) * yaw.Rotation
+		CallInModels.pose(rig, cf, motions)
+		flame.CFrame = CFrame.new(pos + Vector3.new(0, 1, 0))
+	end
+	place(from)
+	snd("PodFall", body, to)
+	animate(fall, function(a)
+		place(from:Lerp(to, a ^ 1.6))
+	end, function()
+		snd("PodImpact", to)
+		shake(1.3, 0.45, to)
+		dustBurst(to, 36, 5)
+		ring(to, accent, 2, 11, 0.5, 0.4)
+		flame:Destroy()
+		if d.kind == "supply" then
+			-- the server's own pod (petals unfolding, server/CallIns/Effects/SUPPLY) takes over on the same spot
+			task.delay(0.12, function()
+				model:Destroy()
+			end)
+			return
+		end
+		-- opens on landing: capsule door drops forward, petals fold out
+		local pivots: { [string]: Vector3 } = {}
+		pivots.Door = CallInModels.pivot(rig, key, "Door")
+		for name in PETAL_OUT do
+			pivots[name] = CallInModels.pivot(rig, key, name)
+		end
+		animate(0.45, function(a)
+			local e = 1 - (1 - a) * (1 - a)
+			local motions: { [string]: CFrame } = {}
+			if capsule then
+				motions.Door = CallInModels.hinge(pivots.Door, CFrame.Angles(-math.rad(88) * e, 0, 0))
+			else
+				for name, out in PETAL_OUT do
+					local axis = Vector3.new(0, 1, 0):Cross(out)
+					motions[name] = CallInModels.hinge(pivots[name], CFrame.fromAxisAngle(axis, math.rad(100) * e))
+				end
+			end
+			place(to, motions)
+		end)
+		-- the capsule stays open a moment (the trooper steps out); other pods hand over to the thing they carried
+		local hold = if capsule then 1.4 elseif d.kind == "supply" then 0.25 else 0.6
+		task.delay(0.45 + hold, function()
+			for _, p in model:GetDescendants() do
+				if p:IsA("BasePart") and p.Transparency < 1 then
+					tween(p, 0.4, { Transparency = 1 })
+				end
+			end
+			Debris:AddItem(model, 0.5)
+		end)
+	end)
+	return true
+end
+
 local function registerPods(Fx: any)
 	Fx.register("DropPod", function(d)
 		local to: Vector3 = d.p
 		local fall: number = math.max(d.t or 1.6, 0.2)
 		local accent = POD_COLORS[d.kind] or Color3.fromRGB(180, 190, 205)
+		if dropPodMesh(d, to, fall, accent) then
+			return
+		end
 		local from = to + Vector3.new(rand(-30, 30), 460, rand(-30, 30))
 		local dir = (to - from).Unit
 		local hull = Color3.fromRGB(70, 76, 88)

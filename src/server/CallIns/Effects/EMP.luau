@@ -6,7 +6,7 @@ return function(ctx)
 	local prm = ctx.params
 	local pos = ctx.groundAt(ctx.pos)
 
-	S.Fx.play("Shell", { p = pos, t = FALL, s = 1, c = Color3.fromRGB(110, 190, 255) })
+	S.Fx.play("Shell", { p = pos, t = FALL, s = 1, c = Color3.fromRGB(110, 190, 255), k = "emp" })
 	task.wait(FALL)
 
 	S.Fx.play("Explosion", { p = pos, r = prm.radius, size = "L", style = "emp" })

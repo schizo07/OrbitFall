@@ -1,7 +1,18 @@
 -- Sentry Turret: drops in, tracks the nearest visible enemy and fires hitscan bursts.
+-- Visual: the callin_sentry_turret mesh (Base, Yaw, Gun + Sensor, Barrel_L/R): Yaw turns about the vertical axis, Gun/Sensor/Barrels
+-- pitch about the gun pivot, a barrel slides back on each shot. Part-built turret as the fallback while the mesh is unavailable.
+local ModelShare = require(script.Parent.Parent.ModelShare)
+
 local POD_FALL = 1.2
 local HEAD_HEIGHT = 2.7
 local MAX_CANDIDATES = 6
+
+local MESH_KEY = "callin_sentry_turret"
+local MESH_YAW_PIVOT = Vector3.new(0, 1.6, 0.767) -- Data/Meshes pivots, model frame (front = -Z)
+local MESH_GUN_PIVOT = Vector3.new(0, 2.95, 0.767)
+local MESH_MUZZLE = { Vector3.new(-0.2, -0.04, -3.27), Vector3.new(0.2, -0.04, -3.27) } -- barrel tips relative to the gun pivot
+local KICK = 0.4 -- barrel recoil (studs)
+local KICK_DECAY = 7 -- studs per second
 
 local function part(parent: Instance, props)
 	local p = Instance.new("Part")
@@ -34,53 +45,121 @@ return function(ctx)
 
 	local yaw0 = math.atan2(-ctx.dir.X, -ctx.dir.Z)
 	local baseCF = CFrame.new(pos + Vector3.new(0, 0.3, 0)) * CFrame.Angles(0, yaw0, 0)
-	local base = part(model, {
-		Name = "Base", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.6, 3.6, 3.6),
-		Material = Enum.Material.Metal, Color = dark, CanCollide = true,
-		CFrame = baseCF * CFrame.Angles(0, 0, math.pi / 2),
-	})
-	part(model, {
-		Name = "Column", Shape = Enum.PartType.Cylinder, Size = Vector3.new(2.0, 1.3, 1.3),
-		Material = Enum.Material.Metal, Color = dark,
-		CFrame = baseCF * CFrame.new(0, 1.3, 0) * CFrame.Angles(0, 0, math.pi / 2),
-	})
-	for i = 0, 2 do
-		local a = i * (math.pi * 2 / 3)
-		part(model, {
-			Name = "Leg", Size = Vector3.new(0.35, 0.35, 2.4), Material = Enum.Material.Metal, Color = dark,
-			CFrame = baseCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.6, -1.4) * CFrame.Angles(math.rad(35), 0, 0),
-		})
-	end
-	model.PrimaryPart = base
 
-	-- rotating head (model so we can PivotTo it)
-	local head = Instance.new("Model")
-	head.Name = "Head"
-	head.Parent = model
-	local housing = part(head, {
-		Name = "Housing", Size = Vector3.new(1.9, 1.4, 2.6), Material = Enum.Material.Metal, Color = olive,
-	})
-	local muzzles = {}
-	for i, x in { -0.55, 0.55 } do
-		part(head, {
-			Name = "Barrel", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3.0, 0.4, 0.4),
-			Material = Enum.Material.Metal, Color = dark, CFrame = CFrame.new(x, 0, -2.6) * CFrame.Angles(0, math.pi / 2, 0),
-		})
-		local m = part(head, {
-			Name = "Muzzle", Shape = Enum.PartType.Ball, Size = Vector3.new(0.7, 0.7, 0.7), Material = Enum.Material.Neon,
-			Color = Color3.fromRGB(255, 220, 120), Transparency = 1, CFrame = CFrame.new(x, 0, -4.2),
-		})
-		muzzles[i] = m
+	local mesh = ModelShare.visual(S, MESH_KEY)
+	if mesh and not (mesh:FindFirstChild("Base") and mesh:FindFirstChild("Yaw") and mesh:FindFirstChild("Gun")) then
+		mesh:Destroy()
+		mesh = nil
 	end
-	part(head, { Name = "Ammo", Size = Vector3.new(1.2, 1.0, 1.0), Material = Enum.Material.Metal, Color = dark, CFrame = CFrame.new(0, -0.2, 1.7) })
-	part(head, {
-		Name = "Eye", Shape = Enum.PartType.Ball, Size = Vector3.new(0.45, 0.45, 0.45), Material = Enum.Material.Neon,
-		Color = accent, CFrame = CFrame.new(0, 0.55, -1.0),
-	})
-	head.PrimaryPart = housing
-	local headPos = pos + Vector3.new(0, HEAD_HEIGHT, 0)
+
+	local muzzles = {}
+	local head: Model? = nil
+	local meshRig: ModelShare.Rig? = nil
+	local meshCF = CFrame.new(pos) * CFrame.Angles(0, yaw0, 0)
+	local headPos: Vector3
+	local muzzleLocal: { Vector3 }
+
+	if mesh then
+		local rig = ModelShare.rig(mesh)
+		meshRig = rig
+		ModelShare.pose(rig, meshCF)
+		for _, d in mesh:GetChildren() do
+			if d:IsA("BasePart") then
+				d.CanQuery = true -- enemy shots must hit it (registered structure below)
+				d.CastShadow = false
+				d.Parent = model
+			end
+		end
+		mesh:Destroy()
+		local base = rig.parts.Base
+		base.CanCollide = true
+		model.PrimaryPart = base
+		headPos = meshCF:PointToWorldSpace(MESH_GUN_PIVOT)
+		muzzleLocal = MESH_MUZZLE
+		for i = 1, 2 do
+			muzzles[i] = part(model, {
+				Name = "Muzzle", Shape = Enum.PartType.Ball, Size = Vector3.new(0.7, 0.7, 0.7), Material = Enum.Material.Neon,
+				Color = Color3.fromRGB(255, 220, 120), Transparency = 1, CanQuery = false, CFrame = CFrame.new(headPos),
+			})
+		end
+	else
+		local base = part(model, {
+			Name = "Base", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.6, 3.6, 3.6),
+			Material = Enum.Material.Metal, Color = dark, CanCollide = true,
+			CFrame = baseCF * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		part(model, {
+			Name = "Column", Shape = Enum.PartType.Cylinder, Size = Vector3.new(2.0, 1.3, 1.3),
+			Material = Enum.Material.Metal, Color = dark,
+			CFrame = baseCF * CFrame.new(0, 1.3, 0) * CFrame.Angles(0, 0, math.pi / 2),
+		})
+		for i = 0, 2 do
+			local a = i * (math.pi * 2 / 3)
+			part(model, {
+				Name = "Leg", Size = Vector3.new(0.35, 0.35, 2.4), Material = Enum.Material.Metal, Color = dark,
+				CFrame = baseCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.6, -1.4) * CFrame.Angles(math.rad(35), 0, 0),
+			})
+		end
+		model.PrimaryPart = base
+
+		-- rotating head (model so we can PivotTo it)
+		local h = Instance.new("Model")
+		h.Name = "Head"
+		h.Parent = model
+		head = h
+		local housing = part(h, {
+			Name = "Housing", Size = Vector3.new(1.9, 1.4, 2.6), Material = Enum.Material.Metal, Color = olive,
+		})
+		for i, x in { -0.55, 0.55 } do
+			part(h, {
+				Name = "Barrel", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3.0, 0.4, 0.4),
+				Material = Enum.Material.Metal, Color = dark, CFrame = CFrame.new(x, 0, -2.6) * CFrame.Angles(0, math.pi / 2, 0),
+			})
+			local m = part(h, {
+				Name = "Muzzle", Shape = Enum.PartType.Ball, Size = Vector3.new(0.7, 0.7, 0.7), Material = Enum.Material.Neon,
+				Color = Color3.fromRGB(255, 220, 120), Transparency = 1, CFrame = CFrame.new(x, 0, -4.2),
+			})
+			muzzles[i] = m
+		end
+		part(h, { Name = "Ammo", Size = Vector3.new(1.2, 1.0, 1.0), Material = Enum.Material.Metal, Color = dark, CFrame = CFrame.new(0, -0.2, 1.7) })
+		part(h, {
+			Name = "Eye", Shape = Enum.PartType.Ball, Size = Vector3.new(0.45, 0.45, 0.45), Material = Enum.Material.Neon,
+			Color = accent, CFrame = CFrame.new(0, 0.55, -1.0),
+		})
+		h.PrimaryPart = housing
+		headPos = pos + Vector3.new(0, HEAD_HEIGHT, 0)
+		muzzleLocal = { Vector3.new(-0.55, 0, -4.2), Vector3.new(0.55, 0, -4.2) }
+	end
+
 	local headCF = CFrame.lookAt(headPos, headPos + ctx.dir)
-	head:PivotTo(headCF)
+	local kick = { 0, 0 }
+
+	-- mesh head: yaw about the vertical axis through the yaw pivot, pitch about the gun pivot (barrels also slide back)
+	local function poseMesh()
+		local rig = meshRig :: ModelShare.Rig
+		local l = meshCF:VectorToObjectSpace(headCF.LookVector)
+		local yaw = math.atan2(-l.X, -l.Z)
+		local pitch = math.asin(math.clamp(l.Y, -1, 1))
+		local my = ModelShare.hinge(MESH_YAW_PIVOT, CFrame.Angles(0, yaw, 0))
+		local function gun(k: number): CFrame
+			return my * CFrame.new(MESH_GUN_PIVOT) * CFrame.Angles(pitch, 0, 0) * CFrame.new(0, 0, k) * CFrame.new(-MESH_GUN_PIVOT)
+		end
+		ModelShare.pose(rig, meshCF, {
+			Yaw = my,
+			Gun = gun(0),
+			Sensor = gun(0),
+			Barrel_L = gun(kick[1]),
+			Barrel_R = gun(kick[2]),
+		})
+	end
+	local function setHead()
+		if meshRig then
+			poseMesh()
+		elseif head then
+			head:PivotTo(headCF)
+		end
+	end
+	setHead()
 	model.Parent = ctx.folder
 	ctx.onStop(function()
 		model:Destroy()
@@ -112,7 +191,7 @@ return function(ctx)
 	local emptyAt: number? = nil
 
 	local function muzzleWorld(i: number): Vector3
-		return headCF:PointToWorldSpace(Vector3.new(i == 1 and -0.55 or 0.55, 0, -4.2))
+		return headCF:PointToWorldSpace(muzzleLocal[i])
 	end
 
 	local function pickTarget()
@@ -152,6 +231,10 @@ return function(ctx)
 				end
 			end
 		end
+		if meshRig then
+			muzzles[i].CFrame = CFrame.new(origin)
+			kick[i] = KICK
+		end
 		muzzles[i].Transparency = 0
 		task.delay(0.05, function()
 			muzzles[i].Transparency = 1
@@ -186,11 +269,15 @@ return function(ctx)
 			end
 		end
 
+		local recoiling = kick[1] > 0 or kick[2] > 0
 		if target and target.alive and target.root and ammo > 0 then
 			aimPoint = target.root.Position
 			local want = CFrame.lookAt(headPos, aimPoint)
 			headCF = headCF:Lerp(want, 1 - math.exp(-14 * dt))
-			head:PivotTo(headCF)
+			for i = 1, 2 do
+				kick[i] = math.max(kick[i] - KICK_DECAY * dt, 0)
+			end
+			setHead()
 			local err = math.acos(math.clamp(headCF.LookVector:Dot((aimPoint - headPos).Unit), -1, 1))
 			if err < math.rad(8) then
 				acc += dt
@@ -205,6 +292,12 @@ return function(ctx)
 			end
 		else
 			acc = 0
+			if recoiling and meshRig then
+				for i = 1, 2 do
+					kick[i] = math.max(kick[i] - KICK_DECAY * dt, 0)
+				end
+				setHead()
+			end
 		end
 	end
 
