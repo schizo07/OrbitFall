@@ -77,7 +77,18 @@ local function bearingName(from: Vector3, to: Vector3): string
 end
 
 -- Tiny line above the own card ---------------------------------------------------------------------------------------
-function SquadComms.build(ownCard: Instance, _touch: boolean)
+-- New layouts (UI STYLE A-C): no line above the card; own radio lines go to the event feed on PC and are skipped on
+-- phones (their feed has 2 lines).
+local feedOwn = false
+local feedTouch = false
+
+function SquadComms.build(ownCard: Instance?, touch: boolean)
+	feedOwn = EventFeed.isNew()
+	feedTouch = touch
+	if feedOwn or not ownCard then
+		ui = {}
+		return
+	end
 	-- Folder: the card's UIListLayout ignores it, its child is positioned against the card frame
 	local folder = Instance.new("Folder")
 	folder.Name = "Chatter"
@@ -103,6 +114,12 @@ function SquadComms.build(ownCard: Instance, _touch: boolean)
 end
 
 local function ownBark(text: string)
+	if feedOwn then
+		if not feedTouch then
+			EventFeed.push(string.format("%s: %s", myTag(), text), Style.Amber, "bark")
+		end
+		return
+	end
 	if not ui.panel then
 		return
 	end

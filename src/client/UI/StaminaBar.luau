@@ -8,6 +8,7 @@ local Config = require(Shared.Config)
 local Store = require(script.Parent.Parent.Store)
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
 
 local StaminaBar = {}
 
@@ -45,6 +46,33 @@ function StaminaBar.init(getter: () -> (number, boolean, boolean))
 		Size = UDim2.fromScale(1, 1),
 		Parent = back,
 	})
+	-- UI STYLE: no brackets on the new skins (Style.brackets draws none), a rounded pill on glass; follows a switch
+	local function applySkin()
+		local skin = HudSkin.current()
+		local old = back:FindFirstChild("Brackets")
+		if old then
+			old:Destroy()
+		end
+		Style.brackets(back, Style.White, 4)
+		for _, f in { back, fill } do
+			local cr = f:FindFirstChild("SkinCorner")
+			if skin and skin.barKind == "pill" then
+				if not cr then
+					cr = Instance.new("UICorner")
+					cr.Name = "SkinCorner"
+					cr.CornerRadius = UDim.new(0.5, 0)
+					cr.Parent = f
+				end
+			elseif cr then
+				cr:Destroy()
+			end
+		end
+		back.ClipsDescendants = not (skin and skin.barKind == "pill")
+	end
+	if HudSkin.current() then
+		applySkin()
+	end
+	HudSkin.onRebuild(applySkin)
 
 	local tick = Style.rect({
 		Name = "Recover",

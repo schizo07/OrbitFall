@@ -8,6 +8,8 @@
 -- IntensityFx both call AlertBar.init, which is idempotent).
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
+local HudLayout = require(script.Parent.HudLayout)
 
 local AlertBar = {}
 AlertBar.TOP = 50
@@ -38,36 +40,76 @@ function AlertBar.init()
 	end
 	built = true
 	touch = Theme.isTouch()
+	local skin = HudSkin.current()
 	local gui = Theme.gui("OrbitAlert", { DisplayOrder = 11, Insets = "CoreUISafeInsets" })
 	ui.gui = gui
 	local root = Theme.root(gui, "hud")
-	local content = Style.content(root, touch)
+	-- new layout: one scale (no 0.8 content frame on phones), place and size from UI/HudLayout
+	local content = if skin then root else Style.content(root, touch)
+	local lay = if skin then HudLayout.get("alert", touch) else nil
+	local barH = if lay then lay.BarHeight else 24
 
 	local stack = Instance.new("Frame")
 	stack.Name = "AlertStack"
 	stack.BackgroundTransparency = 1
-	stack.AnchorPoint = Vector2.new(0.5, 0)
-	stack.Position = UDim2.new(0.5, 0, 0, AlertBar.TOP)
-	stack.Size = UDim2.fromScale(0.34, 0)
+	if lay then
+		stack.AnchorPoint = lay.AnchorPoint
+		stack.Position = lay.Position
+		stack.Size = UDim2.fromOffset(lay.Size.X.Offset, 0)
+	else
+		stack.AnchorPoint = Vector2.new(0.5, 0)
+		stack.Position = UDim2.new(0.5, 0, 0, AlertBar.TOP)
+		stack.Size = UDim2.fromScale(0.34, 0)
+	end
 	stack.AutomaticSize = Enum.AutomaticSize.Y
 	stack.Parent = content
-	local lim = Instance.new("UISizeConstraint")
-	lim.MinSize = Vector2.new(340, 0)
-	lim.Parent = stack
+	if not lay then
+		local lim = Instance.new("UISizeConstraint")
+		lim.MinSize = Vector2.new(340, 0)
+		lim.Parent = stack
+	end
 	Theme.list(stack, Enum.FillDirection.Vertical, 4, Enum.HorizontalAlignment.Center)
 	ui.stack = stack
 
 	-- 1. alert bar
+	ui.barAlpha = 0.15
 	local bar = Style.rect({
 		Name = "AlertBar",
 		Color = Style.Red,
 		Transparency = 0.15,
-		Size = UDim2.new(1, 0, 0, 24),
+		Size = UDim2.new(1, 0, 0, barH),
 		LayoutOrder = 1,
 		Visible = false,
 		Parent = stack,
 	})
-	Style.brackets(bar, Style.White, 5)
+	if skin then
+		-- hairline: the red band fades out at both ends; glass: a rounded pill; visor: a thin danger outline on a faint fill
+		if skin.id == "hairline" then
+			local g = Instance.new("UIGradient")
+			g.Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.18, 0),
+				NumberSequenceKeypoint.new(0.82, 0),
+				NumberSequenceKeypoint.new(1, 1),
+			})
+			g.Parent = bar
+		elseif skin.id == "glass" then
+			local cr = Instance.new("UICorner")
+			cr.CornerRadius = UDim.new(0.5, 0)
+			cr.Parent = bar
+			ui.barAlpha = 0.25
+		else
+			ui.barAlpha = 0.8
+			local st = Instance.new("UIStroke")
+			st.Color = skin.colors.danger
+			st.Thickness = 1
+			st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			st.Parent = bar
+		end
+		bar.BackgroundTransparency = ui.barAlpha
+	else
+		Style.brackets(bar, Style.White, 5)
+	end
 	ui.bar = bar
 	ui.arrow = Style.glyph("up", {
 		Size = 12,
@@ -79,7 +121,7 @@ function AlertBar.init()
 	})
 	ui.text = Style.label({
 		Text = "",
-		TextSize = Style.ALERT,
+		TextSize = if lay then lay.TextSize else Style.ALERT,
 		XAlign = Enum.TextXAlignment.Center,
 		Size = UDim2.new(1, -90, 1, 0),
 		Position = UDim2.fromOffset(45, 0),
@@ -91,9 +133,12 @@ function AlertBar.init()
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -8, 0.5, 0),
-		Size = UDim2.fromOffset(48, 24),
+		Size = UDim2.fromOffset(48, barH),
 		Parent = bar,
 	})
+	if skin then
+		HudSkin.styleText(ui.time, "number")
+	end
 	local prog = Style.bar({
 		Name = "TimeLeft",
 		Size = UDim2.new(1, 0, 0, 2),
@@ -177,7 +222,7 @@ local function pulse()
 			if my ~= pulseToken then
 				return
 			end
-			tw(ui.bar, 0.12, { BackgroundTransparency = 0.15 })
+			tw(ui.bar, 0.12, { BackgroundTransparency = ui.barAlpha or 0.15 })
 			task.wait(0.15)
 		end
 	end)
@@ -374,6 +419,28 @@ function AlertBar.setVisible(on: boolean)
 	if built then
 		ui.gui.Enabled = on
 	end
+end
+
+-- UI STYLE switch (HUD.rebuild): build the stack again in the new skin; sticky alerts stay set and show again
+function AlertBar.rebuild()
+	if not built then
+		return
+	end
+	local enabled = ui.gui and ui.gui.Enabled
+	if ui.gui then
+		ui.gui:Destroy()
+	end
+	table.clear(ui)
+	built = false
+	shownId, shownText = nil, ""
+	pulseToken += 1
+	calloutToken += 1
+	table.clear(noticeQueue)
+	AlertBar.init()
+	if enabled ~= nil then
+		ui.gui.Enabled = enabled
+	end
+	refresh()
 end
 
 return AlertBar

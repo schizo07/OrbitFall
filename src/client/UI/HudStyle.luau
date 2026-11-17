@@ -2,6 +2,7 @@
 -- brackets at 70 % opacity), condensed bold caps font, four accent colours. Used by HUD / AlertBar / CallInList / ...
 -- Ship lobby screens keep using Theme; nothing here touches Theme's own helpers.
 local Theme = require(script.Parent.Theme)
+local HudSkin = require(script.Parent.HudSkin)
 
 local Style = {}
 
@@ -13,6 +14,19 @@ Style.Orange = Color3.fromHex("F07A2B") -- rare pickups
 Style.Grey = Color3.fromHex("A7ADB7")
 Style.White = Color3.new(1, 1, 1)
 Style.Black = Color3.new(0, 0, 0)
+
+-- UI STYLE (UI/HudSkin): the colour fields above and Style.Font follow the active skin. HUD.rebuild() calls
+-- Style.refreshSkin() before building again, so modules that read them at build time follow too. Old HUD = the values above.
+local OLD_COLORS = {
+	Amber = Style.Amber,
+	Cyan = Style.Cyan,
+	Red = Style.Red,
+	Green = Style.Green,
+	Orange = Style.Orange,
+	Grey = Style.Grey,
+	White = Style.White,
+}
+local SKIN_ROLE = { Amber = "own", Cyan = "objective", Red = "danger", Green = "heal", Orange = "rare", Grey = "dim", White = "text" }
 
 Style.MARGIN = 16
 Style.PANEL_ALPHA = 0.55 -- BackgroundTransparency of the black panels
@@ -30,7 +44,17 @@ local function makeFont(): Font
 	end
 	return Font.fromEnum(Enum.Font.GothamBold)
 end
-Style.Font = makeFont()
+local OLD_FONT = makeFont()
+Style.Font = OLD_FONT
+
+function Style.refreshSkin()
+	local s = HudSkin.current()
+	for k, c in OLD_COLORS do
+		(Style :: any)[k] = if s then s.colors[SKIN_ROLE[k]] else c
+	end
+	Style.Font = if s then s.fonts.label else OLD_FONT
+end
+Style.refreshSkin()
 
 function Style.up(s: any): string
 	return string.upper(tostring(s or ""))
@@ -38,6 +62,13 @@ end
 
 -- 1 px corner brackets around a frame (children of a Folder, so a UIListLayout in `frame` ignores them)
 function Style.brackets(frame: GuiObject, color: Color3?, arm: number?, alpha: number?): Folder
+	if HudSkin.current() then
+		-- the new skins draw no corner brackets on elements; an empty holder keeps callers working
+		local empty = Instance.new("Folder")
+		empty.Name = "Brackets"
+		empty.Parent = frame
+		return empty
+	end
 	local col = color or Style.White
 	local len = arm or 6
 	local tr = alpha or Style.BRACKET_ALPHA
@@ -70,6 +101,10 @@ local PANEL_SKIP = { Color = true, Transparency = true, Brackets = true, Bracket
 -- Flat panel. p: Color, Transparency (default 0.55), Brackets (default true), BracketColor, plus any Frame property.
 function Style.panel(p: { [string]: any }?): Frame
 	p = p or {}
+	local skin = HudSkin.current()
+	if skin then
+		return Style.skinPanel(p :: { [string]: any }, skin)
+	end
 	local f = Instance.new("Frame")
 	f.BackgroundColor3 = p.Color or Style.Black
 	f.BackgroundTransparency = p.Transparency or Style.PANEL_ALPHA
@@ -92,6 +127,39 @@ function Style.panel(p: { [string]: any }?): Frame
 	return f
 end
 
+-- Style.panel with a new skin: black panels become the skin's backing (fade / glass / scan); coloured panels (red alert
+-- bar, amber fills) keep their colour and alpha, rounded on glass.
+function Style.skinPanel(p: { [string]: any }, skin: any): Frame
+	local coloured = p.Color ~= nil and p.Color ~= Style.Black and p.Color ~= Color3.new(0, 0, 0)
+	local f: Frame
+	if coloured then
+		f = Instance.new("Frame")
+		f.BorderSizePixel = 0
+		f.BackgroundColor3 = p.Color
+		f.BackgroundTransparency = p.Transparency or Style.PANEL_ALPHA
+		if skin.id == "glass" then
+			local cr = Instance.new("UICorner")
+			cr.CornerRadius = UDim.new(0, skin.corner)
+			cr.Parent = f
+		end
+	else
+		f = HudSkin.panel("auto")
+	end
+	local parent = nil
+	for k, v in p do
+		if PANEL_SKIP[k] then
+			continue
+		end
+		if k == "Parent" then
+			parent = v
+		else
+			(f :: any)[k] = v
+		end
+	end
+	f.Parent = parent
+	return f
+end
+
 local LABEL_SKIP = { Color = true, XAlign = true, YAlign = true, Wrap = true, Rich = true, Shadow = true }
 -- Caps label in the HUD font. p: Text, Color, TextSize (default 14), XAlign (default Left), YAlign, Rich, Wrap + any property.
 function Style.label(p: { [string]: any }?): TextLabel
@@ -109,6 +177,8 @@ function Style.label(p: { [string]: any }?): TextLabel
 	l.TextStrokeColor3 = Style.Black
 	l.TextStrokeTransparency = p.Shadow == false and 1 or 0.65
 	l.Text = ""
+	local skin = HudSkin.current()
+	local caps = not skin or skin.caps
 	local parent = nil
 	for k, v in p do
 		if LABEL_SKIP[k] then
@@ -117,9 +187,19 @@ function Style.label(p: { [string]: any }?): TextLabel
 		if k == "Parent" then
 			parent = v
 		elseif k == "Text" and type(v) == "string" then
-			l.Text = p.Rich and v or string.upper(v)
+			l.Text = if p.Rich or not caps then v else string.upper(v)
 		else
 			(l :: any)[k] = v
+		end
+	end
+	if skin then
+		-- skin font + text treatment (UIStroke instead of TextStroke); Shadow = false keeps the text bare
+		HudSkin.styleText(l, "label")
+		if p.Shadow == false then
+			local st = l:FindFirstChild("SkinStroke")
+			if st then
+				st:Destroy()
+			end
 		end
 	end
 	l.Parent = parent
@@ -166,6 +246,15 @@ function Style.bar(p: { [string]: any }): any
 		Size = UDim2.fromScale(0, 1),
 		Parent = back,
 	})
+	local skin = HudSkin.current()
+	if skin and skin.barKind == "pill" then
+		back.ClipsDescendants = false
+		for _, f in { back, fill } do
+			local cr = Instance.new("UICorner")
+			cr.CornerRadius = UDim.new(0.5, 0)
+			cr.Parent = f
+		end
+	end
 	local bar = { back = back, fill = fill }
 	function bar.set(alpha: number, color: Color3?)
 		fill.Size = UDim2.fromScale(Theme.clamp(alpha, 0, 1), 1)

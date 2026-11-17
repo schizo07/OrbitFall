@@ -20,6 +20,7 @@ local DownedRules = require(Shared.Downed)
 
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local InfoLayer = require(script.Parent.InfoLayer)
 local Store = require(script.Parent.Parent.Store)
 local Input = require(script.Parent.Parent.Input)
 
@@ -115,7 +116,9 @@ local function build()
 	local gui = Theme.gui("OrbitTips", { DisplayOrder = 11, Insets = "CoreUISafeInsets" })
 	ui.gui = gui
 	local root = Theme.root(gui, "hud")
-	local content = Style.content(root, touch)
+	-- new layouts (UI STYLE A-C): one scale, no content x0.8; the card sits at HudLayout "tips" (phone y 110, under the feed)
+	local isNew = InfoLayer.isNew()
+	local content = if isNew then root else Style.content(root, touch)
 
 	local group = Instance.new("CanvasGroup")
 	group.Name = "TipCard"
@@ -124,12 +127,16 @@ local function build()
 	group.AnchorPoint = Vector2.new(0.5, 0)
 	group.Position = UDim2.fromScale(0.5, 0.24) -- under the alert stack (y 50 + ~100), far above the crosshair
 	group.Size = UDim2.fromScale(0.36, 0)
+	if isNew then
+		InfoLayer.place(group, "tips", touch)
+		group.Size = UDim2.new(group.Size.X.Scale, group.Size.X.Offset, 0, 0)
+	end
 	group.AutomaticSize = Enum.AutomaticSize.Y
 	group.GroupTransparency = 1
 	group.Visible = false
 	group.Parent = content
 	local lim = Instance.new("UISizeConstraint")
-	lim.MinSize = Vector2.new(300, 0)
+	lim.MinSize = Vector2.new(if isNew and touch then 200 else 300, 0)
 	lim.MaxSize = Vector2.new(460, math.huge)
 	lim.Parent = group
 	ui.group = group
@@ -501,5 +508,20 @@ function Tips.init(fx: any)
 		end
 	end)
 end
+
+-- UI STYLE switch: build the card again in the new style / place (a tip on screen is dropped; the queue carries on)
+InfoLayer.onRebuild(function(ctx: any)
+	if (type(ctx) == "table" and ctx.first) or not built then
+		return
+	end
+	hideCard()
+	if ui.gui then
+		ui.gui:Destroy()
+	end
+	ui = {}
+	built = false
+	build()
+	task.delay(GAP, pump)
+end)
 
 return Tips

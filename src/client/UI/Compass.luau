@@ -5,6 +5,8 @@
 local Players = game:GetService("Players")
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
+local HudLayout = require(script.Parent.HudLayout)
 local Store = require(script.Parent.Parent.Store)
 
 local Compass = {}
@@ -30,28 +32,83 @@ local function wrap180(a: number): number
 end
 
 -- Returns the Frame the markers (pips) should be parented to.
-function Compass.build(parent: Instance, _touch: boolean): Frame
+function Compass.build(parent: Instance, touch: boolean): Frame
+	-- a second build (HUD.rebuild after a UI STYLE switch): the old nodes died with the old gui
+	table.clear(ui)
+	table.clear(items)
+	table.clear(mates)
+	table.clear(extras)
+	table.clear(blips)
+	headingShown, headingLabel = -1, nil
+	local skin = HudSkin.current()
+	local tapeH = TAPE_H
 	local holder = Instance.new("Frame")
 	holder.Name = "CompassHolder"
 	holder.BackgroundTransparency = 1
-	holder.AnchorPoint = Vector2.new(0.5, 0)
-	holder.Position = UDim2.new(0.5, 0, 0, Style.MARGIN)
-	holder.Size = UDim2.new(0.34, 0, 0, TAPE_H)
+	if skin then
+		-- new layout (UI/HudLayout): 0.29 x screen PC, 240 px phone; tape in the skin's look, no red panel
+		local lay = HudLayout.get("compass", touch)
+		HudLayout.apply(holder, "compass", touch)
+		tapeH = lay.Size.Y.Offset
+	else
+		holder.AnchorPoint = Vector2.new(0.5, 0)
+		holder.Position = UDim2.new(0.5, 0, 0, Style.MARGIN)
+		holder.Size = UDim2.new(0.34, 0, 0, TAPE_H)
+	end
 	holder.Parent = parent
 	local lim = Instance.new("UISizeConstraint")
-	lim.MinSize = Vector2.new(340, TAPE_H)
+	lim.MinSize = Vector2.new(if skin then 200 else 340, tapeH)
 	lim.Parent = holder
 	ui.holder = holder
 
-	local tape = Style.panel({
-		Name = "Tape",
-		Color = Color3.fromHex("36090c"),
-		Transparency = 0.3,
-		Size = UDim2.fromScale(1, 1),
-		ClipsDescendants = true,
-		Parent = holder,
-	})
+	local tape
+	if skin then
+		tape = Instance.new("Frame")
+		tape.Name = "Tape"
+		tape.BorderSizePixel = 0
+		tape.BackgroundTransparency = 1
+		tape.Size = UDim2.fromScale(1, 1)
+		tape.ClipsDescendants = true
+		tape.Parent = holder
+		-- edges fade out so the tape has no hard ends; glass gets a soft pill behind it
+		if skin.id == "glass" then
+			local back = HudSkin.panel("glass", { Name = "Back", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = tape })
+			back.BackgroundTransparency = 0.2
+			local cr = back:FindFirstChildOfClass("UICorner")
+			if cr then
+				cr.CornerRadius = UDim.new(0.5, 0)
+			end
+		else
+			local base = Instance.new("Frame")
+			base.Name = "Baseline"
+			base.BorderSizePixel = 0
+			base.BackgroundColor3 = skin.colors.line
+			base.BackgroundTransparency = 0.6
+			base.AnchorPoint = Vector2.new(0, 1)
+			base.Position = UDim2.fromScale(0, 1)
+			base.Size = UDim2.new(1, 0, 0, 1)
+			base.Parent = tape
+			local g = Instance.new("UIGradient")
+			g.Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.15, 0),
+				NumberSequenceKeypoint.new(0.85, 0),
+				NumberSequenceKeypoint.new(1, 1),
+			})
+			g.Parent = base
+		end
+	else
+		tape = Style.panel({
+			Name = "Tape",
+			Color = Color3.fromHex("36090c"),
+			Transparency = 0.3,
+			Size = UDim2.fromScale(1, 1),
+			ClipsDescendants = true,
+			Parent = holder,
+		})
+	end
 	ui.tape = tape
+	local TAPE_H = tapeH -- the tape nodes below follow the layout height
 
 	for b = 0, 345, 15 do
 		local node: GuiObject
@@ -123,20 +180,26 @@ function Compass.build(parent: Instance, _touch: boolean): Frame
 	})
 
 	-- heading chip hanging under the tape
-	local chip = Style.panel({
+	local chipProps = {
 		Name = "Heading",
 		Size = UDim2.fromOffset(72, 16),
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 1, 2),
 		Parent = holder,
-	})
+	}
+	-- new skins: bare text under the tape (no box), dim, in the number font
+	local chip = if skin then HudSkin.panel("none", chipProps) else Style.panel(chipProps)
 	ui.heading = Style.label({
 		Text = "N [000]",
 		TextSize = 12,
+		Color = if skin then skin.colors.dim else nil,
 		XAlign = Enum.TextXAlignment.Center,
 		Size = UDim2.fromScale(1, 1),
 		Parent = chip,
 	})
+	if skin then
+		HudSkin.styleText(ui.heading, "number")
+	end
 	ui.chip = chip
 	-- RADAR ONLINE tag left of the heading chip (radar side objective: workspace attribute RadarOnline)
 	local radarTag = Style.panel({

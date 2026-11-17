@@ -4,6 +4,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Store = require(script.Parent.Parent.Store)
+local HudSkin = require(script.Parent.HudSkin)
+local WeaponBlock = require(script.Parent.WeaponBlock)
 
 local AmmoPackCount = {}
 local player = Players.LocalPlayer
@@ -15,6 +17,15 @@ local lastText: string? = nil
 local function ensureLabel(): TextLabel?
 	if label and label.Parent then
 		return label
+	end
+	-- UI STYLE new skins: a count cell in the weapon block (UI/WeaponBlock); a style switch destroys it and a new one is made
+	if HudSkin.isNew() then
+		local l = WeaponBlock.addCount("AmmoPack")
+		if l then
+			label = l
+			lastText = nil
+		end
+		return l
 	end
 	local hud = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("OrbitHUD")
 	local card = hud and hud:FindFirstChild("OwnCard", true)

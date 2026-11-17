@@ -13,10 +13,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Weapons = require(Shared:WaitForChild("Data"):WaitForChild("Weapons"))
 local CallIns = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
+-- New layouts (UI STYLE A-C): a squad strip (left mid PC, top-left phone). Each squadmate is one thin row: callsign tag +
+-- a 3 px health line. The row opens (name / weapon, state text, backing) while that mate needs attention: under 50 % hp,
+-- bleeding out, dead, dropping in / in loadout, or carrying a cell; it closes 4 s after they are fine again. Phones keep
+-- every row one line high (the state text replaces the health line).
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
+local InfoLayer = require(script.Parent.InfoLayer)
 
 local SquadCards = {}
+
+local newMode = false
+local nu: { [string]: any } = {}
+local strip: { [number]: any } = {}
+local CLOSE_AFTER = 4
 
 local ui: { [string]: any } = {}
 local cards: { [number]: any } = {}
@@ -261,8 +272,197 @@ local function refreshCard(c: any, m: any, t: number)
 	c.special = deploy ~= nil or carrying or m.downed == true -- (pulsing states refresh every frame)
 end
 
+-- Squad strip (new layouts) ------------------------------------------------------------------------------------------
+local function makeRow(m: any): any
+	local E = InfoLayer.entry("squad", touch)
+	local closedH: number = E.RowCollapsed or 13
+	local openH: number = E.RowOpen or 32
+	local tagSize: number = E.TagSize or 15
+	local statusSize: number = E.StatusSize or 12
+	local hpH: number = E.HpHeight or 3
+	local f = Instance.new("Frame")
+	f.Name = "Mate" .. tostring(m.userId)
+	f.BackgroundTransparency = 1
+	f.BorderSizePixel = 0
+	f.Size = UDim2.new(1, 0, 0, closedH)
+	f.ClipsDescendants = false
+	f.Parent = nu.holder
+	local back = InfoLayer.backing(f)
+	back.Visible = false
+	local tagW = math.floor(tagSize * 1.7)
+	local tag = InfoLayer.label({
+		Text = "",
+		Role = "number",
+		TextSize = tagSize,
+		Shadow = true,
+		Position = UDim2.fromOffset(4, 0),
+		Size = UDim2.fromOffset(tagW, closedH),
+		Parent = f,
+	})
+	-- health line: right of the tag when closed, along the bottom when open
+	local bar = HudSkin.bar({
+		Name = "Hp",
+		Parent = f,
+		Size = UDim2.new(1, -(tagW + 12), 0, hpH),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromOffset(tagW + 8, closedH / 2),
+		Color = InfoLayer.col("text"),
+	})
+	local name = InfoLayer.label({
+		Text = "",
+		TextSize = statusSize,
+		ColorRole = "text",
+		Position = UDim2.fromOffset(tagW + 8, 0),
+		Size = UDim2.new(1, -(tagW + 12), 0, math.floor(openH * 0.55)),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Visible = false,
+		Parent = f,
+	})
+	local status = InfoLayer.label({
+		Text = "",
+		TextSize = statusSize,
+		ColorRole = "danger",
+		XAlign = Enum.TextXAlignment.Right,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -4, 0, 0),
+		Size = UDim2.new(0.6, 0, 0, if E.Compact then closedH else math.floor(openH * 0.55)),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Visible = false,
+		Parent = f,
+	})
+	return {
+		frame = f, back = back, tag = tag, bar = bar, name = name, status = status, m = m,
+		open = false, fineSince = os.clock(), closedH = closedH, openH = openH, tagW = tagW, hpH = hpH,
+		compact = E.Compact == true,
+	}
+end
+
+local function setOpen(r: any, open: boolean)
+	if r.open == open then
+		return
+	end
+	r.open = open
+	local compact = r.compact
+	if compact then
+		-- phones: one line; the state text takes the health line's place
+		r.bar.root.Visible = not open
+		r.status.Visible = open
+		return
+	end
+	r.frame.Size = UDim2.new(1, 0, 0, if open then r.openH else r.closedH)
+	r.back.Visible = open
+	r.name.Visible = open
+	r.status.Visible = open
+	r.tag.Size = UDim2.fromOffset(r.tagW, if open then math.floor(r.openH * 0.55) else r.closedH)
+	if open then
+		r.bar.root.Size = UDim2.new(1, -(r.tagW + 12), 0, r.hpH)
+		r.bar.root.AnchorPoint = Vector2.new(0, 1)
+		r.bar.root.Position = UDim2.new(0, r.tagW + 8, 1, -4)
+		HudSkin.enter(r.back, "left")
+	else
+		r.bar.root.AnchorPoint = Vector2.new(0, 0.5)
+		r.bar.root.Position = UDim2.fromOffset(r.tagW + 8, r.closedH / 2)
+	end
+end
+
+local function refreshRow(r: any, m: any, t: number)
+	r.m = m
+	local cs = Style.callsign(m.userId)
+	local plr = Players:GetPlayerByUserId(m.userId)
+	local deploy = plr and plr:GetAttribute("Deploy")
+	local carrying = plr ~= nil and plr:GetAttribute("CarryCell") == true
+	local alive = m.alive ~= false and deploy ~= "loadout"
+	local frac = if (m.maxHp or 0) > 0 then Theme.clamp((m.hp or 0) / m.maxHp, 0, 1) else 0
+	local downed = alive and m.downed == true
+	r.tag.Text = cs.tag
+	r.tag.TextColor3 = if alive then cs.color else InfoLayer.col("dim")
+	r.name.Text = InfoLayer.caseText(if alive and deploy ~= "dropping" then weaponName(m) else (m.name or "?"))
+	local text, col, pulse = "", InfoLayer.col("danger"), 0
+	if deploy == "loadout" then
+		text, col = "IN LOADOUT", InfoLayer.col("dim")
+	elseif not alive then
+		local s, c = deadStatus(m, t)
+		text = s
+		col = if c == Style.Amber then InfoLayer.col("own") elseif c == Style.Grey then InfoLayer.col("dim") else InfoLayer.col("danger")
+		if r.compact then
+			text = string.gsub(text, " AVAILABLE", "")
+			text = string.gsub(text, "REINFORCEMENTS", "REINFORCE")
+		end
+		pulse = if s == "REINFORCE AVAILABLE" then 3 else 0
+	elseif downed then
+		text, pulse = "BLEEDING OUT", 5
+	elseif deploy == "dropping" then
+		text, col, pulse = "DROPPING IN", InfoLayer.col("own"), 4
+	elseif carrying then
+		text, col = "CELL", CELL
+	elseif frac < 0.5 then
+		text = string.format("%d%%", math.floor(frac * 100 + 0.5))
+	end
+	r.status.Text = InfoLayer.caseText(text)
+	r.status.TextColor3 = col
+	r.status.TextTransparency = if pulse > 0 then 0.1 + 0.4 * math.abs(math.sin(t * pulse)) else 0
+	if not alive then
+		r.bar.set(1, InfoLayer.col("danger"))
+	else
+		r.bar.set(frac, if frac > 0.35 and not downed then InfoLayer.col("text") else InfoLayer.col("danger"))
+	end
+	local needs = text ~= ""
+	local now = os.clock()
+	if needs then
+		r.fineSince = nil
+		setOpen(r, true)
+	else
+		r.fineSince = r.fineSince or now
+		if r.open and now - r.fineSince >= CLOSE_AFTER then
+			setOpen(r, false)
+		end
+	end
+end
+
+local function buildNew()
+	nu = {}
+	table.clear(strip)
+	local holder = InfoLayer.fresh("SquadStrip")
+	InfoLayer.place(holder, "squad", touch)
+	local w = holder.Size.X.Offset
+	holder.Size = UDim2.fromOffset(w, 0)
+	holder.AutomaticSize = Enum.AutomaticSize.Y
+	holder.Visible = false
+	Theme.list(holder, Enum.FillDirection.Vertical, if touch then 2 else 4)
+	nu.holder = holder
+end
+
+local function updateNew(squad: any, userId: number, t: number)
+	local seen: { [number]: boolean } = {}
+	if type(squad) == "table" then
+		for _, m in squad do
+			if type(m) ~= "table" or type(m.userId) ~= "number" or m.userId == userId then
+				continue
+			end
+			seen[m.userId] = true
+			local r = strip[m.userId]
+			if not r then
+				r = makeRow(m)
+				strip[m.userId] = r
+			end
+			r.frame.LayoutOrder = Style.callsign(m.userId).index
+			refreshRow(r, m, t)
+		end
+	end
+	local n = 0
+	for id, r in strip do
+		if not seen[id] then
+			r.frame:Destroy()
+			strip[id] = nil
+		else
+			n += 1
+		end
+	end
+	nu.holder.Visible = want and n > 0
+end
+
 local function applyPosition()
-	if ui.holder then
+	if ui.holder and not newMode then
 		ui.holder.Position = UDim2.new(0, ui.x or Style.MARGIN, 1, -math.floor(ui.bottom or 200))
 	end
 end
@@ -319,6 +519,19 @@ end
 
 function SquadCards.build(parent: Instance, isTouch: boolean)
 	touch = isTouch
+	newMode = InfoLayer.isNew()
+	-- a rebuild (style switch) drops the previous build's cards
+	for _, c in cards do
+		c.frame:Destroy()
+	end
+	table.clear(cards)
+	if newMode then
+		ui = {}
+		buildNew()
+		return
+	end
+	InfoLayer.drop("SquadStrip")
+	table.clear(strip)
 	local holder = Instance.new("Frame")
 	holder.Name = "SquadCards"
 	holder.BackgroundTransparency = 1
@@ -342,11 +555,25 @@ end
 
 function SquadCards.setVisible(on: boolean)
 	want = on
+	if newMode then
+		if nu.holder then
+			local any = next(strip) ~= nil
+			nu.holder.Visible = on and any
+		end
+		return
+	end
 	relayout()
 end
 
 -- squad = Store "squad"; me = Store "me"; mission = Store "mission"; t = workspace:GetServerTimeNow()
 function SquadCards.update(squad: any, me: any, mission: any, userId: number, t: number)
+	if newMode then
+		lastMe, lastMission, lastT = me, mission, t
+		if nu.holder then
+			updateNew(squad, userId, t)
+		end
+		return
+	end
 	if not ui.holder then
 		return
 	end
@@ -381,6 +608,16 @@ end
 
 -- 10 Hz: countdown text / pulse of the dead cards
 function SquadCards.tick(me: any, mission: any, t: number)
+	if newMode then
+		-- every row: pulses, countdowns, the 4 s close timer and join / carry attributes
+		if nu.holder and nu.holder.Visible then
+			lastMe, lastMission, lastT = me, mission, t
+			for _, r in strip do
+				refreshRow(r, r.m, t)
+			end
+		end
+		return
+	end
 	if not ui.holder or not ui.holder.Visible then
 		return
 	end

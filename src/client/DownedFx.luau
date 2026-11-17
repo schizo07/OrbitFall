@@ -28,14 +28,19 @@ local Audio: any = nil
 local shownAt = 0
 local fullSpan = 12 -- seconds the bar spans (first DownedEnd seen after going down)
 
+local HudSkin: any = nil
+local HudLayout: any = nil
+
 local function build()
 	local gui = Theme.gui("OrbitDowned", { DisplayOrder = 9 })
 	local root = Theme.root(gui, "hud")
+	-- UI STYLE new skins: size / place from UI/HudLayout; Style.panel draws the skin's backing (old HUD: as before)
+	local lay = HudSkin and HudSkin.current() and HudLayout and HudLayout.get("downed", Theme.isTouch())
 	local holder = Style.panel({
 		Name = "Downed",
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0.5, 70),
-		Size = UDim2.fromOffset(260, 58),
+		Position = if lay then lay.Position else UDim2.new(0.5, 0, 0.5, 70),
+		Size = if lay then lay.Size else UDim2.fromOffset(260, 58),
 		BracketColor = Style.Red,
 		Visible = false,
 		Parent = root,
@@ -192,11 +197,25 @@ function DownedFx.init(audio: any?)
 	local okS, S = pcall(require, uiFolder:FindFirstChild("HudStyle"))
 	local okT, T = pcall(require, uiFolder:FindFirstChild("Theme"))
 	local okC, C = pcall(require, uiFolder:FindFirstChild("ContextPrompt"))
+	local okK, K = pcall(require, uiFolder:FindFirstChild("HudSkin"))
+	local okL, L = pcall(require, uiFolder:FindFirstChild("HudLayout"))
+	HudSkin = if okK then K else nil
+	HudLayout = if okL then L else nil
 	if okS and okT then
 		Style, Theme = S, T
 		build()
 	end
 	ContextPrompt = if okC then C else nil
+	-- UI STYLE switch (HUD.rebuild): the panel is built again in the new skin and shown again if still downed
+	if HudSkin and ui then
+		HudSkin.onRebuild(function()
+			if ui and ui.gui then
+				ui.gui:Destroy()
+			end
+			build()
+			onDownedChanged()
+		end)
+	end
 
 	player:GetAttributeChangedSignal(Rules.ATTR):Connect(onDownedChanged)
 	player:GetAttributeChangedSignal(Rules.END_ATTR):Connect(function()

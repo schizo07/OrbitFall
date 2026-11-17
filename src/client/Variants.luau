@@ -63,6 +63,36 @@ local GROUPS = {
 		},
 	},
 	{
+		-- client/UI/HudSkin + HUD.rebuild: the in-mission HUD's look and layout, rebuilt live (D = the old HUD)
+		name = "UI STYLE",
+		keys = { "Feel_UiStyle" },
+		presets = {
+			{ name = "A Hairline (thin lines, angled cuts)", set = {} },
+			{ name = "B Soft glass (rounded, translucent)", set = { Feel_UiStyle = "glass" } },
+			{ name = "C Visor (one phosphor colour, mono)", set = { Feel_UiStyle = "visor" } },
+			{ name = "D old HUD", set = { Feel_UiStyle = "old" } },
+		},
+	},
+	{
+		-- client/UI/HUD crosshair satellites (new UI STYLE only): mag count + health arc next to the crosshair
+		name = "CROSSHAIR INFO",
+		keys = { "Feel_XhairInfo" },
+		presets = {
+			{ name = "A on low ammo / low health", set = {} },
+			{ name = "B always", set = { Feel_XhairInfo = "always" } },
+			{ name = "C off", set = { Feel_XhairInfo = "off" } },
+		},
+	},
+	{
+		-- client/UI/GoalLine (new UI STYLE only, PC): what sits under the goal line; the full list is in the mission sheet
+		name = "GOAL LINES",
+		keys = { "Feel_GoalLines" },
+		presets = {
+			{ name = "A current step only (hold Tab for the list)", set = {} },
+			{ name = "B + next 2 steps, smaller", set = { Feel_GoalLines = "next" } },
+		},
+	},
+	{
 		-- client/UI/Theme.applyFont: swaps the face of every HUD / menu text live (sizes stay)
 		name = "UI FONT",
 		keys = { "Feel_Font" },

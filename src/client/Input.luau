@@ -1,5 +1,5 @@
 -- Abstract input actions for keyboard/mouse, gamepad and touch (MobileControls calls Input.set).
--- Actions: Fire Aim Reload Grenade Dial Interact Sprint Swap1 Swap2 Swap3 Jump Scoreboard Crouch Prone Ping
+-- Actions: Fire Aim Reload Grenade Dial Interact Sprint Swap1 Swap2 Swap3 Jump MissionSheet Crouch Prone Ping
 local UserInputService = game:GetService("UserInputService")
 
 local Input = {}
@@ -17,7 +17,9 @@ local KEYS: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.One] = "Swap1",
 	[Enum.KeyCode.Two] = "Swap2",
 	[Enum.KeyCode.Three] = "Swap3",
-	[Enum.KeyCode.Tab] = "Scoreboard",
+	-- hold: mission sheet (UI/MissionSheet, new HUD layouts only; touch taps the goal line instead)
+	[Enum.KeyCode.Tab] = "MissionSheet",
+	[Enum.KeyCode.ButtonSelect] = "MissionSheet",
 	[Enum.KeyCode.V] = "Shoulder", -- swap camera shoulder (CameraController)
 	[Enum.KeyCode.ButtonR3] = "Shoulder",
 	[Enum.KeyCode.ButtonR2] = "Fire",

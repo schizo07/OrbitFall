@@ -6,13 +6,22 @@
 -- step(cam) runs per frame (HUD) for the distance / arrow.
 local Players = game:GetService("Players")
 
+-- New layouts (UI STYLE A-C, UI/InfoLayer.isNew() at build time): the HUD block is replaced by UI/GoalLine (one line
+-- under the compass) and the full checklist moves into UI/MissionSheet. build / render / step / setVisible keep their
+-- signatures, so HUD calls them the same way for every style.
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local InfoLayer = require(script.Parent.InfoLayer)
+local GoalLine = require(script.Parent.GoalLine)
+local MissionSheet = require(script.Parent.MissionSheet)
 
 local ObjectiveList = {}
 
 local ui: { [string]: any } = {}
 local touch = false
+local newMode = false
+local sheetHolder: Frame? = nil
+local lastObjs: any = nil
 local prevDone: { [string]: boolean }? = nil
 local MAX_ROWS = 8
 local MAX_ROWS_TOUCH = 2
@@ -27,6 +36,20 @@ local COUNTER_W = 62
 -- order: when given, the block is a child of a vertical list (touch left column) instead of a right-anchored holder
 function ObjectiveList.build(parent: Instance, isTouch: boolean, order: number?)
 	touch = isTouch
+	newMode = InfoLayer.isNew()
+	if newMode then
+		ui = {}
+		GoalLine.build(isTouch)
+		MissionSheet.build(isTouch)
+		sheetHolder = MissionSheet.slot("objectives")
+		if lastObjs ~= nil then
+			ObjectiveList.render(lastObjs)
+		end
+		return
+	end
+	sheetHolder = nil
+	GoalLine.destroy()
+	MissionSheet.destroy()
 	local holder = Instance.new("Frame")
 	holder.Name = "Objectives"
 	holder.BackgroundTransparency = 1
@@ -46,6 +69,11 @@ function ObjectiveList.build(parent: Instance, isTouch: boolean, order: number?)
 end
 
 function ObjectiveList.setVisible(on: boolean)
+	if newMode then
+		GoalLine.setVisible(on)
+		MissionSheet.setAllowed(on)
+		return
+	end
 	if ui.holder then
 		ui.holder.Visible = on
 	end
@@ -116,8 +144,244 @@ local function activeStep(o: any): any?
 	return nil
 end
 
+-- What the player should do now, shared by the goal line and the mission sheet (one source for "active step + marker").
+--   text      active step of the primary (first main) objective, without a trailing "[k/n]"; "OBJECTIVE COMPLETE" when done
+--   counter   "2/7" from a trailing "[2/7]", or nil
+--   frac      0..1 progress of the active step (hold %, k/n), nil when the step has no progress to show
+--   marker    the primary's marker, else the first unfinished objective's that has one
+--   nextSteps up to 2 unfinished step texts after the active one
+--   sides     unfinished side objectives { title, text, marker, started }
+export type Goal = {
+	title: string,
+	text: string,
+	counter: string?,
+	frac: number?,
+	marker: Vector3?,
+	done: boolean,
+	nextSteps: { string },
+	sides: { { title: string, text: string?, marker: Vector3?, started: boolean } },
+}
+
+function ObjectiveList.goal(objs: any): Goal?
+	if type(objs) ~= "table" or #objs == 0 then
+		return nil
+	end
+	local primary: any = nil
+	for _, o in objs do
+		if o.main then
+			primary = o
+			break
+		end
+	end
+	primary = primary or objs[1]
+	local act = activeStep(primary)
+	local g: Goal = {
+		title = primary.title or "MISSION",
+		text = "",
+		counter = nil,
+		frac = nil,
+		marker = nil,
+		done = primary.done == true,
+		nextSteps = {},
+		sides = {},
+	}
+	if primary.done then
+		g.text = "OBJECTIVE COMPLETE"
+	else
+		local text = act and act.text or primary.title or "OBJECTIVE"
+		local body, counter = string.match(text, "^(.-)%s*%[(%d+/%d+)%]$")
+		g.text = body or text
+		g.counter = counter
+		if act and act.progress ~= nil then
+			g.frac = math.clamp(act.progress, 0, 1)
+		elseif counter then
+			local k, n = string.match(counter, "(%d+)/(%d+)")
+			local kn, nn = tonumber(k), tonumber(n)
+			if kn and nn and nn > 0 then
+				g.frac = math.clamp(kn / nn, 0, 1)
+			end
+		end
+		local sk, sn = string.match(g.text, "%((%d+)/(%d+)%)")
+		if not g.frac and sk then
+			local kn, nn = tonumber(sk), tonumber(sn)
+			if kn and nn and nn > 0 then
+				g.frac = math.clamp(kn / nn, 0, 1)
+			end
+		end
+		if primary.steps then
+			local after = false
+			for _, s in primary.steps do
+				if after and not s.done and #g.nextSteps < 2 then
+					table.insert(g.nextSteps, (string.gsub(s.text or "", "%s*%[%d+/%d+%]$", "")))
+				end
+				if s == act then
+					after = true
+				end
+			end
+		end
+	end
+	if not primary.done and typeof(primary.marker) == "Vector3" then
+		g.marker = primary.marker
+	else
+		for _, o in objs do
+			if not o.done and typeof(o.marker) == "Vector3" then
+				g.marker = o.marker
+				break
+			end
+		end
+	end
+	for _, o in objs do
+		if o ~= primary and not o.main and not o.done then
+			local sa = activeStep(o)
+			local started = false
+			if o.steps then
+				for i, s in o.steps do
+					if s.done or (s.active and i > 1) or (s.active and s.progress ~= nil and s.progress > 0) then
+						started = true
+					end
+				end
+			end
+			table.insert(g.sides, {
+				title = o.title or "SIDE OBJECTIVE",
+				text = sa and sa.text or nil,
+				marker = if typeof(o.marker) == "Vector3" then o.marker else nil,
+				started = started,
+			})
+		end
+	end
+	return g
+end
+
+-- newly finished objectives / steps since the previous call (new layouts; the old path keeps its inline copy)
+local function diffDone(objs: any): ({ string }, { string })
+	local newlyDone: { string } = {}
+	local newlyStep: { string } = {}
+	if type(objs) ~= "table" or #objs == 0 then
+		prevDone = nil
+		return newlyDone, newlyStep
+	end
+	local doneNow: { [string]: boolean } = {}
+	for _, o in objs do
+		local key = tostring(o.id)
+		doneNow[key] = o.done == true
+		if prevDone and o.done and not prevDone[key] then
+			table.insert(newlyDone, o.title or "Objective")
+		end
+		if o.steps then
+			for i, s in o.steps do
+				local k = key .. ":" .. i
+				doneNow[k] = s.done == true
+				if prevDone and s.done and not prevDone[k] and not o.done then
+					table.insert(newlyStep, s.text)
+				end
+			end
+		end
+	end
+	prevDone = doneNow
+	return newlyDone, newlyStep
+end
+
+-- Mission sheet checklist (new layouts): every objective with all its steps, in the skin.
+local function renderSheet(objs: any)
+	local holder = sheetHolder
+	if not holder or not holder.Parent then
+		return
+	end
+	for _, c in holder:GetChildren() do
+		if c:IsA("GuiObject") then
+			c:Destroy()
+		end
+	end
+	if type(objs) ~= "table" or #objs == 0 then
+		InfoLayer.label({ Text = "No objectives yet", TextSize = 18, Color = InfoLayer.col("dim"), Size = UDim2.new(1, 0, 0, 24), Parent = holder })
+		return
+	end
+	local order = 0
+	local function nextOrder(): number
+		order += 1
+		return order
+	end
+	local mains, sides = {}, {}
+	for _, o in objs do
+		table.insert(o.main and mains or sides, o)
+	end
+	local function block(o: any, isMain: boolean)
+		local col = if isMain then InfoLayer.col("objective") else InfoLayer.col("heal")
+		local head = Instance.new("Frame")
+		head.Name = "Head"
+		head.BackgroundTransparency = 1
+		head.Size = UDim2.new(1, 0, 0, 26)
+		head.LayoutOrder = nextOrder()
+		head.Parent = holder
+		Theme.list(head, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+		InfoLayer.mark(head, col, 0)
+		InfoLayer.label({
+			Text = (if isMain then "" else "SIDE: ") .. (o.title or "OBJECTIVE") .. (if o.done then "  -  DONE" else ""),
+			TextSize = 20,
+			Color = if o.done then InfoLayer.col("dim") else col,
+			Size = UDim2.new(1, -16, 1, 0),
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			LayoutOrder = 1,
+			Parent = head,
+		})
+		if o.steps then
+			for _, s in o.steps do
+				local row = Instance.new("Frame")
+				row.Name = "Step"
+				row.BackgroundTransparency = 1
+				row.Size = UDim2.new(1, 0, 0, 22)
+				row.LayoutOrder = nextOrder()
+				row.Parent = holder
+				local box = Instance.new("Frame")
+				box.Name = "Box"
+				box.AnchorPoint = Vector2.new(0, 0.5)
+				box.Position = UDim2.new(0, 18, 0.5, 0)
+				box.Size = UDim2.fromOffset(10, 10)
+				box.BackgroundColor3 = col
+				box.BackgroundTransparency = if s.done then 0 else 1
+				box.BorderSizePixel = 0
+				box.Parent = row
+				if InfoLayer.style() == "glass" then
+					local c = Instance.new("UICorner")
+					c.CornerRadius = UDim.new(0.5, 0)
+					c.Parent = box
+				end
+				local st = Instance.new("UIStroke")
+				st.Color = if s.done or s.active then col else InfoLayer.col("dim")
+				st.Thickness = 1
+				st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+				st.Parent = box
+				InfoLayer.label({
+					Text = s.text or "",
+					TextSize = 18,
+					Color = if s.done then InfoLayer.col("dim") elseif s.active then InfoLayer.col("text") else InfoLayer.col("dim"),
+					TextTransparency = if s.done then 0.35 else 0,
+					Position = UDim2.fromOffset(38, 0),
+					Size = UDim2.new(1, -38, 1, 0),
+					TextTruncate = Enum.TextTruncate.AtEnd,
+					Parent = row,
+				})
+			end
+		end
+	end
+	for _, o in mains do
+		block(o, true)
+	end
+	for _, o in sides do
+		block(o, false)
+	end
+end
+
 -- objs: Store "objectives" array. Returns (newlyDoneTitles, newlyDoneStepTexts, anyShown)
 function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
+	lastObjs = objs -- kept in every style, so a switch back to a new layout starts from the current list
+	if newMode then
+		local nd, ns = diffDone(objs)
+		local g = ObjectiveList.goal(objs)
+		GoalLine.set(g)
+		renderSheet(objs)
+		return nd, ns, g ~= nil
+	end
 	local newlyDone: { string } = {}
 	local newlyStep: { string } = {}
 	if not ui.holder then
@@ -340,6 +604,10 @@ end
 
 -- Per frame: distance + arrow towards the primary objective's marker, relative to the camera heading.
 function ObjectiveList.step(cam: Camera)
+	if newMode then
+		GoalLine.step(cam)
+		return
+	end
 	local tgt = target
 	local dist, arrow = ui.dist, ui.arrow
 	if not tgt or not dist or not arrow or not ui.holder or not ui.holder.Visible then

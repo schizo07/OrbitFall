@@ -5,11 +5,32 @@
 -- Data: Store "me".callins.slots[{id, readyAt, uses, charges, maxCharges}] and me.reinforceReadyAt (HUD forwards `me`).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- New layouts (UI STYLE A-C): a strip of call-in icons (bottom-left PC, top-left phone): glyph in the beacon colour,
+-- a dark wipe that drains upward while it cools down, seconds under it, a uses / charges count in the corner, one pop
+-- when it comes off cooldown. PC: while the Uplink is open (UplinkCodes / UplinkDial) the strip grows a list upward with
+-- names and cooldowns. Phones never expand (the radial dial covers it).
 local CallIns = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("CallIns"))
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
+local InfoLayer = require(script.Parent.InfoLayer)
+local UplinkCodes = require(script.Parent.UplinkCodes)
+-- UplinkDial is looked up on first use: it reaches HUD (which builds this list), so a top-level require would loop
+local uplinkDial: any = nil
+local function dialOpen(): boolean
+	if uplinkDial == nil then
+		local m = script.Parent:FindFirstChild("UplinkDial")
+		uplinkDial = if m and m:IsA("ModuleScript") then require(m) :: any else false
+	end
+	return uplinkDial ~= false and uplinkDial.isOpen() == true
+end
 
 local CallInList = {}
+
+local newMode = false
+local nu: { [string]: any } = {}
+local icons: { any } = {}
+local iconKey: string? = nil
 
 local touch = false
 local ui: { [string]: any } = {}
@@ -106,8 +127,279 @@ local function rebuild(me: any)
 	table.insert(rows, rr)
 end
 
+-- New layouts ---------------------------------------------------------------------------------------------------------
+local function buildNew()
+	nu = {}
+	table.clear(icons)
+	iconKey = nil
+	local E = InfoLayer.entry("callins", touch)
+	local holder = InfoLayer.fresh("CallInStrip")
+	InfoLayer.place(holder, "callins", touch)
+	holder.Size = UDim2.fromOffset(0, E.Icon or 34)
+	holder.AutomaticSize = Enum.AutomaticSize.X
+	holder.Visible = false
+	nu.holder = holder
+	local strip = Instance.new("Frame")
+	strip.Name = "Strip"
+	strip.BackgroundTransparency = 1
+	strip.Size = UDim2.fromOffset(0, E.Icon or 34)
+	strip.AutomaticSize = Enum.AutomaticSize.X
+	strip.Parent = holder
+	Theme.list(strip, Enum.FillDirection.Horizontal, E.Gap or 7, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+	nu.strip = strip
+	-- expanded list (PC): bottom-anchored just above the strip, grows upward
+	if not touch and (E.ExpandedWidth or 0) > 0 then
+		local ex = Instance.new("Frame")
+		ex.Name = "Expanded"
+		ex.BackgroundTransparency = 1
+		ex.AnchorPoint = Vector2.new(0, 1)
+		ex.Position = UDim2.fromOffset(0, -8)
+		ex.Size = UDim2.fromOffset(E.ExpandedWidth, 0)
+		ex.AutomaticSize = Enum.AutomaticSize.Y
+		ex.Visible = false
+		ex.Parent = holder
+		InfoLayer.backing(ex)
+		Theme.pad(ex, 8, 6, 8, 6)
+		Theme.list(ex, Enum.FillDirection.Vertical, 2, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Bottom)
+		nu.expanded = ex
+	end
+end
+
+local function makeIcon(def: any, order: number, reinforce: boolean, slotIndex: number?): any
+	local E = InfoLayer.entry("callins", touch)
+	local size: number = E.Icon or 34
+	local color = if reinforce then InfoLayer.col("heal") else Theme.beaconColor(def and def.beacon)
+	local box = Instance.new("Frame")
+	box.Name = "Icon"
+	box.BackgroundTransparency = 1
+	box.BorderSizePixel = 0
+	box.Size = UDim2.fromOffset(size, size)
+	box.LayoutOrder = order
+	box.ClipsDescendants = false
+	box.Parent = nu.strip
+	local st = InfoLayer.style()
+	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Color = color
+	stroke.Thickness = 1
+	stroke.Transparency = 0.35
+	stroke.Parent = box
+	if st == "glass" then
+		box.BackgroundColor3 = color
+		box.BackgroundTransparency = 0.7
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0.5, 0)
+		c.Parent = box
+		stroke.Color = Color3.new(1, 1, 1)
+		stroke.Transparency = 0.82
+	elseif st == "visor" then
+		stroke.Transparency = 0.5
+	end
+	-- cooldown wipe: a dark fill from the bottom that drains as the cooldown runs out
+	local wipe = Instance.new("Frame")
+	wipe.Name = "Wipe"
+	wipe.BorderSizePixel = 0
+	wipe.BackgroundColor3 = Color3.new(0, 0, 0)
+	wipe.BackgroundTransparency = 0.35
+	wipe.AnchorPoint = Vector2.new(0, 1)
+	wipe.Position = UDim2.fromScale(0, 1)
+	wipe.Size = UDim2.fromScale(1, 0)
+	wipe.ZIndex = 2
+	wipe.Parent = box
+	if st == "glass" then
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0.5, 0)
+		c.Parent = wipe
+	end
+	local glyph = Style.glyph(if def then Style.callinShape(def) else "dot", {
+		Size = math.floor(size * 0.42),
+		Color = if st == "glass" then Color3.new(1, 1, 1) else color,
+		Box = UDim2.fromScale(1, 1),
+		ZIndex = 3,
+		Parent = box,
+	})
+	glyph.AnchorPoint = Vector2.zero
+	local secs = InfoLayer.label({
+		Text = "",
+		Role = "number",
+		TextSize = math.max(11, math.floor(size * 0.36)),
+		ColorRole = "text",
+		XAlign = Enum.TextXAlignment.Center,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 4,
+		Parent = box,
+	})
+	local badge = InfoLayer.label({
+		Text = "",
+		Role = "number",
+		TextSize = math.max(11, math.floor(size * 0.3)),
+		Color = color,
+		XAlign = Enum.TextXAlignment.Right,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 3, 0, -4),
+		Size = UDim2.fromOffset(size, math.floor(size * 0.34)),
+		ZIndex = 5,
+		Parent = box,
+	})
+	local row = nil
+	if nu.expanded then
+		local nameSize: number = E.NameSize or 14
+		local r = Instance.new("Frame")
+		r.Name = "Row"
+		r.BackgroundTransparency = 1
+		r.Size = UDim2.new(1, 0, 0, nameSize + 8)
+		r.LayoutOrder = order
+		r.Parent = nu.expanded
+		local tick = Style.glyph(if def then Style.callinShape(def) else "dot", {
+			Size = math.floor(nameSize * 0.6),
+			Color = color,
+			Box = UDim2.fromOffset(nameSize, nameSize + 8),
+			Parent = r,
+		})
+		tick.AnchorPoint = Vector2.zero
+		local name = InfoLayer.label({
+			Text = if reinforce then "REINFORCE" else (def and def.name or "?"),
+			TextSize = nameSize,
+			ColorRole = "text",
+			Position = UDim2.fromOffset(nameSize + 6, 0),
+			Size = UDim2.new(1, -(nameSize + 6) - 56, 1, 0),
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Parent = r,
+		})
+		local status = InfoLayer.label({
+			Text = "",
+			Role = "number",
+			TextSize = nameSize,
+			ColorRole = "dim",
+			XAlign = Enum.TextXAlignment.Right,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.fromScale(1, 0),
+			Size = UDim2.new(0, 56, 1, 0),
+			Parent = r,
+		})
+		row = { frame = r, name = name, status = status }
+	end
+	return {
+		box = box, stroke = stroke, wipe = wipe, glyph = glyph, secs = secs, badge = badge, row = row, color = color,
+		def = def, reinforce = reinforce, slotIndex = slotIndex, ready = nil,
+	}
+end
+
+local function rebuildIcons(me: any)
+	for _, ic in icons do
+		ic.box:Destroy()
+		if ic.row then
+			ic.row.frame:Destroy()
+		end
+	end
+	table.clear(icons)
+	local slots = me and me.callins and me.callins.slots or {}
+	for i, s in slots do
+		table.insert(icons, makeIcon(CallIns.get(s.id), i, false, i))
+	end
+	table.insert(icons, makeIcon(CallIns.get("REINFORCE"), 20, true, nil))
+end
+
+local function uplinkOpen(): boolean
+	return UplinkCodes.isOpen() or dialOpen()
+end
+
+local function updateNew(me: any, t: number)
+	local slots = me.callins.slots
+	local ids = {}
+	for _, s in slots do
+		table.insert(ids, s.id)
+	end
+	local key = table.concat(ids, ",")
+	if key ~= iconKey then
+		iconKey = key
+		rebuildIcons(me)
+	end
+	nu.holder.Visible = nu.want == true and #icons > 0
+	local expand = nu.expanded ~= nil and nu.holder.Visible and uplinkOpen()
+	if nu.expanded and nu.expanded.Visible ~= expand then
+		if expand then
+			HudSkin.enter(nu.expanded, "bottom")
+		else
+			nu.expanded.Visible = false
+		end
+	end
+	for _, ic in icons do
+		local def = ic.def
+		if not def then
+			continue
+		end
+		local available, remaining, reason
+		local slot
+		if ic.reinforce then
+			remaining = math.max(0, (me.reinforceReadyAt or 0) - t)
+			available = remaining <= 0
+			reason = if available then "READY" else "COOLDOWN"
+		else
+			slot = slots[ic.slotIndex]
+			if not slot then
+				continue
+			end
+			available, remaining, reason = Theme.slotStatus(slot, def, t)
+		end
+		local frac = 0
+		if remaining > 0 and not (slot and slot.charges ~= nil and slot.charges > 0) then
+			frac = Theme.clamp(remaining / math.max(def.cooldown, 1), 0, 1)
+		end
+		local status: string
+		if reason == "NO USES" then
+			ic.wipe.Size = UDim2.fromScale(1, 1)
+			ic.secs.Text = "-"
+			ic.secs.TextColor3 = InfoLayer.col("danger")
+			status = "EMPTY"
+		elseif frac > 0 then
+			ic.wipe.Size = UDim2.fromScale(1, frac)
+			ic.secs.Text = tostring(math.ceil(remaining))
+			ic.secs.TextColor3 = InfoLayer.col("text")
+			status = tostring(math.ceil(remaining)) .. "s"
+		else
+			ic.wipe.Size = UDim2.fromScale(1, 0)
+			ic.secs.Text = ""
+			status = "READY"
+		end
+		Style.glyphAlpha(ic.glyph, if available then 0 else 0.55)
+		local count = ""
+		if slot then
+			if slot.maxCharges and slot.maxCharges > 1 then
+				count = "x" .. tostring(slot.charges or 0)
+			elseif def.uses then
+				count = tostring(slot.uses or def.uses)
+			end
+		end
+		ic.badge.Text = count
+		if ic.row then
+			ic.row.status.Text = InfoLayer.caseText(status)
+			ic.row.status.TextColor3 = if available then InfoLayer.col("heal") elseif reason == "NO USES" then InfoLayer.col("danger") else InfoLayer.col("dim")
+			ic.row.name.TextTransparency = if available then 0 else 0.4
+		end
+		if ic.ready ~= available then
+			if available and ic.ready == false then
+				-- off cooldown: one pop + the edge flashes
+				HudSkin.bump(ic.box)
+				ic.stroke.Transparency = 0
+				Theme.tween(ic.stroke, 0.5, { Transparency = if InfoLayer.style() == "glass" then 0.82 else 0.35 })
+			end
+			ic.ready = available
+		end
+	end
+end
+
 function CallInList.build(parent: Instance, isTouch: boolean, order: number?)
 	touch = isTouch
+	newMode = InfoLayer.isNew()
+	if newMode then
+		ui = {}
+		table.clear(rows)
+		rowKey = nil
+		buildNew()
+		return
+	end
+	InfoLayer.drop("CallInStrip")
 	local p = Style.panel({
 		Name = "CallIns",
 		Size = if isTouch then UDim2.fromOffset(112, 0) else UDim2.new(1, 0, 0, 0), -- phones: narrow icon column
@@ -139,6 +431,13 @@ function CallInList.build(parent: Instance, isTouch: boolean, order: number?)
 end
 
 function CallInList.setVisible(on: boolean)
+	if newMode then
+		nu.want = on
+		if nu.holder then
+			nu.holder.Visible = on and #icons > 0
+		end
+		return
+	end
 	if ui.panel then
 		ui.panel.Visible = on and #rows > 0
 		ui.want = on
@@ -147,6 +446,12 @@ end
 
 -- me = Store "me"; t = workspace:GetServerTimeNow()
 function CallInList.update(me: any, t: number)
+	if newMode then
+		if nu.holder and type(me) == "table" and type(me.callins) == "table" and type(me.callins.slots) == "table" then
+			updateNew(me, t)
+		end
+		return
+	end
 	if not ui.panel then
 		return
 	end

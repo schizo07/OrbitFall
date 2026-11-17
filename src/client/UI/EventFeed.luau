@@ -5,12 +5,34 @@
 -- API: build(parent, touch) / push(text, color, kind?) / route(notifyText, color, kind) -> handled / setVisible / clear / tick.
 -- Touch: the feed (plus a one-line resource summary) sits behind a FEED button in the top row (right of the compass),
 -- auto-closes after 8 s.
+-- New layouts (UI STYLE A-C): the one event feed. Right-mid on PC (6 lines, newest on top, 6 s), under the alert stack on
+-- phones (2 lines, 4 s), no FEED button. Every line has a glyph by kind; pickups (UI/PickupToast), HUD toasts
+-- (EventFeed.toast) and your own radio lines (UI/SquadComms) land here too. A repeat of the same line bumps a counter
+-- (pickups add up their "+N").
 local Store = require(script.Parent.Parent.Store)
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
+local InfoLayer = require(script.Parent.InfoLayer)
 local TopRight = require(script.Parent.TopRight)
 
 local EventFeed = {}
+
+local newMode = false
+local nu: { [string]: any } = {}
+local feedLines: { any } = {}
+
+-- line glyph by kind (Style.glyph shapes)
+local KIND_SHAPE: { [string]: string } = {
+	died = "skull",
+	kill = "cross",
+	objective = "check",
+	callin = "diamond",
+	bark = "dash",
+	comms = "dash",
+	pickup = "diamond",
+	toast = "dot",
+}
 
 local MAX_LINES = 5
 local LIFE = 8 -- seconds a line stays before it fades
@@ -112,8 +134,163 @@ local function squadMember(name: string): any?
 	return nil
 end
 
+-- New layouts ---------------------------------------------------------------------------------------------------------
+-- HUD / module colours -> skin colour roles; squad callsign colours and other custom colours pass through
+local function roleColor(c: Color3?): Color3
+	if c == nil or c == Style.Amber then
+		return InfoLayer.col("own")
+	elseif c == Style.Red then
+		return InfoLayer.col("danger")
+	elseif c == Style.Cyan then
+		return InfoLayer.col("objective")
+	elseif c == Style.Green then
+		return InfoLayer.col("heal")
+	elseif c == Style.Orange then
+		return InfoLayer.col("rare")
+	elseif c == Style.White then
+		return InfoLayer.col("text")
+	elseif c == Style.Grey then
+		return InfoLayer.col("dim")
+	end
+	return c
+end
+
+local function buildNew()
+	nu = {}
+	table.clear(feedLines)
+	local E = InfoLayer.entry("feed", touch)
+	local holder = InfoLayer.fresh("EventFeed")
+	InfoLayer.place(holder, "feed", touch)
+	holder.Visible = false
+	holder.ClipsDescendants = false
+	Theme.list(
+		holder,
+		Enum.FillDirection.Vertical,
+		E.Gap or 6,
+		if touch then Enum.HorizontalAlignment.Center else Enum.HorizontalAlignment.Right,
+		Enum.VerticalAlignment.Top
+	)
+	nu.holder = holder
+	nu.E = E
+end
+
+local function removeNew(line: any)
+	local i = table.find(feedLines, line)
+	if i then
+		table.remove(feedLines, i)
+	end
+	if line.row.Parent then
+		line.row:Destroy()
+	end
+end
+
+local function armNew(line: any)
+	line.gen += 1
+	local gen = line.gen
+	local E = nu.E
+	task.delay(E.Life or 6, function()
+		if line.gen ~= gen or not line.row.Parent then
+			return
+		end
+		line.dying = true
+		local fade = E.FadeTime or 0.4
+		HudSkin.fade(line.row, 1, fade)
+		task.delay(fade + 0.05, function()
+			if line.gen == gen then
+				removeNew(line)
+			end
+		end)
+	end)
+end
+
+-- one feed line. shape = glyph (default by kind); plus = amount that adds up on repeats ("+2 GRENADES")
+local function pushNew(text: string, color: Color3?, kind: string?, shape: string?, plus: number?)
+	if not nu.holder then
+		return
+	end
+	local E = nu.E
+	local col = roleColor(color)
+	local base = InfoLayer.caseText(text)
+	-- the same line again while it is still up: bump a counter instead of stacking
+	for _, l in feedLines do
+		if not l.dying and l.base == base and l.row.Parent then
+			l.count += 1
+			if plus and l.plus then
+				l.plus += plus
+				l.label.Text = string.format("+%d %s", l.plus, base)
+			else
+				l.label.Text = string.format("%s  x%d", base, l.count)
+			end
+			HudSkin.bump(l.label)
+			armNew(l)
+			return
+		end
+	end
+	serial += 1
+	local H: number = E.LineHeight or 20
+	local row = Instance.new("Frame")
+	row.Name = "Line"
+	row.BackgroundTransparency = 1
+	row.BorderSizePixel = 0
+	row.Size = UDim2.fromOffset(0, H)
+	row.AutomaticSize = Enum.AutomaticSize.X
+	row.LayoutOrder = -serial -- newest on top
+	Theme.list(row, Enum.FillDirection.Horizontal, E.GlyphGap or 8, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+	if InfoLayer.style() == "glass" then
+		Theme.pad(row, 10, 0, 10, 0)
+		local b = InfoLayer.backing(row)
+		local c = b:FindFirstChildOfClass("UICorner")
+		if c then
+			c.CornerRadius = UDim.new(0.5, 0)
+		end
+	end
+	local textSize: number = E.TextSize or 15
+	local g = Style.glyph(shape or KIND_SHAPE[kind or ""] or "dot", {
+		Size = math.max(7, math.floor(textSize * 0.6)),
+		Color = col,
+		Box = UDim2.fromOffset(math.floor(textSize * 0.8), H),
+		LayoutOrder = if touch then 1 else 2,
+		Parent = row,
+	})
+	g.AnchorPoint = Vector2.zero
+	local label = InfoLayer.label({
+		Text = if plus then string.format("+%d %s", plus, base) else base,
+		Raw = true,
+		TextSize = textSize,
+		Color = col,
+		Shadow = true,
+		XAlign = if touch then Enum.TextXAlignment.Left else Enum.TextXAlignment.Right,
+		Size = UDim2.fromOffset(0, H),
+		AutomaticSize = Enum.AutomaticSize.X,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		LayoutOrder = if touch then 2 else 1,
+		Parent = row,
+	})
+	local cap = Instance.new("UISizeConstraint")
+	cap.MaxSize = Vector2.new(nu.holder.Size.X.Offset - textSize * 2, H)
+	cap.Parent = label
+	row.Parent = nu.holder
+	local line = { row = row, label = label, base = base, count = 1, gen = 0, dying = false, plus = plus }
+	table.insert(feedLines, line)
+	while #feedLines > (E.Lines or 6) do
+		removeNew(feedLines[1])
+	end
+	HudSkin.enter(row, if touch then "top" else "right")
+	armNew(line)
+end
+
 function EventFeed.build(parent: Instance, isTouch: boolean)
 	touch = isTouch
+	newMode = InfoLayer.isNew()
+	-- a rebuild (style switch) drops the previous build's lines
+	table.clear(lines)
+	if newMode then
+		ui = {}
+		buildNew()
+		return
+	end
+	InfoLayer.drop("EventFeed")
+	table.clear(feedLines)
 	local H = lineHeight()
 	local holder = Instance.new("Frame")
 	holder.Name = "EventFeed"
@@ -208,7 +385,11 @@ function EventFeed.build(parent: Instance, isTouch: boolean)
 	end
 end
 
-function EventFeed.push(text: string, color: Color3?, _kind: string?)
+function EventFeed.push(text: string, color: Color3?, kind: string?)
+	if newMode then
+		pushNew(text, color, kind, nil, nil)
+		return
+	end
 	if not ui.list then
 		return
 	end
@@ -297,8 +478,37 @@ function EventFeed.route(text: string, color: Color3?, _kind: string?): boolean
 	return false
 end
 
+-- New layouts only: a pickup line with its own glyph and an amount that adds up ("+2 GRENADES"). Returns false with the
+-- old HUD (PickupToast then shows its own toast).
+function EventFeed.pickup(text: string, shape: string?, color: Color3?, plus: number?): boolean
+	if not newMode then
+		return false
+	end
+	pushNew(text, color, "pickup", shape, plus)
+	return true
+end
+
+-- New layouts only: a short HUD message (what HUD.toast shows with the old HUD). Returns false with the old HUD.
+function EventFeed.toast(text: string, color: Color3?): boolean
+	if not newMode then
+		return false
+	end
+	pushNew(text, color, "toast", nil, nil)
+	return true
+end
+
+function EventFeed.isNew(): boolean
+	return newMode
+end
+
 function EventFeed.setVisible(on: boolean)
 	want = on
+	if newMode then
+		if nu.holder then
+			nu.holder.Visible = on
+		end
+		return
+	end
 	if not ui.holder then
 		return
 	end
@@ -309,6 +519,13 @@ function EventFeed.setVisible(on: boolean)
 end
 
 function EventFeed.clear()
+	if newMode then
+		for _, l in table.clone(feedLines) do
+			removeNew(l)
+		end
+		table.clear(feedLines)
+		return
+	end
 	for _, l in table.clone(lines) do
 		removeLine(l)
 	end
@@ -332,7 +549,7 @@ end
 
 -- 10 Hz from HUD
 function EventFeed.tick()
-	if not touch or not ui.holder or not open then
+	if newMode or not touch or not ui.holder or not open then
 		return
 	end
 	if os.clock() > openUntil then

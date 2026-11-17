@@ -20,10 +20,18 @@
 
 local UserInputService = game:GetService("UserInputService")
 
+-- New layouts (UI STYLE A-C): the prompt sits at the layout's "prompt" spot (PC 20 px under the centre clear box; phone
+-- left of the SIDE button), in the skin's fonts; glass / visor get their backing, hairline is text on a stroke. The
+-- layer is built again after a style switch.
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
+local InfoLayer = require(script.Parent.InfoLayer)
 
 local ContextPrompt = {}
+
+local newMode = false
+local TEXT_SIZE, KEY_SIZE = 17, 22
 
 -- per input mode: kb = keyboard, pad = gamepad, touch = on-screen button name. "@shape" draws a Style.glyph shape.
 local ACTIONS: { [string]: { kb: string, pad: string, touch: string } } = {
@@ -85,6 +93,56 @@ local function build()
 	end
 	built = true
 	local touch = Theme.isTouch()
+	newMode = InfoLayer.isNew()
+	if newMode then
+		local E = InfoLayer.entry("prompt", touch)
+		local g = Theme.gui("OrbitPrompt", { DisplayOrder = 11, Insets = "CoreUISafeInsets" })
+		ui.gui = g
+		local r = Theme.root(g, "hud")
+		H = E.Size.Y.Offset
+		TEXT_SIZE = E.TextSize or 17
+		KEY_SIZE = E.KeySize or 22
+		local wrap = Instance.new("Frame")
+		wrap.Name = "PromptWrap"
+		wrap.BackgroundTransparency = 1
+		InfoLayer.place(wrap, "prompt", touch)
+		wrap.Size = UDim2.fromOffset(0, 0)
+		wrap.AutomaticSize = Enum.AutomaticSize.XY
+		wrap.Parent = r
+		Theme.list(wrap, Enum.FillDirection.Vertical, 3, Enum.HorizontalAlignment.Center)
+		local holder = Instance.new("Frame")
+		holder.Name = "Prompt"
+		holder.BackgroundTransparency = 1
+		holder.Size = UDim2.fromOffset(0, H)
+		holder.AutomaticSize = Enum.AutomaticSize.X
+		holder.LayoutOrder = 1
+		holder.Visible = false
+		holder.Parent = wrap
+		if InfoLayer.style() ~= "hairline" then
+			InfoLayer.backing(holder)
+		end
+		local lim = Instance.new("UISizeConstraint")
+		lim.MaxSize = Vector2.new(E.MaxWidth or 400, math.huge)
+		lim.Parent = holder
+		Theme.pad(holder, 10, 0, 10, 0)
+		Theme.list(holder, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+		local scale = Instance.new("UIScale")
+		scale.Parent = holder
+		ui.holder = holder
+		ui.scale = scale
+		ui.parts = {}
+		local bar = HudSkin.bar({
+			Name = "PromptProgress",
+			Size = UDim2.fromOffset(math.floor((E.MaxWidth or 400) * 0.45), 4),
+			Color = InfoLayer.col("heal"),
+			LayoutOrder = 2,
+			Parent = wrap,
+		})
+		ui.progress = { back = bar.root, set = bar.set }
+		ui.progress.back.Visible = false
+		return
+	end
+	H, TEXT_SIZE, KEY_SIZE = 30, 17, 22
 	local gui = Theme.gui("OrbitPrompt", { DisplayOrder = 11, Insets = "None" })
 	ui.gui = gui
 	local root = Theme.root(gui, "hud")
@@ -128,6 +186,22 @@ local function addText(text: string, order: number)
 	if text == "" then
 		return
 	end
+	if newMode then
+		table.insert(
+			ui.parts,
+			InfoLayer.label({
+				Text = text,
+				TextSize = TEXT_SIZE,
+				ColorRole = "text",
+				Shadow = true,
+				Size = UDim2.fromOffset(0, H),
+				AutomaticSize = Enum.AutomaticSize.X,
+				LayoutOrder = order,
+				Parent = ui.holder,
+			})
+		)
+		return
+	end
 	local l = Style.label({
 		Text = text,
 		TextSize = 17,
@@ -140,7 +214,51 @@ local function addText(text: string, order: number)
 	table.insert(ui.parts, l)
 end
 
+local function addKeyNew(glyph: string, order: number)
+	local isGlyph = string.sub(glyph, 1, 1) == "@"
+	local own = InfoLayer.col("own")
+	local box = Instance.new("Frame")
+	box.Name = "Key"
+	box.BorderSizePixel = 0
+	box.BackgroundColor3 = own
+	box.BackgroundTransparency = 0.85
+	box.Size = UDim2.fromOffset(if isGlyph then KEY_SIZE else 0, KEY_SIZE)
+	box.AutomaticSize = if isGlyph then Enum.AutomaticSize.None else Enum.AutomaticSize.X
+	box.LayoutOrder = order
+	box.Parent = ui.holder
+	local st = Instance.new("UIStroke")
+	st.Color = own
+	st.Thickness = 1
+	st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	st.Parent = box
+	if InfoLayer.style() == "glass" then
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 5)
+		c.Parent = box
+	end
+	if isGlyph then
+		Style.glyph(string.sub(glyph, 2), { Size = math.floor(KEY_SIZE * 0.5), Color = own, Box = UDim2.fromScale(1, 1), Parent = box })
+	else
+		Theme.pad(box, 6, 0, 6, 0)
+		InfoLayer.label({
+			Text = glyph,
+			Role = "number",
+			TextSize = math.floor(KEY_SIZE * 0.68),
+			Color = own,
+			XAlign = Enum.TextXAlignment.Center,
+			Size = UDim2.fromOffset(0, KEY_SIZE),
+			AutomaticSize = Enum.AutomaticSize.X,
+			Parent = box,
+		})
+	end
+	table.insert(ui.parts, box)
+end
+
 local function addKey(glyph: string, order: number)
+	if newMode then
+		addKeyNew(glyph, order)
+		return
+	end
 	local box = Style.rect({
 		Name = "Key",
 		Color = Style.White,
@@ -276,6 +394,24 @@ function ContextPrompt.setVisible(on: boolean)
 	visible = on
 	refresh()
 end
+
+-- style switch: build the layer again for the new style and show the current prompt in it
+InfoLayer.onRebuild(function()
+	if not built then
+		return -- built lazily on the first show()
+	end
+	if not newMode and not InfoLayer.isNew() then
+		return -- old HUD before and after: nothing to rebuild
+	end
+	if ui.gui then
+		ui.gui:Destroy()
+	end
+	ui = {}
+	built = false
+	shownId, shownSig = nil, ""
+	build()
+	refresh(true)
+end)
 
 mode = inputMode()
 UserInputService.LastInputTypeChanged:Connect(function()

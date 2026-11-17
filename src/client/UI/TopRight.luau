@@ -2,10 +2,21 @@
 -- resource chips (samples green, rare orange, salvage / super amber, kills + XP grey). Chips only appear once their
 -- count is above zero. On touch only the timer row is built; the counts are still tracked and EventFeed shows them
 -- as a one-line summary behind its FEED button (TopRight.summary()).
+-- New layouts (UI STYLE A-C): the timer alone ("12:41", no "T-") at the top-right; "v 3" reinforcements left of it
+-- only for 10 s after the count changed or while someone is down; no chips (the counts go into the mission sheet).
 local Style = require(script.Parent.HudStyle)
 local Theme = require(script.Parent.Theme)
+local HudSkin = require(script.Parent.HudSkin)
+local InfoLayer = require(script.Parent.InfoLayer)
+local Store = require(script.Parent.Parent.Store)
 
 local TopRight = {}
+
+local LIVES_SHOW = 10
+local newMode = false
+local nu: { [string]: any } = {}
+local livesShown: number? = nil
+local livesChangedAt = -100
 
 local CHIP = 52
 local ui: { [string]: any } = {}
@@ -23,7 +34,105 @@ local DEFS = {
 	{ key = "xp", label = "XP", color = Style.Grey, shape = "up" },
 }
 
+local function buildNew(touch: boolean)
+	nu = {}
+	local T = InfoLayer.entry("timer", touch)
+	local R = InfoLayer.entry("reinforce", touch)
+	-- one right-aligned row at the timer's spot: [v 3] gap [12:41]; the reinforce part hides when it has nothing to say
+	local h = T.Size.Y.Offset
+	local holder = InfoLayer.fresh("TopRight")
+	InfoLayer.place(holder, "timer", touch)
+	holder.Size = UDim2.fromOffset(0, h)
+	holder.AutomaticSize = Enum.AutomaticSize.X
+	holder.Visible = false
+	Theme.list(holder, Enum.FillDirection.Horizontal, R.Gap or 17, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+	nu.holder = holder
+	local lives = Instance.new("Frame")
+	lives.Name = "Reinforce"
+	lives.BackgroundTransparency = 1
+	lives.Size = UDim2.fromOffset(0, h)
+	lives.AutomaticSize = Enum.AutomaticSize.X
+	lives.LayoutOrder = 1
+	lives.Visible = false
+	lives.Parent = holder
+	Theme.list(lives, Enum.FillDirection.Horizontal, 4, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+	local rs: number = R.TextSize or 17
+	nu.livesIcon = Style.glyph("down", {
+		Size = math.floor(rs * 0.6),
+		Color = InfoLayer.col("own"),
+		Box = UDim2.fromOffset(math.floor(rs * 0.7), h),
+		LayoutOrder = 1,
+		Parent = lives,
+	})
+	nu.lives = InfoLayer.label({
+		Text = "0",
+		Role = "number",
+		TextSize = rs,
+		ColorRole = "own",
+		Shadow = true,
+		Size = UDim2.fromOffset(0, h),
+		AutomaticSize = Enum.AutomaticSize.X,
+		LayoutOrder = 2,
+		Parent = lives,
+	})
+	nu.livesRow = lives
+	nu.timer = InfoLayer.label({
+		Text = "00:00",
+		Role = "number",
+		TextSize = T.TextSize or 20,
+		ColorRole = "text",
+		Shadow = true,
+		XAlign = Enum.TextXAlignment.Right,
+		Size = UDim2.fromOffset(0, h),
+		AutomaticSize = Enum.AutomaticSize.X,
+		LayoutOrder = 2,
+		Parent = holder,
+	})
+end
+
+-- reinforcements show while they matter: 10 s after the count changed, or while a squadmate / you are down
+local function livesWanted(): boolean
+	if os.clock() - livesChangedAt < LIVES_SHOW then
+		return true
+	end
+	local me = Store.get("me")
+	if type(me) == "table" and me.alive == false then
+		return true
+	end
+	local squad = Store.get("squad")
+	if type(squad) == "table" then
+		for _, m in squad do
+			if type(m) == "table" and m.alive == false then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- HUD colour -> skin colour role (the old HUD passes its own urgency colours)
+local function roleColor(c: Color3): Color3
+	if c == Style.Red then
+		return InfoLayer.col("danger")
+	elseif c == Style.Amber then
+		return InfoLayer.col("own")
+	elseif c == Style.Green then
+		return InfoLayer.col("heal")
+	end
+	return InfoLayer.col("text")
+end
+
 function TopRight.build(parent: Instance, touch: boolean)
+	newMode = InfoLayer.isNew()
+	table.clear(chips) -- a rebuild (style switch) drops the previous build's chips
+	if newMode then
+		ui = {}
+		livesShown = nil
+		buildNew(touch)
+		return
+	end
+	InfoLayer.drop("TopRight")
+	nu = {}
 	local holder = Instance.new("Frame")
 	holder.Name = "TopRight"
 	holder.BackgroundTransparency = 1
@@ -125,6 +234,12 @@ function TopRight.build(parent: Instance, touch: boolean)
 end
 
 function TopRight.setVisible(on: boolean)
+	if newMode then
+		if nu.holder then
+			nu.holder.Visible = on
+		end
+		return
+	end
 	if ui.holder then
 		ui.holder.Visible = on
 	end
@@ -132,6 +247,13 @@ end
 
 -- text like "T-12:30"; color for urgency
 function TopRight.setTimer(text: string, color: Color3)
+	if newMode then
+		if nu.timer then
+			nu.timer.Text = (string.gsub(text, "^T%-", ""))
+			nu.timer.TextColor3 = roleColor(color)
+		end
+		return
+	end
 	if ui.timer then
 		ui.timer.Text = text
 		ui.timer.TextColor3 = color
@@ -139,6 +261,26 @@ function TopRight.setTimer(text: string, color: Color3)
 end
 
 function TopRight.setLives(n: number?)
+	if newMode then
+		if not nu.lives then
+			return
+		end
+		if n ~= livesShown then
+			if livesShown ~= nil and n ~= nil then
+				livesChangedAt = os.clock()
+				HudSkin.bump(nu.lives)
+			end
+			livesShown = n
+			if n then
+				local col = if n <= 1 then InfoLayer.col("danger") else InfoLayer.col("own")
+				nu.lives.Text = tostring(n)
+				nu.lives.TextColor3 = col
+				Style.tint(nu.livesIcon, col)
+			end
+		end
+		nu.livesRow.Visible = n ~= nil and livesWanted()
+		return
+	end
 	if not ui.lives then
 		return
 	end
@@ -157,7 +299,7 @@ function TopRight.setResource(key: string, count: number)
 	local n = math.max(0, math.floor(count + 0.5))
 	counts[key] = n
 	local c = chips[key]
-	if not c then
+	if not c or newMode then
 		return
 	end
 	if n == c.count then

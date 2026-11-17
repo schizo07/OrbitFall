@@ -4,8 +4,12 @@
 --   "Sample collected (2/5)"  -> green diamond     "Resupplied(!)"       -> amber ammo (skipped right after an Acquired)
 --   "Picked up <thing>"       -> orange diamond    "Equipped <weapon>"   -> orange diamond (support weapon pickup)
 -- Up to 3 toasts stack upwards from the anchor; the same text repeating bumps a counter instead of stacking.
+-- New layouts (UI STYLE A-C): no toast of its own; route() still decides, and show() writes a feed line instead
+-- ("+2 GRENADES", "SAMPLE 2/5") through EventFeed.pickup.
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local InfoLayer = require(script.Parent.InfoLayer)
+local EventFeed = require(script.Parent.EventFeed)
 
 local PickupToast = {}
 
@@ -20,6 +24,11 @@ local serial = 0
 
 function PickupToast.build(parent: Instance, isTouch: boolean)
 	touch = isTouch
+	table.clear(live) -- a rebuild (style switch) drops the previous build's toasts
+	if InfoLayer.isNew() then
+		ui = {}
+		return
+	end
 	local holder = Instance.new("Frame")
 	holder.Name = "PickupToasts"
 	holder.BackgroundTransparency = 1
@@ -100,6 +109,12 @@ end
 -- shape: a Style.glyph shape name (default "diamond"); color: glyph colour (the outline is always orange)
 -- plus: optional amount, drawn as a green "+N" box at the end; repeats of the same text add up
 function PickupToast.show(text: string, shape: string?, color: Color3?, plus: number?)
+	-- new layouts: one feed line, shorter wording
+	local short = string.gsub(text, "^ACQUIRED%s+", "")
+	short = string.gsub(short, "^SAMPLE COLLECTED%s+", "SAMPLE ")
+	if EventFeed.pickup(short, shape or "diamond", color or Style.Orange, plus) then
+		return
+	end
 	if not ui.holder then
 		return
 	end
