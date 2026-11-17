@@ -500,7 +500,7 @@ local function pickMat(x: number, z: number, h: number, slope: number): Enum.Mat
 end
 
 local function writeChunk(x0: number, z0: number, n: number)
-	local terrain = Workspace.Terrain
+	local terrain: Terrain = Workspace.Terrain
 	local H = {}
 	local maxH = 0
 	for i = 0, n + 1 do
@@ -3071,6 +3071,10 @@ local function applyLighting(faction: string, biome: string)
 	atm.Offset = m.atmOffset
 	atm.Haze = math.min(m.haze + (HAZE_EXTRA[biome] or 0.9), 6)
 	atm.Glare = m.glare
+	-- lighter dust than the first pass, so rocks, cliffs and props read at range (thick haze turned everything to mush)
+	atm.Density *= 0.8
+	atm.Haze *= 0.6
+	atm.Glare *= 0.7
 	atm.Color = m.atm:Lerp(DUST_WARM, HAZE_WARM[biome] or 0.12)
 	atm.Decay = m.decay
 	tag(atm)
@@ -3212,7 +3216,8 @@ function MapBuilder.build(faction: string?, biome: string?): any
 	end
 	setTerrainColors()
 	pcall(function()
-		Workspace.Terrain.Decoration = true
+		-- no realistic grass blades: they clash with the flat-colour props
+		Workspace.Terrain.Decoration = false
 	end)
 	applyLighting(fac, biomeName)
 
@@ -3492,12 +3497,25 @@ function MapBuilder.build(faction: string?, biome: string?): any
 		terrain = Workspace.Terrain,
 	}
 	MapBuilder.current = map
-	-- lime Neon (slime, goo, spore pods) blooms into flat yellow blobs; pull it to a deep acid green
+	-- flat colour props in the call-in model style: every textured material (Slate, Sandstone, Metal, Fabric...) becomes
+	-- SmoothPlastic
+	local flatProps = true
+	local KEEP = { [Enum.Material.SmoothPlastic] = true, [Enum.Material.Plastic] = true, [Enum.Material.Neon] = true, [Enum.Material.Glass] = true, [Enum.Material.ForceField] = true }
+	local nd = 0
 	for _, d in folder:GetDescendants() do
-		if d:IsA("BasePart") and d.Material == Enum.Material.Neon then
-			local c = d.Color
-			if c.G > 0.85 and c.R > 0.4 and c.R < 0.75 and c.B < 0.5 then
-				d.Color = RGB(70, 200, 40)
+		if d:IsA("BasePart") then
+			if d.Material == Enum.Material.Neon then
+				-- lime Neon (slime, goo, spore pods) blooms into flat yellow blobs; pull it to a deep acid green
+				local c = d.Color
+				if c.G > 0.85 and c.R > 0.4 and c.R < 0.75 and c.B < 0.5 then
+					d.Color = RGB(70, 200, 40)
+				end
+			elseif flatProps and not KEEP[d.Material] then
+				d.Material = Enum.Material.SmoothPlastic
+			end
+			nd += 1
+			if nd % 800 == 0 then
+				task.wait()
 			end
 		end
 	end
