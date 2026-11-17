@@ -863,6 +863,12 @@ local function finCluster(parent: Instance, x: number, z: number, s: number, tin
 	maybeYield()
 end
 
+local SPIRE_SHADE = 0.6
+
+local function keepMat(p: BasePart)
+	p:SetAttribute("KeepMat", true) -- skip the end-of-build flat SmoothPlastic pass
+end
+
 -- NOTE: env_spire_a (Blender "hoodoo": stem + flat overhanging caprock) reads as a mushroom silhouette and is no longer
 -- placed anywhere; spires are env_spire_b crags or jagged wedge fins.
 local function spire(parent: Instance, x: number, z: number, s: number, tint: Color3?, key: string?)
@@ -871,8 +877,12 @@ local function spire(parent: Instance, x: number, z: number, s: number, tint: Co
 		return
 	end
 	local k = key or "env_spire_b"
+	-- the crag's big flat faces wash out to pale peach as SmoothPlastic (sky specular on huge planes, whatever the colour):
+	-- keep the biome's rough rock material (exempt from the flat pass) and tint darker so it sits with the terrain cliffs
+	local t = tint or rockTint()
+	t = Color3.new(t.R * SPIRE_SHADE, t.G * SPIRE_SHADE, t.B * SPIRE_SHADE)
 	-- spires are tall pointed landmarks that can stand on rim slopes: allow steeper ground (lowest-hit placement keeps them planted)
-	local m, skipped = placeMesh(parent, k, x, z, { scale = s, tint = tint or rockTint(), material = B.rockMat, collide = true, align = 0.35, sink = rng:NextNumber(0.1, 0.16), maxSlope = 55 })
+	local m, skipped = placeMesh(parent, k, x, z, { scale = s, tint = t, material = B.rockMat, paint = keepMat, collide = true, align = 0.35, sink = rng:NextNumber(0.1, 0.16), maxSlope = 55 })
 	if not m and not skipped then
 		fallbackSpire(parent, x, z, s, tint)
 	end
@@ -2931,8 +2941,9 @@ local function farMountains(parent: Instance)
 			m:PivotTo(CFrame.new(x, 52 - h * rng:NextNumber(0.1, 0.3), z) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0))
 			for _, p in m:GetChildren() do
 				if p:IsA("BasePart") then
-					p.Color = tint
+					p.Color = Color3.new(tint.R * SPIRE_SHADE, tint.G * SPIRE_SHADE, tint.B * SPIRE_SHADE)
 					p.Material = B.rockMat
+					keepMat(p)
 					p.CanCollide = false
 					p.CanQuery = false
 					p.CastShadow = false
@@ -3512,7 +3523,7 @@ function MapBuilder.build(faction: string?, biome: string?): any
 				if c.G > 0.85 and c.R > 0.4 and c.R < 0.75 and c.B < 0.5 then
 					d.Color = RGB(70, 200, 40)
 				end
-			elseif flatProps and not KEEP[d.Material] then
+			elseif flatProps and not KEEP[d.Material] and not d:GetAttribute("KeepMat") then
 				d.Material = Enum.Material.SmoothPlastic
 			end
 			nd += 1

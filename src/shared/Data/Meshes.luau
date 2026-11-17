@@ -384,24 +384,24 @@ local Meshes: { [string]: MeshInfo } = {
 		},
 	},
 	env_rock_a = {
-		assetId = 116802756173826,
-		size = Vector3.new(12.97, 6.86, 10.23),
+		assetId = 115901004762188,
+		size = Vector3.new(14.351, 7.995, 10.769),
 		parts = {
-			Rock = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Slate, role = "body" },
+			Rock = { color = Color3.fromRGB(160, 150, 140), material = Enum.Material.Slate, role = "body" },
 		},
 	},
 	env_rock_b = {
-		assetId = 124802072047906,
-		size = Vector3.new(13.13, 14.22, 10.35),
+		assetId = 107390461264137,
+		size = Vector3.new(12.949, 15.825, 11.247),
 		parts = {
-			Rock = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Slate, role = "body" },
+			Rock = { color = Color3.fromRGB(160, 150, 140), material = Enum.Material.Slate, role = "body" },
 		},
 	},
 	env_rock_c = {
-		assetId = 107062841093560,
-		size = Vector3.new(16.49, 7.23, 11.78),
+		assetId = 89077031132255,
+		size = Vector3.new(16.9, 6.819, 11.584),
 		parts = {
-			Rock = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Slate, role = "body" },
+			Rock = { color = Color3.fromRGB(160, 150, 140), material = Enum.Material.Slate, role = "body" },
 		},
 	},
 	env_spire_a = {
@@ -412,10 +412,10 @@ local Meshes: { [string]: MeshInfo } = {
 		},
 	},
 	env_spire_b = {
-		assetId = 87844329539373,
-		size = Vector3.new(30.99, 48.5, 25.34),
+		assetId = 125769686206936,
+		size = Vector3.new(33.47, 48.122, 26.763),
 		parts = {
-			Rock = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Slate, role = "body" },
+			Rock = { color = Color3.fromRGB(160, 150, 140), material = Enum.Material.Slate, role = "body" },
 		},
 	},
 	env_crystal_cluster = {
@@ -427,23 +427,19 @@ local Meshes: { [string]: MeshInfo } = {
 		},
 	},
 	env_supply_crate = {
-		assetId = 93369381849725,
-		size = Vector3.new(4.36, 3.21, 2.94),
+		assetId = 119352662075545,
+		size = Vector3.new(4.616, 2.928, 3.05),
 		parts = {
-			Body = { color = Color3.fromRGB(96, 110, 70), material = Enum.Material.Metal, role = "body" },
-			Frame = { color = Color3.fromRGB(62, 72, 46), material = Enum.Material.Metal, role = "trim" },
-			Stencil = { color = Color3.fromRGB(240, 205, 50), material = Enum.Material.SmoothPlastic, role = "trim" },
-			Light = { color = Color3.fromRGB(90, 225, 255), material = Enum.Material.Neon, role = "glow" },
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body" },
+			Light = { color = Color3.fromRGB(255, 179, 71), material = Enum.Material.Neon, role = "glow" },
 		},
 	},
 	env_cog_barricade = {
-		assetId = 134940430851243,
-		size = Vector3.new(10.4, 4.75, 5.06),
+		assetId = 82091158850000,
+		size = Vector3.new(10.26, 4.935, 4.08),
 		parts = {
-			Body = { color = Color3.fromRGB(96, 110, 132), material = Enum.Material.Metal, role = "body" },
-			Plates = { color = Color3.fromRGB(217, 100, 43), material = Enum.Material.SmoothPlastic, role = "trim" },
-			Dark = { color = Color3.fromRGB(30, 34, 42), material = Enum.Material.SmoothPlastic, role = "trim" },
-			Trim = { color = Color3.fromRGB(240, 190, 40), material = Enum.Material.SmoothPlastic, role = "trim" },
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body" },
+			Eye = { color = Color3.fromRGB(255, 74, 26), material = Enum.Material.Neon, role = "glow" },
 		},
 	},
 	env_cog_pylon = {
@@ -826,6 +822,13 @@ local Meshes: { [string]: MeshInfo } = {
 		pivots = {
 			Casing = Vector3.new(-0.0, 0.0, 0.0),
 			Glow = Vector3.new(-0.0, 0.82, 0.0),
+		},
+	},
+	env_sandbags = {
+		assetId = 98950895039469,
+		size = Vector3.new(9.36, 2.0, 2.438),
+		parts = {
+			Bags = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.SmoothPlastic, role = "body" },
 		},
 	},
 }

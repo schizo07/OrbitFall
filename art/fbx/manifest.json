@@ -2617,73 +2617,124 @@
     "rigAssetId": "112677500199427"
   },
   "env_rock_a": {
+    "fbx": "art/fbx/set1/env_rock_a.fbx",
+    "texture": null,
     "size_studs_roblox_xyz": [
-      12.97,
-      6.86,
-      10.23
+      14.351,
+      7.995,
+      10.769
     ],
-    "weak_spots": [],
-    "triangles_total": 352,
+    "bbox_center_roblox": [
+      0.478,
+      3.998,
+      0.166
+    ],
+    "palette": "terrain",
     "parts": [
       {
         "name": "Rock",
-        "rgb": [
-          200,
-          200,
-          200
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.961,
+          1.656,
+          0.248
         ],
         "material": "Slate",
-        "role": "body",
-        "triangles": 352
+        "textured": false,
+        "triangles": 186,
+        "rgb": [
+          160,
+          150,
+          140
+        ]
       }
     ],
-    "assetId": "116802756173826"
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "115901004762188",
+    "triangles_total": 186,
+    "source": "art/blender/env_set1.py"
   },
   "env_rock_b": {
+    "fbx": "art/fbx/set1/env_rock_b.fbx",
+    "texture": null,
     "size_studs_roblox_xyz": [
-      13.13,
-      14.22,
-      10.35
+      12.949,
+      15.825,
+      11.247
     ],
-    "weak_spots": [],
-    "triangles_total": 384,
+    "bbox_center_roblox": [
+      0.346,
+      7.913,
+      0.065
+    ],
+    "palette": "terrain",
     "parts": [
       {
         "name": "Rock",
-        "rgb": [
-          200,
-          200,
-          200
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.418,
+          1.466,
+          -0.876
         ],
         "material": "Slate",
-        "role": "body",
-        "triangles": 384
+        "textured": false,
+        "triangles": 230,
+        "rgb": [
+          160,
+          150,
+          140
+        ]
       }
     ],
-    "assetId": "124802072047906"
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "107390461264137",
+    "triangles_total": 230,
+    "source": "art/blender/env_set1.py"
   },
   "env_rock_c": {
+    "fbx": "art/fbx/set1/env_rock_c.fbx",
+    "texture": null,
     "size_studs_roblox_xyz": [
-      16.49,
-      7.23,
-      11.78
+      16.9,
+      6.819,
+      11.584
     ],
-    "weak_spots": [],
-    "triangles_total": 404,
+    "bbox_center_roblox": [
+      -0.095,
+      3.409,
+      -0.127
+    ],
+    "palette": "terrain",
     "parts": [
       {
         "name": "Rock",
-        "rgb": [
-          200,
-          200,
-          200
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.23,
+          1.297,
+          -0.043
         ],
         "material": "Slate",
-        "role": "body",
-        "triangles": 404
+        "textured": false,
+        "triangles": 196,
+        "rgb": [
+          160,
+          150,
+          140
+        ]
       }
     ],
-    "assetId": "107062841093560"
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "89077031132255",
+    "triangles_total": 196,
+    "source": "art/blender/env_set1.py"
   },
   "env_spire_a": {
     "size_studs_roblox_xyz": [
@@ -2709,27 +2760,44 @@
     "assetId": "72616549175323"
   },
   "env_spire_b": {
+    "fbx": "art/fbx/set1/env_spire_b.fbx",
+    "texture": null,
     "size_studs_roblox_xyz": [
-      30.99,
-      48.5,
-      25.34
+      33.47,
+      48.122,
+      26.763
     ],
-    "weak_spots": [],
-    "triangles_total": 880,
+    "bbox_center_roblox": [
+      -0.142,
+      24.061,
+      0.154
+    ],
+    "palette": "terrain",
     "parts": [
       {
         "name": "Rock",
-        "rgb": [
-          200,
-          200,
-          200
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.82,
+          1.637,
+          0.933
         ],
         "material": "Slate",
-        "role": "body",
-        "triangles": 880
+        "textured": false,
+        "triangles": 946,
+        "rgb": [
+          160,
+          150,
+          140
+        ]
       }
     ],
-    "assetId": "87844329539373"
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "125769686206936",
+    "triangles_total": 946,
+    "source": "art/blender/env_set1.py"
   },
   "env_crystal_cluster": {
     "size_studs_roblox_xyz": [
@@ -2768,116 +2836,112 @@
     "assetId": "94987672994637"
   },
   "env_supply_crate": {
+    "fbx": "art/fbx/set1/env_supply_crate.fbx",
+    "texture": "art/fbx/set1/palette_human.png",
     "size_studs_roblox_xyz": [
-      4.36,
-      3.21,
-      2.94
+      4.616,
+      2.928,
+      3.05
     ],
-    "weak_spots": [],
-    "triangles_total": 2848,
+    "bbox_center_roblox": [
+      0.0,
+      1.464,
+      0.0
+    ],
+    "palette": "human",
     "parts": [
       {
         "name": "Body",
-        "rgb": [
-          96,
-          110,
-          70
-        ],
-        "material": "Metal",
         "role": "body",
-        "triangles": 108
-      },
-      {
-        "name": "Frame",
-        "rgb": [
-          62,
-          72,
-          46
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.042
         ],
         "material": "Metal",
-        "role": "trim",
-        "triangles": 2092
-      },
-      {
-        "name": "Stencil",
-        "rgb": [
-          240,
-          205,
-          50
-        ],
-        "material": "SmoothPlastic",
-        "role": "trim",
-        "triangles": 528
+        "textured": true,
+        "triangles": 928,
+        "rgb": null
       },
       {
         "name": "Light",
-        "rgb": [
-          90,
-          225,
-          255
+        "role": "glow",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.042
         ],
         "material": "Neon",
-        "role": "glow",
-        "triangles": 120
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          179,
+          71
+        ]
       }
     ],
-    "assetId": "93369381849725"
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "119352662075545",
+    "triangles_total": 964,
+    "source": "art/blender/env_set1.py"
   },
   "env_cog_barricade": {
+    "fbx": "art/fbx/set1/env_cog_barricade.fbx",
+    "texture": "art/fbx/set1/palette_cogwork.png",
     "size_studs_roblox_xyz": [
-      10.4,
-      4.75,
-      5.06
+      10.26,
+      4.935,
+      4.08
     ],
-    "weak_spots": [],
-    "triangles_total": 2836,
+    "bbox_center_roblox": [
+      0.0,
+      2.467,
+      0.0
+    ],
+    "palette": "cogwork",
     "parts": [
       {
         "name": "Body",
-        "rgb": [
-          74,
-          85,
-          104
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          -0.71
         ],
         "material": "Metal",
-        "role": "body",
-        "triangles": 648
+        "textured": true,
+        "triangles": 1638,
+        "rgb": null
       },
       {
-        "name": "Plates",
-        "rgb": [
-          217,
-          100,
-          43
+        "name": "Eye",
+        "role": "glow",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          -0.71
         ],
-        "material": "SmoothPlastic",
-        "role": "trim",
-        "triangles": 856
-      },
-      {
-        "name": "Dark",
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
         "rgb": [
-          30,
-          34,
-          42
-        ],
-        "material": "SmoothPlastic",
-        "role": "trim",
-        "triangles": 1072
-      },
-      {
-        "name": "Trim",
-        "rgb": [
-          240,
-          190,
-          40
-        ],
-        "material": "SmoothPlastic",
-        "role": "trim",
-        "triangles": 260
+          255,
+          74,
+          26
+        ]
       }
     ],
-    "assetId": "134940430851243"
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "82091158850000",
+    "triangles_total": 1674,
+    "source": "art/blender/env_set1.py"
   },
   "env_cog_pylon": {
     "size_studs_roblox_xyz": [
@@ -9133,5 +9197,41 @@
       }
     ],
     "assetId": "82417762160519"
+  },
+  "env_sandbags": {
+    "fbx": "art/fbx/set1/env_sandbags.fbx",
+    "texture": "art/fbx/set1/palette_human.png",
+    "size_studs_roblox_xyz": [
+      9.36,
+      2.0,
+      2.438
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Bags",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          -0.607
+        ],
+        "material": "SmoothPlastic",
+        "textured": true,
+        "triangles": 1088,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "98950895039469",
+    "triangles_total": 1088,
+    "source": "art/blender/env_set1.py"
   }
 }
