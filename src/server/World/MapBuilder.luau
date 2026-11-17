@@ -139,7 +139,7 @@ local BIOMES: { [string]: Biome } = {
 		plant = { RGB(50, 46, 46), RGB(66, 58, 56) },
 		smoke = RGB(52, 46, 46),
 		mood = {
-			clock = 17.8, elev = 0.17, bright = 2.7, expo = 0.0, amb = RGB(52, 41, 37), out = RGB(83, 62, 55),
+			clock = 17.8, elev = 0.17, bright = 2.7, expo = 0.25, amb = RGB(52, 41, 37), out = RGB(83, 62, 55),
 			top = RGB(255, 130, 84), bottom = RGB(110, 56, 62),
 			atmDensity = 0.42, atmOffset = 0.1, haze = 2.8, glare = 2.0, atm = RGB(236, 100, 70), decay = RGB(120, 40, 40),
 			tint = RGB(255, 240, 230), sat = -0.1, contrast = 0.3, bloom = 0.55, rays = 0.14, sun = 18, stars = 0,
@@ -2998,25 +2998,27 @@ end
 
 -- Park the sun low and in front of the default camera direction (players drop in facing +X/+Z), so the
 -- landmarks and ridges read as backlit silhouettes. Searches latitude/clock for the best match.
+-- Sun BEHIND-LEFT of the drop-in view (players land facing +X/+Z) and ~30 degrees up: the scene is front/side lit, rocks
+-- and cliffs get a lit side and a shadow side, and nobody stares into a low sun (the old low backlit sun was all glare).
+local SUN_DIR = Vector3.new(-0.966, 0, -0.259)
+local SUN_ELEV = 0.5
+
 local function alignSun(m: { [string]: any })
-	local target = Vector3.new(0.7071, 0, 0.7071)
+	local target = SUN_DIR
 	local bestScore, bestLat, bestClock = -math.huge, 35, m.clock
 	local seen: { [string]: boolean } = {}
 	local ok = pcall(function()
-		for _, lat in { -40, -20, 0, 20, 40 } do
-			for _, base in { m.clock, 24 - m.clock } do
-				for _, dc in { -0.8, 0, 0.8 } do
-					local clk = (base + dc) % 24
-					Lighting.GeographicLatitude = lat
-					Lighting.ClockTime = clk
-					local d = Lighting:GetSunDirection()
-					seen[string.format("%.2f,%.2f,%.2f", d.X, d.Y, d.Z)] = true
-					local hm = Vector3.new(d.X, 0, d.Z)
-					local align = if hm.Magnitude > 0.02 then hm.Unit:Dot(target) else 0
-					local score = align - math.abs(d.Y - m.elev) * 4 - (if d.Y < 0.05 then 3 else 0)
-					if score > bestScore then
-						bestScore, bestLat, bestClock = score, lat, clk
-					end
+		for lat = -60, 60, 5 do
+			for clk = 5, 19, 0.2 do
+				Lighting.GeographicLatitude = lat
+				Lighting.ClockTime = clk
+				local d = Lighting:GetSunDirection()
+				seen[string.format("%.2f,%.2f,%.2f", d.X, d.Y, d.Z)] = true
+				local hm = Vector3.new(d.X, 0, d.Z)
+				local align = if hm.Magnitude > 0.02 then hm.Unit:Dot(target) else 0
+				local score = align - math.abs(d.Y - SUN_ELEV) * 4 - (if d.Y < 0.05 then 3 else 0)
+				if score > bestScore then
+					bestScore, bestLat, bestClock = score, lat, clk
 				end
 			end
 		end
@@ -3048,7 +3050,7 @@ local function applyLighting(faction: string, biome: string)
 	Lighting.GlobalShadows = true
 	Lighting.EnvironmentDiffuseScale = m.envDiffuse or 0.25 -- low: shadows keep the biome hue and stay dark and contrasty
 	Lighting.EnvironmentSpecularScale = 0.5
-	Lighting.ExposureCompensation = m.expo
+	Lighting.ExposureCompensation = m.expo + 0.15 -- a touch brighter: the old grade was dim and muddy
 	Lighting.Ambient = m.amb
 	Lighting.OutdoorAmbient = m.out
 	Lighting.ColorShift_Top = m.top
@@ -3070,11 +3072,11 @@ local function applyLighting(faction: string, biome: string)
 	atm.Density = math.max(m.atmDensity, 0.35)
 	atm.Offset = m.atmOffset
 	atm.Haze = math.min(m.haze + (HAZE_EXTRA[biome] or 0.9), 6)
-	atm.Glare = m.glare
-	-- lighter dust than the first pass, so rocks, cliffs and props read at range (thick haze turned everything to mush)
+	-- lighter dust than the first pass, so rocks, cliffs and props read at range (thick haze turned everything to mush),
+	-- and no sun glare in the air
 	atm.Density *= 0.8
 	atm.Haze *= 0.6
-	atm.Glare *= 0.7
+	atm.Glare = 0
 	atm.Color = m.atm:Lerp(DUST_WARM, HAZE_WARM[biome] or 0.12)
 	atm.Decay = m.decay
 	tag(atm)
@@ -3086,17 +3088,17 @@ local function applyLighting(faction: string, biome: string)
 	tag(sky)
 	local cc = Instance.new("ColorCorrectionEffect")
 	cc.TintColor = m.tint
-	cc.Saturation = m.sat
-	cc.Contrast = m.contrast
+	cc.Saturation = m.sat * 0.5
+	cc.Contrast = m.contrast * 0.5 -- the old 0.3+ crushed shadows to black once the sun moved off the horizon
 	cc.Brightness = 0.02
 	tag(cc)
 	local bloom = Instance.new("BloomEffect")
-	bloom.Intensity = m.bloom
+	bloom.Intensity = m.bloom * 0.45
 	bloom.Size = 40
-	bloom.Threshold = 1.1
+	bloom.Threshold = 1.5 -- only real light sources bloom, not sunlit sand
 	tag(bloom)
 	local rays = Instance.new("SunRaysEffect")
-	rays.Intensity = m.rays
+	rays.Intensity = m.rays * 0.25
 	rays.Spread = 0.9
 	tag(rays)
 	local dof = Instance.new("DepthOfFieldEffect") -- soft far blur: makes the horizon feel huge
