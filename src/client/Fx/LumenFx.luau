@@ -12,7 +12,7 @@
 -- Planet mood, biome "crystal" (workspace.Map attribute Biome, or mission faction LUMEN when unset): slow aurora
 -- ribbons in the sky with an occasional bright shimmer. Motes live in Fx/Ambience.luau, the colour grade in Fx/Weather.luau.
 -- All parts come from one pool and one Heartbeat loop. Counts scale with Fx.quality (phones 0.5).
--- Studio A/B (client/Variants.luau, group LUMEN FX): Feel_LumenFx nil = default | "big" (bigger, brighter) | "min"
+-- Studio A/B (client/Variants.luau, group LUMEN FX): Feel_LumenFx nil = big (picked) | "normal" (first pass) | "min"
 -- (fewer parts, no lights, no aurora).
 
 local RunService = game:GetService("RunService")
@@ -54,8 +54,12 @@ end
 
 -- Feel ----------------------------------------------------------------------------------------------------------------
 local function mode(): string?
+	-- the playtest pick (2026-11-17) is "big"; "normal" keeps the first-pass sizes
 	local v = Workspace:GetAttribute("Feel_LumenFx")
-	return if v == "big" or v == "min" then v else nil
+	if v == "normal" then
+		return nil
+	end
+	return if v == "min" then "min" else "big"
 end
 
 local function sizeK(): number

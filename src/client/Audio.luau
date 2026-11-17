@@ -116,6 +116,83 @@ function Audio.init()
 	p.Parent = workspace
 	holder = p
 	Audio.preload() -- warm the cache and Sound pool (background), gun shots first
+
+	-- SOUND A/B (Feel_Sound = "off"): everything silent, including sounds this module doesn't own
+	local function applyFeel()
+		Audio.setMuted(workspace:GetAttribute("Feel_Sound") == "off")
+	end
+	workspace:GetAttributeChangedSignal("Feel_Sound"):Connect(applyFeel)
+	applyFeel()
+end
+
+-- MUTE ------------------------------------------------------------------------------
+-- Audio.setMuted(true) silences the whole game on this client: the master group goes to 0, and every other Sound
+-- (character footsteps, anything parented outside OrbitMaster) is routed into a silent group until unmuted.
+
+local muted = false
+local muteGroup: SoundGroup? = nil
+local stray: { [Sound]: SoundGroup | false } = {}
+local muteConns: { RBXScriptConnection } = {}
+
+local function captureStray(d: Instance)
+	if not muted or not d:IsA("Sound") or stray[d] ~= nil then
+		return
+	end
+	local s = d :: Sound
+	if master and s.SoundGroup and s.SoundGroup:IsDescendantOf(master) then
+		return -- already silenced through the master group
+	end
+	stray[s] = s.SoundGroup or false
+	s.SoundGroup = muteGroup
+end
+
+function Audio.setMuted(on: boolean)
+	if not master then
+		Audio.init()
+	end
+	if on == muted then
+		return
+	end
+	muted = on
+	if master then
+		master.Volume = if on then 0 else 1
+	end
+	if on then
+		if not muteGroup then
+			local g = Instance.new("SoundGroup")
+			g.Name = "OrbitMuted"
+			g.Volume = 0
+			g.Parent = SoundService
+			muteGroup = g
+		end
+		local plr = game:GetService("Players").LocalPlayer
+		local roots: { Instance } = { workspace, SoundService }
+		local pg = plr and plr:FindFirstChildOfClass("PlayerGui")
+		if pg then
+			table.insert(roots, pg)
+		end
+		for _, r in roots do
+			for _, d in r:GetDescendants() do
+				captureStray(d)
+			end
+			table.insert(muteConns, r.DescendantAdded:Connect(captureStray))
+		end
+	else
+		for _, c in muteConns do
+			c:Disconnect()
+		end
+		table.clear(muteConns)
+		for s, g in stray do
+			if s.Parent and s.SoundGroup == muteGroup then
+				s.SoundGroup = if g then g else nil
+			end
+		end
+		table.clear(stray)
+	end
+end
+
+function Audio.isMuted(): boolean
+	return muted
 end
 
 local function ensure()

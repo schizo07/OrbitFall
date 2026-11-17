@@ -360,9 +360,18 @@ local GROUPS = {
 		name = "LUMEN FX",
 		keys = { "Feel_LumenFx" },
 		presets = {
-			{ name = "A default", set = {} },
-			{ name = "B bigger + brighter, more shards", set = { Feel_LumenFx = "big" } },
+			{ name = "A bigger + brighter, more shards (picked)", set = {} },
+			{ name = "B first-pass sizes", set = { Feel_LumenFx = "normal" } },
 			{ name = "C minimal (fewer parts, no lights, no aurora)", set = { Feel_LumenFx = "min" } },
+		},
+	},
+	{
+		-- client/Audio: Feel_Sound "off" mutes every sound on this client (master group 0, stray Sounds routed silent)
+		name = "SOUND",
+		keys = { "Feel_Sound" },
+		presets = {
+			{ name = "A on", set = {} },
+			{ name = "B ALL SOUND OFF", set = { Feel_Sound = "off" } },
 		},
 	},
 	{
