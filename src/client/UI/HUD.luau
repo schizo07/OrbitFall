@@ -1960,7 +1960,7 @@ local function showResults()
 	})
 	Theme.sfx(success and "MissionSuccess" or "MissionFail")
 
-	local sub = (r and r.bonusText) or (success and "Excellent work, Helldiver-class heroes." or "The squad was lost. Regroup on the ship.")
+	local sub = (r and r.bonusText) or (success and "Excellent work, troopers. The Skiff is home." or "The squad was lost. Regroup on the ship.")
 	if success and not (r and r.bonusText) then
 		sub = "Squad extracted. Rewards secured."
 	end
