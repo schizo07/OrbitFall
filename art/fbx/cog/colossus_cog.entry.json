@@ -1,0 +1,260 @@
+{
+  "fbx": "art/fbx/colossus_cog.fbx",
+  "texture": "art/fbx/palette_cogwork.png",
+  "size_studs_roblox_xyz": [
+    24.718,
+    22.66,
+    27.731
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    11.33,
+    -0.484
+  ],
+  "palette": "cogwork",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        13.0,
+        0.0
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 5858,
+      "rgb": null
+    },
+    {
+      "name": "Core",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        16.0,
+        8.65
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 44,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Glow",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        13.0,
+        0.0
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 204,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Leg_1_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        5.2,
+        13.0,
+        -5.8
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1308,
+      "rgb": null
+    },
+    {
+      "name": "Joint_1",
+      "role": "weak",
+      "parent": "Leg_1_Upper",
+      "pivot": [
+        8.3,
+        8.0,
+        -8.9
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 80,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Leg_1_Lower",
+      "role": "limb",
+      "parent": "Leg_1_Upper",
+      "pivot": [
+        8.3,
+        8.0,
+        -8.9
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 760,
+      "rgb": null
+    },
+    {
+      "name": "Leg_2_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -5.2,
+        13.0,
+        -5.8
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1308,
+      "rgb": null
+    },
+    {
+      "name": "Joint_2",
+      "role": "weak",
+      "parent": "Leg_2_Upper",
+      "pivot": [
+        -8.3,
+        8.0,
+        -8.9
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 80,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Leg_2_Lower",
+      "role": "limb",
+      "parent": "Leg_2_Upper",
+      "pivot": [
+        -8.3,
+        8.0,
+        -8.9
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 760,
+      "rgb": null
+    },
+    {
+      "name": "Leg_3_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        5.2,
+        13.0,
+        5.8
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1308,
+      "rgb": null
+    },
+    {
+      "name": "Joint_3",
+      "role": "weak",
+      "parent": "Leg_3_Upper",
+      "pivot": [
+        8.3,
+        8.0,
+        8.9
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 80,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Leg_3_Lower",
+      "role": "limb",
+      "parent": "Leg_3_Upper",
+      "pivot": [
+        8.3,
+        8.0,
+        8.9
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 760,
+      "rgb": null
+    },
+    {
+      "name": "Leg_4_Upper",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -5.2,
+        13.0,
+        5.8
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1308,
+      "rgb": null
+    },
+    {
+      "name": "Joint_4",
+      "role": "weak",
+      "parent": "Leg_4_Upper",
+      "pivot": [
+        -8.3,
+        8.0,
+        8.9
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 80,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Leg_4_Lower",
+      "role": "limb",
+      "parent": "Leg_4_Upper",
+      "pivot": [
+        -8.3,
+        8.0,
+        8.9
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 760,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [
+    "Core",
+    "Joint_1",
+    "Joint_2",
+    "Joint_3",
+    "Joint_4"
+  ],
+  "attachments": [],
+  "assetId": ""
+}

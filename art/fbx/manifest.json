@@ -1,119 +1,86 @@
 {
   "tinker": {
     "rigVersion": 2,
-    "fbx": "fbx/tinker_rig.fbx",
-    "texture": "textures/cog_palette.png",
+    "fbx": "art/fbx/cog/tinker_cog.fbx",
+    "texture": "art/fbx/cog/palette_cogwork.png",
     "size_studs_roblox_xyz": [
-      4.88,
-      4.56,
-      4.29
+      4.758,
+      4.54,
+      4.425
     ],
     "bbox_center_roblox": [
-      -0.19,
-      2.28,
-      -0.896
+      0.017,
+      2.27,
+      -0.817
     ],
     "weak_spots": [
       "Eye"
     ],
-    "triangles_total": 9580,
-    "palette": [
-      {
-        "index": 0,
-        "name": "GUNMETAL",
-        "rgb": [
-          96,
-          110,
-          132
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "DARK",
-        "rgb": [
-          30,
-          34,
-          42
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "RUST",
-        "rgb": [
-          217,
-          100,
-          43
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "YELLOW",
-        "rgb": [
-          240,
-          190,
-          40
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      }
-    ],
+    "triangles_total": 5642,
+    "palette": "cogwork",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           1.7,
           0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1812
+        "triangles": 1882,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          1.7,
+          0.05
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 40,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
       },
       {
         "name": "Head",
         "role": "limb",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           3.05,
           -0.55
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1800
+        "triangles": 944,
+        "rgb": null
       },
       {
         "name": "Eye",
         "role": "weak",
         "parent": "Head",
         "pivot": [
-          -0.0,
+          0.0,
           3.55,
           -1.62
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 440,
+        "triangles": 36,
         "rgb": [
           255,
-          150,
-          25
+          74,
+          26
         ]
       },
       {
@@ -125,9 +92,10 @@
           1.7,
           0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 776
+        "triangles": 196,
+        "rgb": null
       },
       {
         "name": "Leg_L_Lower",
@@ -138,9 +106,10 @@
           1.1,
           0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 732
+        "triangles": 384,
+        "rgb": null
       },
       {
         "name": "Leg_R_Upper",
@@ -151,9 +120,10 @@
           1.7,
           0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 776
+        "triangles": 196,
+        "rgb": null
       },
       {
         "name": "Leg_R_Lower",
@@ -164,22 +134,10 @@
           1.1,
           0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 732
-      },
-      {
-        "name": "Arm_R",
-        "role": "limb",
-        "parent": "Body",
-        "pivot": [
-          1.5,
-          3.0,
-          -0.2
-        ],
-        "material": "SmoothPlastic",
-        "textured": true,
-        "triangles": 1216
+        "triangles": 384,
+        "rgb": null
       },
       {
         "name": "Arm_L",
@@ -190,9 +148,24 @@
           3.0,
           -0.2
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1296
+        "triangles": 632,
+        "rgb": null
+      },
+      {
+        "name": "Arm_R",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          1.5,
+          3.0,
+          -0.2
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 948,
+        "rgb": null
       }
     ],
     "assetId": "77274895704849",
@@ -275,123 +248,91 @@
         "triangles": 440
       }
     ],
-    "rigAssetId": "119878870001998"
+    "rigAssetId": "116396653292174",
+    "source": "art/blender/cog_tinker.py"
   },
   "rivet": {
     "rigVersion": 2,
-    "fbx": "fbx/rivet_rig.fbx",
-    "texture": "textures/cog_palette.png",
+    "fbx": "art/fbx/cog/rivet_cog.fbx",
+    "texture": "art/fbx/cog/palette_cogwork.png",
     "size_studs_roblox_xyz": [
-      6.07,
-      6.97,
-      6.22
+      5.861,
+      7.5,
+      5.986
     ],
     "bbox_center_roblox": [
-      -0.0,
-      3.485,
-      -0.79
+      0.0,
+      3.75,
+      -0.807
     ],
     "weak_spots": [
       "Eye"
     ],
-    "triangles_total": 9124,
-    "palette": [
-      {
-        "index": 0,
-        "name": "GUNMETAL",
-        "rgb": [
-          96,
-          110,
-          132
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "DARK",
-        "rgb": [
-          30,
-          34,
-          42
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "RUST",
-        "rgb": [
-          217,
-          100,
-          43
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "YELLOW",
-        "rgb": [
-          240,
-          190,
-          40
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      }
-    ],
+    "triangles_total": 8512,
+    "palette": "cogwork",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           3.4,
           -0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 2548
+        "triangles": 3648,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          3.4,
+          -0.05
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 136,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
       },
       {
         "name": "Head",
         "role": "limb",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           5.85,
           -0.2
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 620
+        "triangles": 612,
+        "rgb": null
       },
       {
         "name": "Eye",
         "role": "weak",
         "parent": "Head",
         "pivot": [
-          -0.0,
-          6.1,
-          -1.2
+          0.0,
+          5.85,
+          -0.2
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 108,
+        "triangles": 84,
         "rgb": [
           255,
-          70,
-          45
+          74,
+          26
         ]
       },
       {
@@ -403,9 +344,10 @@
           3.4,
           -0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 604
+        "triangles": 228,
+        "rgb": null
       },
       {
         "name": "Leg_L_Lower",
@@ -416,9 +358,10 @@
           2.2,
           -0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 892
+        "triangles": 492,
+        "rgb": null
       },
       {
         "name": "Leg_R_Upper",
@@ -429,9 +372,10 @@
           3.4,
           -0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 604
+        "triangles": 228,
+        "rgb": null
       },
       {
         "name": "Leg_R_Lower",
@@ -442,22 +386,10 @@
           2.2,
           -0.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 892
-      },
-      {
-        "name": "Arm_R",
-        "role": "limb",
-        "parent": "Body",
-        "pivot": [
-          2.2,
-          5.0,
-          -0.15
-        ],
-        "material": "SmoothPlastic",
-        "textured": true,
-        "triangles": 1428
+        "triangles": 492,
+        "rgb": null
       },
       {
         "name": "Arm_L",
@@ -468,9 +400,24 @@
           5.0,
           -0.15
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1428
+        "triangles": 1296,
+        "rgb": null
+      },
+      {
+        "name": "Arm_R",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          2.2,
+          5.0,
+          -0.15
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1296,
+        "rgb": null
       }
     ],
     "assetId": "91801305641542",
@@ -564,110 +511,59 @@
         "triangles": 108
       }
     ],
-    "rigAssetId": "130021338060457"
+    "rigAssetId": "80789115265000",
+    "source": "art/blender/cog_rivet.py"
   },
   "bulwark": {
     "rigVersion": 2,
-    "fbx": "fbx/bulwark_rig.fbx",
-    "texture": "textures/cog_palette.png",
+    "fbx": "art/fbx/cog/bulwark_cog.fbx",
+    "texture": "art/fbx/cog/palette_cogwork.png",
     "size_studs_roblox_xyz": [
-      9.56,
+      9.519,
       6.6,
-      9.1
+      9.32
     ],
     "bbox_center_roblox": [
-      -0.0,
+      0.0,
       3.3,
-      -1.15
+      -0.84
     ],
     "weak_spots": [
       "Core"
     ],
-    "triangles_total": 9420,
-    "palette": [
-      {
-        "index": 0,
-        "name": "GUNMETAL",
-        "rgb": [
-          96,
-          110,
-          132
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "DARK",
-        "rgb": [
-          30,
-          34,
-          42
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "RUST",
-        "rgb": [
-          217,
-          100,
-          43
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "YELLOW",
-        "rgb": [
-          240,
-          190,
-          40
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      }
-    ],
+    "triangles_total": 10332,
+    "palette": "cogwork",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           3.05,
           1.05
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 3240
+        "triangles": 3528,
+        "rgb": null
       },
       {
         "name": "Core",
         "role": "weak",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           5.55,
           0.8
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 440,
+        "triangles": 20,
         "rgb": [
           255,
-          150,
-          25
+          74,
+          26
         ]
       },
       {
@@ -675,13 +571,32 @@
         "role": "armor",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           2.65,
           -2.207
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 1500
+        "triangles": 1792,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          3.05,
+          1.05
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 136,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
       },
       {
         "name": "Leg_1",
@@ -694,7 +609,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 652
+        "triangles": 792,
+        "rgb": null
       },
       {
         "name": "Leg_2",
@@ -707,7 +623,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 652
+        "triangles": 792,
+        "rgb": null
       },
       {
         "name": "Leg_3",
@@ -720,7 +637,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 652
+        "triangles": 792,
+        "rgb": null
       },
       {
         "name": "Leg_4",
@@ -733,7 +651,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 652
+        "triangles": 792,
+        "rgb": null
       },
       {
         "name": "Arm_R",
@@ -746,7 +665,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 816
+        "triangles": 844,
+        "rgb": null
       },
       {
         "name": "Arm_L",
@@ -759,7 +679,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 816
+        "triangles": 844,
+        "rgb": null
       }
     ],
     "assetId": "74947540705546",
@@ -853,21 +774,22 @@
         "triangles": 440
       }
     ],
-    "rigAssetId": "121709771310785"
+    "rigAssetId": "139073346224473",
+    "source": "art/blender/cog_bulwark.py"
   },
   "colossus": {
     "rigVersion": 2,
-    "fbx": "fbx/colossus_rig.fbx",
-    "texture": "textures/cog_palette.png",
+    "fbx": "art/fbx/cog/colossus_cog.fbx",
+    "texture": "art/fbx/cog/palette_cogwork.png",
     "size_studs_roblox_xyz": [
-      24.3,
-      22.55,
-      27.15
+      24.718,
+      22.66,
+      27.731
     ],
     "bbox_center_roblox": [
-      -0.0,
-      11.275,
-      -0.175
+      0.0,
+      11.33,
+      -0.484
     ],
     "weak_spots": [
       "Core",
@@ -876,91 +798,57 @@
       "Joint_3",
       "Joint_4"
     ],
-    "triangles_total": 8936,
-    "palette": [
-      {
-        "index": 0,
-        "name": "GUNMETAL",
-        "rgb": [
-          96,
-          110,
-          132
-        ],
-        "uv": [
-          0.125,
-          0.875
-        ]
-      },
-      {
-        "index": 1,
-        "name": "DARK",
-        "rgb": [
-          30,
-          34,
-          42
-        ],
-        "uv": [
-          0.375,
-          0.875
-        ]
-      },
-      {
-        "index": 2,
-        "name": "RUST",
-        "rgb": [
-          217,
-          100,
-          43
-        ],
-        "uv": [
-          0.625,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
-        "name": "YELLOW",
-        "rgb": [
-          240,
-          190,
-          40
-        ],
-        "uv": [
-          0.875,
-          0.875
-        ]
-      }
-    ],
+    "triangles_total": 14698,
+    "palette": "cogwork",
     "parts": [
       {
         "name": "Body",
         "role": "body",
         "parent": null,
         "pivot": [
-          -0.0,
+          0.0,
           13.0,
           0.0
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 3980
+        "triangles": 5858,
+        "rgb": null
       },
       {
         "name": "Core",
         "role": "weak",
         "parent": "Body",
         "pivot": [
-          -0.0,
+          0.0,
           16.0,
           8.65
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 108,
+        "triangles": 44,
         "rgb": [
           255,
-          105,
-          28
+          74,
+          26
+        ]
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          13.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 204,
+        "rgb": [
+          255,
+          74,
+          26
         ]
       },
       {
@@ -972,9 +860,10 @@
           13.0,
           -5.8
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 404
+        "triangles": 1308,
+        "rgb": null
       },
       {
         "name": "Joint_1",
@@ -987,11 +876,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 224,
+        "triangles": 80,
         "rgb": [
           255,
-          150,
-          25
+          74,
+          26
         ]
       },
       {
@@ -1005,7 +894,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 584
+        "triangles": 760,
+        "rgb": null
       },
       {
         "name": "Leg_2_Upper",
@@ -1016,9 +906,10 @@
           13.0,
           -5.8
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 404
+        "triangles": 1308,
+        "rgb": null
       },
       {
         "name": "Joint_2",
@@ -1031,11 +922,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 224,
+        "triangles": 80,
         "rgb": [
           255,
-          150,
-          25
+          74,
+          26
         ]
       },
       {
@@ -1049,7 +940,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 584
+        "triangles": 760,
+        "rgb": null
       },
       {
         "name": "Leg_3_Upper",
@@ -1060,9 +952,10 @@
           13.0,
           5.8
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 404
+        "triangles": 1308,
+        "rgb": null
       },
       {
         "name": "Joint_3",
@@ -1075,11 +968,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 224,
+        "triangles": 80,
         "rgb": [
           255,
-          150,
-          25
+          74,
+          26
         ]
       },
       {
@@ -1093,7 +986,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 584
+        "triangles": 760,
+        "rgb": null
       },
       {
         "name": "Leg_4_Upper",
@@ -1104,9 +998,10 @@
           13.0,
           5.8
         ],
-        "material": "SmoothPlastic",
+        "material": "Metal",
         "textured": true,
-        "triangles": 404
+        "triangles": 1308,
+        "rgb": null
       },
       {
         "name": "Joint_4",
@@ -1119,11 +1014,11 @@
         ],
         "material": "Neon",
         "textured": false,
-        "triangles": 224,
+        "triangles": 80,
         "rgb": [
           255,
-          150,
-          25
+          74,
+          26
         ]
       },
       {
@@ -1137,7 +1032,8 @@
         ],
         "material": "Metal",
         "textured": true,
-        "triangles": 584
+        "triangles": 760,
+        "rgb": null
       }
     ],
     "assetId": "101653672107449",
@@ -1231,7 +1127,8 @@
         "triangles": 224
       }
     ],
-    "rigAssetId": "85131836535522"
+    "rigAssetId": "106771597762675",
+    "source": "art/blender/cog_colossus.py"
   },
   "skitter": {
     "rigVersion": 2,

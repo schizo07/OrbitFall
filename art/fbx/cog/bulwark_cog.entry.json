@@ -1,0 +1,170 @@
+{
+  "fbx": "art/fbx/bulwark_cog.fbx",
+  "texture": "art/fbx/palette_cogwork.png",
+  "size_studs_roblox_xyz": [
+    9.519,
+    6.6,
+    9.32
+  ],
+  "bbox_center_roblox": [
+    0.0,
+    3.3,
+    -0.84
+  ],
+  "palette": "cogwork",
+  "parts": [
+    {
+      "name": "Body",
+      "role": "body",
+      "parent": null,
+      "pivot": [
+        0.0,
+        3.05,
+        1.05
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 3528,
+      "rgb": null
+    },
+    {
+      "name": "Core",
+      "role": "weak",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        5.55,
+        0.8
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 20,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Shield",
+      "role": "armor",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        2.65,
+        -2.207
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 1792,
+      "rgb": null
+    },
+    {
+      "name": "Glow",
+      "role": "glow",
+      "parent": "Body",
+      "pivot": [
+        0.0,
+        3.05,
+        1.05
+      ],
+      "material": "Neon",
+      "textured": false,
+      "triangles": 136,
+      "rgb": [
+        255,
+        74,
+        26
+      ]
+    },
+    {
+      "name": "Leg_1",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -2.5,
+        3.05,
+        -0.1
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 792,
+      "rgb": null
+    },
+    {
+      "name": "Leg_2",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        2.5,
+        3.05,
+        -0.1
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 792,
+      "rgb": null
+    },
+    {
+      "name": "Leg_3",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -2.5,
+        3.05,
+        2.2
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 792,
+      "rgb": null
+    },
+    {
+      "name": "Leg_4",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        2.5,
+        3.05,
+        2.2
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 792,
+      "rgb": null
+    },
+    {
+      "name": "Arm_R",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        2.85,
+        3.0,
+        -1.5
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 844,
+      "rgb": null
+    },
+    {
+      "name": "Arm_L",
+      "role": "limb",
+      "parent": "Body",
+      "pivot": [
+        -2.85,
+        3.0,
+        -1.5
+      ],
+      "material": "Metal",
+      "textured": true,
+      "triangles": 844,
+      "rgb": null
+    }
+  ],
+  "weak_spots": [
+    "Core"
+  ],
+  "attachments": [],
+  "assetId": ""
+}
