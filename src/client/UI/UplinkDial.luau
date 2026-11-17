@@ -510,7 +510,9 @@ local function updateHub(inside: boolean)
 	else
 		hubName.Text = "UPLINK"
 		hubName.TextColor3 = C.Text
-		hubState.Text = Theme.isTouch() and "DRAG TO CHOOSE" or "MOVE MOUSE TO CHOOSE"
+		local UIS = game:GetService("UserInputService")
+		local pad = UIS.GamepadEnabled and UIS:GetLastInputType().Name:find("Gamepad") ~= nil
+		hubState.Text = if pad then "RIGHT STICK TO CHOOSE" elseif Theme.isTouch() then "DRAG TO CHOOSE" else "MOVE MOUSE TO CHOOSE"
 		hubState.TextColor3 = C.Muted
 		hubDesc.Text = "Release in the centre to cancel"
 	end

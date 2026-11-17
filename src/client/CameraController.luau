@@ -270,9 +270,15 @@ function CameraController.init()
 		end
 	end)
 	local pinchStart = distTarget
-	UserInputService.TouchPinch:Connect(function(_touches, scale, _velocity, state, gp)
+	UserInputService.TouchPinch:Connect(function(touches, scale, _velocity, state, gp)
 		if gp then
 			return
+		end
+		local half = camera.ViewportSize.X * 0.45
+		for _, t in touches do
+			if t.X <= half then
+				return -- one finger is on the stick side: move + look, not a pinch
+			end
 		end
 		if state == Enum.UserInputState.Begin then
 			pinchStart = distTarget

@@ -430,7 +430,7 @@ function WeaponController.init()
 	end
 	Input.on("SwapNext", function(d)
 		local m = me()
-		if not d or not m or not m.weapons or m.downed then
+		if not d or not m or not m.weapons or m.downed or Store.get("menuOpen") == true then
 			return
 		end
 		local cur = m.weapon or 1

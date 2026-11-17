@@ -195,6 +195,16 @@ local function refreshVisibility()
 		b.btn.Visible = show
 	end
 	gui.Enabled = not menu
+	-- hidden toggles must not stay on (respawn still in ADS / sprint)
+	local aimB, sprintB = buttons.Aim, buttons.Sprint
+	if not combat and aimB and aimB.toggled then
+		setToggled(aimB, false)
+		Input.set("Aim", false)
+	end
+	if not move and sprintB and sprintB.toggled then
+		setToggled(sprintB, false)
+		Input.set("Sprint", false)
+	end
 end
 
 function MobileControls.init()
@@ -347,6 +357,12 @@ function MobileControls.init()
 		local on = not sprint.toggled
 		setToggled(sprint, on)
 		Input.set("Sprint", on)
+		-- sprint and aim can't both be on: sprinting drops the aim toggle
+		local aimB = buttons.Aim
+		if on and aimB and aimB.toggled then
+			setToggled(aimB, false)
+			Input.set("Aim", false)
+		end
 	end)
 	Input.on("Sprint", function(isDown)
 		if sprint.toggled ~= isDown then
