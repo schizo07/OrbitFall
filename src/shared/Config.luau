@@ -142,6 +142,29 @@ Config.Action = {
 	RecycleMax = 8, -- most units recycled per pass
 }
 
+-- Encounters (server/Enemies/Director.luau + Garrisons.luau): fewer, tougher enemies. The world is held by garrisons (guard posts
+-- at sites, patrol squads walking between them); waves and breaches are rarer and come as a response (spotted calls, objectives,
+-- mission clock). Multipliers apply on top of Config.Action and shared/Data/Intensity.luau.
+Config.Encounters = {
+	CapMult = 0.55, -- live cap (Config.Action Cap*, breach / extraction caps and floors)
+	BudgetMult = 0.55, -- every composed wave / reinforcement / extraction budget
+	FodderMult = 0.6, -- breach source fodder batch size (Brood swarms stay, smaller)
+	EliteEveryMult = 1.4, -- seconds between a source's elites
+	ReinforceCooldown = 90, -- seconds between spotted -> reinforcement calls (Config.Action.ReinforceCooldown is the old 45)
+	-- ambient pacing: CALM lasts CalmEarly x as long at mission start, easing to CalmLate x by RampTime seconds in
+	CalmEarly = 2.6,
+	CalmLate = 1.2,
+	RampTime = 540,
+	FirstCalmMult = 1.3, -- the opening CALM is longer still (the squad explores, meets garrisons)
+	-- roaming patrols that cross the squad's path (Intensity.Patrol): rarer and smaller
+	PatrolIntervalMult = 3,
+	PatrolCount = { 2, 4 },
+	PatrolFirstDelay = 45,
+	-- garrison units that have not joined the fight do not use up the live cap, up to this much load
+	GarrisonFreeLoad = 12,
+	GarrisonMinInsertDist = 80, -- no guard post or patrol route point closer than this to the insertion point
+}
+
 -- Rewards (per successful mission)
 Config.Rewards = {
 	XpBase = 250, XpPerMainStep = 60, XpPerSide = 80, XpPerKill = 2,

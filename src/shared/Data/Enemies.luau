@@ -103,12 +103,12 @@ local E: { [string]: Enemy } = {
 	-- THE COGWORK LEGION ------------------------------------------------------------
 	TINKER = {
 		id = "TINKER", name = "Tinker Drone", faction = "COG", class = "regular",
-		hp = 70, speed = 13, size = 2,
+		hp = 120, speed = 13, size = 2,
 		zones = {
 			body = { armor = 1, mult = 1 },
-			eye = { armor = 0, mult = 2, fatal = 25 },
+			eye = { armor = 0, mult = 2, fatal = 40 },
 		},
-		attacks = { { kind = "bolt", damage = 15, range = 70, cooldown = 0.85, speed = 110 } },
+		attacks = { { kind = "bolt", damage = 17, range = 70, cooldown = 0.85, speed = 110 } },
 		aim = { base = 9, min = 2.2, tighten = 2.5, rangeMul = 0.5, moveMul = 0.6, warnShots = 2 },
 		keepDistance = 30, salvage = 2, xp = 2,
 		desc = "Cheap biped bot. Eye pops with one good shot.",
@@ -116,14 +116,14 @@ local E: { [string]: Enemy } = {
 	},
 	RIVET = {
 		id = "RIVET", name = "Rivet Trooper", faction = "COG", class = "medium",
-		hp = 260, speed = 11, size = 2.6,
+		hp = 440, speed = 11, size = 2.6,
 		zones = {
 			body = { armor = 2, mult = 1 },
-			eye = { armor = 1, mult = 2.5, fatal = 80 },
+			eye = { armor = 1, mult = 2.5, fatal = 130 },
 			pack = { armor = 1, mult = 2 },
 			shield = { armor = 3, mult = 0, blocks = true },
 		},
-		attacks = { { kind = "burst", damage = 25, range = 80, cooldown = 2.2, speed = 120, count = 3 } },
+		attacks = { { kind = "burst", damage = 28, range = 80, cooldown = 2.2, speed = 120, count = 3 } },
 		aim = { base = 7, min = 1.8, tighten = 2.0, rangeMul = 0.4, moveMul = 0.5, warnShots = 2 },
 		keepDistance = 35, salvage = 6, xp = 6,
 		desc = "Front riot shield. Flank it or shoot the eye over the rim.",
@@ -183,25 +183,25 @@ local E: { [string]: Enemy } = {
 	-- THE SKITTER BROOD -------------------------------------------------------------
 	SKITTER = {
 		id = "SKITTER", name = "Skitterling", faction = "BROOD", class = "regular",
-		hp = 50, speed = 20, size = 1.6,
+		hp = 85, speed = 20, size = 1.6,
 		zones = {
 			body = { armor = 0, mult = 1 },
 			head = { armor = 0, mult = 1.5 },
 		},
-		-- ground bite (mandibles): run up, 0.3 s tell with the mandibles open, snap. Same damage / cycle (~8 per s) as the old leap.
-		attacks = { { kind = "bite", damage = 12, range = 5, cooldown = 1.2, windup = 0.3 } },
+		-- ground bite (mandibles): run up, 0.3 s tell with the mandibles open, snap (~11 per s)
+		attacks = { { kind = "bite", damage = 14, range = 5, cooldown = 1.2, windup = 0.3 } },
 		salvage = 1, xp = 1,
 		desc = "Fast little biter. Comes in packs.",
 		tactics = { spread = 40 },
 	},
 	SPITTER = {
 		id = "SPITTER", name = "Spitter", faction = "BROOD", class = "medium",
-		hp = 220, speed = 12, size = 2.6,
+		hp = 380, speed = 12, size = 2.6,
 		zones = {
 			body = { armor = 1, mult = 1 },
-			sac = { armor = 0, mult = 2.5, fatal = 70 },
+			sac = { armor = 0, mult = 2.5, fatal = 110 },
 		},
-		attacks = { { kind = "spit", damage = 25, range = 60, cooldown = 2.6, speed = 60, radius = 4, windup = 0.4 } },
+		attacks = { { kind = "spit", damage = 28, range = 60, cooldown = 2.6, speed = 60, radius = 4, windup = 0.4 } },
 		keepDistance = 28, salvage = 5, xp = 5,
 		desc = "Lobs acid. Pop the glowing sac.",
 	},
@@ -246,25 +246,25 @@ local E: { [string]: Enemy } = {
 	-- Behaviour lives in server/Enemies/LumenAI.luau, fallback models in server/Enemies/LumenModels.luau.
 	SHARDLING = {
 		id = "SHARDLING", name = "Shardling", faction = "LUMEN", class = "regular",
-		hp = 60, speed = 15, size = 1.8,
+		hp = 100, speed = 15, size = 1.8,
 		zones = {
 			body = { armor = 1, mult = 1 },
-			core = { armor = 0, mult = 2, fatal = 22 },
+			core = { armor = 0, mult = 2, fatal = 35 },
 		},
-		attacks = { { kind = "needle", damage = 9, range = 65, cooldown = 1.1, speed = 150, count = 2, interval = 0.1, spread = 3 } },
+		attacks = { { kind = "needle", damage = 10, range = 65, cooldown = 1.1, speed = 150, count = 2, interval = 0.1, spread = 3 } },
 		keepDistance = 24, salvage = 2, xp = 2,
 		desc = "Floating crystal drone. Its petals open around a violet core: one clean shot pops it.",
 	},
 	WARDEN = {
 		id = "WARDEN", name = "Lumen Warden", faction = "LUMEN", class = "medium",
-		hp = 280, speed = 11, size = 2.6,
+		hp = 470, speed = 11, size = 2.6,
 		zones = {
 			body = { armor = 2, mult = 1 },
 			head = { armor = 1, mult = 1.5 },
-			core = { armor = 1, mult = 2.5, fatal = 85 },
+			core = { armor = 1, mult = 2.5, fatal = 140 },
 			shield = { armor = 3, mult = 0, blocks = true },
 		},
-		attacks = { { kind = "needle", damage = 16, range = 80, cooldown = 2.2, speed = 140, count = 3, interval = 0.14, spread = 2 } },
+		attacks = { { kind = "needle", damage = 18, range = 80, cooldown = 2.2, speed = 140, count = 3, interval = 0.14, spread = 2 } },
 		keepDistance = 32, salvage = 6, xp = 6,
 		blink = { aim = 1.5, dist = 13, cooldown = 4 },
 		desc = "Hard-light shield up front, core on its back. Blinks aside when you hold your aim on it.",

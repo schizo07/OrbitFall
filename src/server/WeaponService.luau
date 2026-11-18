@@ -9,6 +9,7 @@ local Aim = require(Shared.Aim)
 local Blasts = require(Shared.Data.Blasts)
 local Throw = require(Shared.Throw)
 local DownedRules = require(Shared.Downed)
+local Awareness = require(script.Parent.Enemies.Awareness) -- gunfire noise: nearby unaware enemies get suspicious
 
 local WeaponService = {}
 local S
@@ -713,6 +714,7 @@ local function onFire(p: Player, slot: any, aimPoint: any, _seq: any, mode: any)
 	if not origin then
 		return
 	end
+	Awareness.noise(origin, if w.quiet then 30 else 70, p) -- `quiet` (optional weapon flag): suppressed guns carry less far
 	if w.spinUp and p.Character then
 		-- other clients spin the Gatling barrels from this (the local player spins from its own input)
 		local gunTool = p.Character:FindFirstChild("Gun")

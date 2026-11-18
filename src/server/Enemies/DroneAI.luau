@@ -9,9 +9,14 @@
 --   DroneAI.push(e, velocity, dur)                     outside push (Gravity Well)
 --   DroneAI.clear(), DroneAI.init(S)
 --
--- Behaviour: hover `def.drone.hover` studs above whatever is below (terrain or roofs), bob, jink sideways at random, orbit
--- the nearest trooper inside HARASS range and plink at them; with nobody close, patrol: drift towards a random trooper's
--- area or around the foundry. Stun / Cryo freeze (FrozenUntil) drop them low and stop the guns; burn ticks like EnemyAI.
+-- Behaviour: hover `def.drone.hover` studs above whatever is below (terrain or roofs), bob, jink sideways at random.
+-- Awareness (Enemies/Awareness.luau) decides when a drone notices the squad, like ground units: until then it hover-patrols
+-- slowly round its home (or follows Awareness' investigate / search / patrol moves). Taking damage alerts it.
+-- Alert: a cycle of attack runs on its target (the Awareness target, else the nearest trooper inside HARASS range):
+--   orbit (circle at ORBIT range, shooting) -> strafing pass (flies past one side of the target and out the far side, shooting
+--   on the way in) -> break (pulls away and up, no shooting) -> orbit or another pass. No target for LOST_T s => Awareness.lost.
+-- Without the Awareness module it falls back to the old harass: always alert, patrol towards a random trooper's area.
+-- Stun / Cryo freeze (FrozenUntil) drop them low and stop the guns; burn ticks like EnemyAI.
 -- Studio A/B Feel_DroneAim: nil = loose cone (AIM.loose), "tight" = AIM.tight with a little lead.
 -- Model attribute Drone = "COG" | "BROOD": client/Fx/EnemyFx.luau adds rotor blur / wing flutter locally.
 
@@ -19,6 +24,20 @@ local Players = game:GetService("Players")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Assets = require(script.Parent.Parent.World.Assets)
+
+-- optional: drones keep the old always-hunting behaviour if the module is missing
+local Awareness: any = nil
+do
+	local mod = script.Parent:FindFirstChild("Awareness")
+	if mod and mod:IsA("ModuleScript") then
+		local ok, m = pcall(require, mod)
+		if ok and type(m) == "table" then
+			Awareness = m
+		else
+			warn("[DroneAI] Awareness failed to load:", m)
+		end
+	end
+end
 
 local DroneAI = {}
 
@@ -30,6 +49,20 @@ local MAP_HALF = Config.MapSize / 2 - 6
 local THINK = 0.2
 local HARASS = 110 -- studs: picks a trooper inside this range (x1.5 once hit)
 local ORBIT = { 13, 22 } -- distance band kept from the target
+-- attack runs (alert): seconds per mode, pass geometry, break geometry
+local RUN = {
+	orbit = { 2.5, 4.5 },
+	passMax = 4, -- give up a pass after this long
+	passSide = { 6, 10 }, -- studs to the side of the target the pass line goes by
+	passOut = 22, -- the pass ends this far beyond the target
+	passSpeed = 1.35, -- x def.speed
+	breakT = { 1.2, 2.2 },
+	breakDist = { 32, 45 },
+	breakRise = 4, -- extra hover height while breaking away
+	idleSpeed = 0.45, -- x def.speed for the home hover-patrol
+	idleRing = { 18, 45 }, -- hover-patrol points around home
+}
+local LOST_T = 6 -- alert with no target this long => Awareness.lost
 local SPIT_G = 30
 local FAR_PIVOT = 250 -- further than this from every trooper: model written every 4th frame
 local AIM = {
@@ -271,10 +304,35 @@ function DroneAI.register(e: any, cf: CFrame, opts: any)
 	e.bobPhase = rng:NextNumber(0, math.pi * 2)
 	e.spinUntil = 0
 	e.beat = rng:NextInteger(0, 3)
+	e.runMode = "orbit"
+	e.runUntil = now + rng:NextNumber(RUN.orbit[1], RUN.orbit[2])
+	e.passDir = nil
+	e.passOff = nil
+	e.breakDir = nil
+	e.noTargetSince = nil
+	e.dAlert = Awareness == nil
+	e.dLastHp = e.hp
+	e.idleDir = nil
+	e.idleSpeed = 0
+	e.idleFace = nil
+	if Awareness then
+		local o = opts or {}
+		Awareness.register(e, {
+			posture = o.posture,
+			route = o.route,
+			squad = o.squad,
+			home = e.home,
+			aggro = o.aggro,
+			target = o.target,
+		})
+	end
 	drones[e] = true
 end
 
 function DroneAI.unregister(e: any)
+	if Awareness then
+		Awareness.unregister(e)
+	end
 	drones[e] = nil
 	e.dTarget = nil
 	e.push = nil
@@ -326,23 +384,98 @@ local function think(e: any, now: number)
 
 	e.groundY = groundBelow(e.pos) or e.groundY
 
-	-- target: nearest trooper in harass range (wider once something hit it); the one who hit it last wins a close call
+	-- awareness: damage alerts it; otherwise Awareness decides when it notices the squad
+	if Awareness then
+		if e.hp < (e.dLastHp or e.hp) then
+			Awareness.alert(e, e.lastHitBy, nil, "damage")
+		end
+		e.dLastHp = e.hp
+		Awareness.sense(e, now)
+		e.dAlert = Awareness.isAlert(e)
+	end
+
+	if not e.dAlert then
+		e.dTarget = nil
+		e.noTargetSince = nil
+		local wish, mul, face = Awareness.idle(e, now)
+		e.idleDir = wish
+		e.idleSpeed = mul or 0
+		e.idleFace = face
+		if not wish and (not e.goal or now > e.goalUntil or flat(e.goal - e.pos).Magnitude < 6) then
+			-- hover-patrol: slow loop between points round home
+			local a = rng:NextNumber(0, math.pi * 2)
+			e.goal = clampMap(e.home + Vector3.new(math.cos(a), 0, math.sin(a)) * rng:NextNumber(RUN.idleRing[1], RUN.idleRing[2]))
+			e.goalUntil = now + rng:NextNumber(8, 14)
+		end
+	else
+		e.idleDir = nil
+		e.idleFace = nil
+	end
+
+	-- target: the trooper Awareness is after if in reach, else the nearest in harass range (wider once something hit it);
+	-- the one who hit it last wins a close call
 	local range = HARASS * (if e.alerted then 1.5 else 1)
 	local best: Target? = nil
 	local bestD = range
-	for _, t in targets do
-		local d = (t.pos - e.pos).Magnitude
-		if t.p == e.lastHitBy then
-			d *= 0.7
-		end
-		if d < bestD then
-			best = t
-			bestD = d
+	if e.dAlert then
+		local want = e.awareTarget
+		for _, t in targets do
+			local d = (t.pos - e.pos).Magnitude
+			if t.p == e.lastHitBy then
+				d *= 0.7
+			end
+			if want ~= nil and t.p == want and d < range then
+				d = 0
+			end
+			if d < bestD then
+				best = t
+				bestD = d
+			end
 		end
 	end
+	if best ~= e.dTarget and best then
+		-- a fresh target starts with an orbit
+		e.runMode = "orbit"
+		e.runUntil = now + rng:NextNumber(RUN.orbit[1], RUN.orbit[2])
+	end
 	e.dTarget = best
+	if best then
+		e.noTargetSince = nil
+		local d = flat(best.pos - e.pos)
+		local dist = d.Magnitude
+		-- attack run cycle: orbit -> pass -> break -> orbit / pass
+		if e.runMode == "pass" then
+			local beyond = (e.pos - best.pos):Dot(e.passDir)
+			if beyond > RUN.passOut or now >= e.runUntil then
+				e.runMode = "break"
+				e.runUntil = now + rng:NextNumber(RUN.breakT[1], RUN.breakT[2])
+				local a = rng:NextNumber(-1.2, 1.2)
+				e.breakDir = CFrame.Angles(0, a, 0) * e.passDir
+			end
+		elseif now >= e.runUntil then
+			if e.runMode == "break" and rng:NextNumber() < 0.5 then
+				e.runMode = "orbit"
+				e.runUntil = now + rng:NextNumber(RUN.orbit[1], RUN.orbit[2])
+				e.orbitA = math.atan2(e.pos.Z - best.pos.Z, e.pos.X - best.pos.X)
+				e.orbitR = rng:NextNumber(ORBIT[1], ORBIT[2])
+			else
+				e.runMode = "pass"
+				e.runUntil = now + RUN.passMax
+				local through = if dist > 1 then d / dist else Vector3.new(1, 0, 0)
+				e.passDir = through
+				local side = if rng:NextNumber() < 0.5 then 1 else -1
+				e.passOff = Vector3.new(-through.Z, 0, through.X) * side * rng:NextNumber(RUN.passSide[1], RUN.passSide[2])
+			end
+		end
+	elseif e.dAlert and Awareness then
+		e.noTargetSince = e.noTargetSince or now
+		if now - e.noTargetSince > LOST_T then
+			e.noTargetSince = now
+			Awareness.lost(e, now)
+		end
+	end
 
-	if not best then
+	if not best and not Awareness then
 		-- patrol: drift towards a random trooper's area (so drones find the squad across the map) or loop around the foundry
 		if not e.goal or now > e.goalUntil or flat(e.goal - e.pos).Magnitude < 8 then
 			local g: Vector3
@@ -429,7 +562,8 @@ local function update(e: any, dt: number, now: number)
 	local frozen = e.frozenUntil ~= nil and e.frozenUntil > now
 	local stunned = e.status.stun ~= nil or frozen
 	local t: Target? = e.dTarget
-	local hoverY = e.groundY + (if stunned then 3 else e.hover)
+	local rise = if t and e.runMode == "break" then RUN.breakRise else 0
+	local hoverY = e.groundY + (if stunned then 3 else e.hover + rise)
 
 	local want = Vector3.zero
 	if not stunned then
@@ -440,11 +574,32 @@ local function update(e: any, dt: number, now: number)
 		end
 		local speed = def.speed * mul
 		local dest: Vector3? = nil
+		local jinkMul = 0.6
 		if t then
-			e.orbitA += dt * 0.7 * e.orbitSign
-			dest = t.pos + Vector3.new(math.cos(e.orbitA), 0, math.sin(e.orbitA)) * e.orbitR
+			if e.runMode == "pass" and e.passDir then
+				-- aim at a point that runs ahead of the target along the pass line, so it flies past one side and out
+				dest = t.pos + e.passOff + e.passDir * (RUN.passOut + 10)
+				speed *= RUN.passSpeed
+				jinkMul = 0.25
+			elseif e.runMode == "break" and e.breakDir then
+				dest = t.pos + e.breakDir * RUN.breakDist[2]
+				speed *= 1.15
+			else
+				e.orbitA += dt * 0.7 * e.orbitSign
+				dest = t.pos + Vector3.new(math.cos(e.orbitA), 0, math.sin(e.orbitA)) * e.orbitR
+			end
+		elseif e.dAlert and Awareness then
+			dest = e.lastKnown or e.goal -- searching: hover over where the squad was last seen
+		elseif e.idleDir then
+			dest = e.pos + e.idleDir * 8
+			speed *= math.clamp(e.idleSpeed, 0, 1)
+			jinkMul = 0.25
 		else
 			dest = e.goal
+			if Awareness then
+				speed *= RUN.idleSpeed
+				jinkMul = 0.25
+			end
 		end
 		if dest then
 			local d = flat(dest - e.pos)
@@ -452,7 +607,7 @@ local function update(e: any, dt: number, now: number)
 				want = d.Unit * math.min(speed, d.Magnitude * 1.5)
 			end
 		end
-		want += e.jink * speed * 0.6
+		want += e.jink * speed * jinkMul
 	end
 	local vy = math.clamp((hoverY - e.pos.Y) * 2.2, -12, 10)
 	want = Vector3.new(want.X, vy + (if stunned then 0 else e.jink.Y * 4), want.Z)
@@ -472,7 +627,7 @@ local function update(e: any, dt: number, now: number)
 	e.pos = np
 
 	-- shooting
-	if t and not stunned and now >= e.nextShot then
+	if t and not stunned and now >= e.nextShot and e.runMode ~= "break" then
 		local atk = def.attacks[1]
 		local dist = (t.pos - e.pos).Magnitude
 		if atk and dist <= atk.range then
@@ -490,7 +645,14 @@ local function update(e: any, dt: number, now: number)
 	end
 
 	-- facing: the target, else the way it flies; bank into sideways motion
-	local face = if t then flat(t.pos - e.pos) else flat(e.vel)
+	local face: Vector3
+	if t and e.runMode ~= "break" then
+		face = flat(t.pos - e.pos)
+	elseif not t and e.idleFace then
+		face = flat(e.idleFace)
+	else
+		face = flat(e.vel)
+	end
 	if face.Magnitude > 0.1 and not frozen then
 		local wantYaw = math.atan2(-face.X, -face.Z)
 		local diff = (wantYaw - e.yaw + math.pi) % (2 * math.pi) - math.pi

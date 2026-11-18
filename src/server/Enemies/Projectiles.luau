@@ -1,5 +1,5 @@
 -- S.Projectiles: server-simulated enemy projectiles (data only, no parts).
--- Clients render them from Fx "Bolt" {id, a, v, g, style, c, life} and "BoltEnd" {id, p, style, r, pd?, miss?}.
+-- Clients render them from Fx "Bolt" {id, a, v, g, style, c, life, o?} and "BoltEnd" {id, p, style, r, pd?, miss?, hit?}.
 -- Position at time t after spawn:  a + v*t - (0, 0.5*g*t^2, 0)   (g >= 0, studs/s^2 downward)
 --
 -- Projectiles.fire(spec) -> id?
@@ -16,6 +16,12 @@
 --     spare: Player?,                               -- never hits this player (enemy warning shots, EnemyAI.shootBolt)
 --   }
 -- Projectiles.count(), Projectiles.clear()
+-- Projectiles.speedMul(kind?, style?) -> number   speed factor fire() applies to straight shots (aim lead can use it)
+--
+-- Straight (g == 0) shots are slowed per kind / style (SPEED_MUL) so they can be sidestepped at mid range; life is
+-- stretched by the same factor, so range is unchanged. The Bolt payload carries the final velocity, so the client
+-- draws exactly what the server hit-tests. Bolt payload extra (optional): o = owner enemy id (client muzzle cache).
+-- Studio A/B: workspace attribute Feel_BoltSpeed (number, default 1) scales every SPEED_MUL entry.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -26,6 +32,11 @@ local Damage = require(Shared.Damage)
 local Decoys = require(script.Parent.Parent.Decoys) -- Holo Decoy targets: shots / splash damage them, no player API involved
 
 local MAX_LIVE = 120
+
+-- by spec.kind first, then spec.style. COG bolts: Tinker 110 -> 94, Rivet 120 -> 102, Gnat 95 -> 81 studs/s;
+-- cannon shells: Bulwark 90 -> 72, Bastion 80 -> 64. Lumen needles and arcing shots (gravity) are untouched.
+local SPEED_MUL: { [string]: number } = { bolt = 0.85, cannon = 0.8 }
+local IS_STUDIO = RunService:IsStudio()
 
 local Projectiles = {}
 
@@ -169,6 +180,9 @@ local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, bloc
 		if miss then
 			data.miss = true
 		end
+		if (hitPlayer or hitDecoy) and not blocked and not miss then
+			data.hit = true -- struck a trooper / decoy: the client plays the bigger impact
+		end
 		fx.play("BoltEnd", data)
 		if not shell and radius >= 3 and not blocked and not miss and (pr.style == "cannon" or pr.style == "mortar") then
 			fx.play("Explosion", { p = pos, r = radius, size = radius >= 6 and "L" or "M", style = "fire" })
@@ -310,21 +324,44 @@ local function connect()
 	end)
 end
 
+function Projectiles.speedMul(kind: string?, style: string?): number
+	local m = (kind and SPEED_MUL[kind]) or (style and SPEED_MUL[style])
+	if not m then
+		return 1
+	end
+	if IS_STUDIO then
+		local k = workspace:GetAttribute("Feel_BoltSpeed")
+		if type(k) == "number" and k > 0 then
+			m *= math.clamp(k, 0.3, 3)
+		end
+	end
+	return m
+end
+
 function Projectiles.fire(spec: any): number?
 	if #live >= MAX_LIVE then
 		return nil
 	end
 	nextId += 1
 	local id = nextId
+	local v: Vector3 = spec.v
+	local life: number = spec.life or 5
+	if (spec.g or 0) <= 0 then
+		local m = Projectiles.speedMul(spec.kind, spec.style or "bolt")
+		if m ~= 1 then
+			v *= m
+			life /= m
+		end
+	end
 	local pr = {
 		id = id,
 		a = spec.a,
 		pos = spec.a,
 		prev = spec.a,
-		v = spec.v,
+		v = v,
 		g = spec.g or 0,
 		t = 0,
-		life = spec.life or 5,
+		life = life,
 		style = spec.style or "bolt",
 		c = spec.c,
 		damage = spec.damage or 0,
@@ -339,7 +376,9 @@ function Projectiles.fire(spec: any): number?
 	}
 	table.insert(live, pr)
 	if S.Fx then
-		S.Fx.play("Bolt", { id = id, a = pr.a, v = pr.v, g = pr.g, style = pr.style, c = pr.c, life = pr.life, r = pr.radius })
+		local owner = spec.owner
+		local oid = if type(owner) == "table" then owner.id else nil
+		S.Fx.play("Bolt", { id = id, a = pr.a, v = pr.v, g = pr.g, style = pr.style, c = pr.c, life = pr.life, r = pr.radius, o = oid })
 	end
 	return id
 end

@@ -1387,10 +1387,77 @@ local function stepBody()
 	end
 end
 
+-- Bastion turret ------------------------------------------------------------------------
+-- The base never turns; the turret part rides a Motor6D "Turret" (server EnemyModels.rigTurret). The server snaps the motor's
+-- C0 to the model attribute TurretYaw at think rate (hit boxes); here the turret eases toward the same yaw every frame through
+-- Transform = (smoothed yaw) - (yaw already in C0), so it sweeps instead of stepping. Within 220 studs, on-screen or not
+-- (cheap: one CFrame per Bastion).
+type TurretEntry = { model: Model, root: BasePart?, motor: Motor6D?, baseInv: CFrame, yaw: number?, nextTry: number }
+local turrets: { [Model]: TurretEntry } = {}
+local TURRET_RANGE = 220
+local TURRET_EASE = 7 -- 1/s exponential ease toward the server yaw (the server already limits the turn rate)
+
+local function trackTurret(model: Instance)
+	if not model:IsA("Model") or turrets[model] or model:GetAttribute("Kind") ~= "BASTION" then
+		return
+	end
+	turrets[model] = { model = model, root = nil, motor = nil, baseInv = IDENT, yaw = nil, nextTry = 0 }
+end
+
+local function stepTurrets(dt: number, now: number)
+	local cam = Workspace.CurrentCamera
+	if not cam or next(turrets) == nil then
+		return
+	end
+	local camPos = cam.CFrame.Position
+	for model, te in turrets do
+		if not model.Parent then
+			turrets[model] = nil
+			continue
+		end
+		local motor = te.motor
+		if not (motor and motor.Parent) or not te.root then
+			if now < te.nextTry then
+				continue
+			end
+			te.nextTry = now + 0.5 -- not streamed in yet
+			local root = model.PrimaryPart or model:FindFirstChild("Root")
+			local tp = model:FindFirstChild("Turret")
+			local m = tp and tp:FindFirstChild("Turret")
+			if not (root and root:IsA("BasePart") and m and m:IsA("Motor6D")) then
+				continue
+			end
+			te.root = root
+			te.motor = m
+			local base = m:GetAttribute("BaseRot")
+			te.baseInv = if typeof(base) == "CFrame" then base:Inverse() else IDENT
+			motor = m
+		end
+		local root = te.root :: BasePart
+		local mm = motor :: Motor6D
+		local target = model:GetAttribute("TurretYaw")
+		if type(target) ~= "number" or (root.Position - camPos).Magnitude > TURRET_RANGE then
+			if te.yaw then
+				te.yaw = nil
+				mm.Transform = IDENT -- far away: the server's C0 alone poses it
+			end
+			continue
+		end
+		local look = root.CFrame.LookVector
+		local want = wrapPi(target - math.atan2(-look.X, -look.Z))
+		local cur = te.yaw or want
+		cur = wrapPi(cur + wrapPi(want - cur) * min(1, dt * TURRET_EASE))
+		te.yaw = cur
+		local _, inC0 = (te.baseInv * mm.C0.Rotation):ToEulerAnglesYXZ()
+		mm.Transform = ry(wrapPi(cur - inC0))
+	end
+end
+
 -- MicroProfiler label "EnemyAnim.step"
-local function step(_dt: number)
+local function step(dt: number)
 	debug.profilebegin("EnemyAnim.step")
 	stepBody()
+	stepTurrets(clamp(dt, 0, 0.1), os.clock())
 	debug.profileend()
 end
 
@@ -1411,9 +1478,11 @@ local function start(Fx: any)
 		end
 		for _, m in folder:GetChildren() do
 			track(m)
+			trackTurret(m)
 		end
 		folder.ChildAdded:Connect(function(m)
 			task.defer(track, m)
+			task.defer(trackTurret, m)
 		end)
 		folder.ChildRemoved:Connect(untrack)
 	end)

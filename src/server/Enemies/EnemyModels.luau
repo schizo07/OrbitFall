@@ -25,11 +25,16 @@ local EnemyData = require(ReplicatedStorage:WaitForChild("Shared").Data.Enemies)
 local EnemyModels = {}
 
 -- Palette ---------------------------------------------------------------------------
-local GUNMETAL = Color3.fromRGB(72, 78, 90)
-local DARKMETAL = Color3.fromRGB(44, 47, 57)
-local STEEL = Color3.fromRGB(104, 112, 126)
-local RUST = Color3.fromRGB(196, 108, 44)
-local EYE_RED = Color3.fromRGB(255, 40, 36)
+-- Faction accents (readability on the dark brown / charcoal ground): COG = hot red-orange glow, BROOD = acid green.
+-- Mesh models get them through GLOW_FIX below, the part-built fallbacks use them directly.
+local COG_ACCENT = Color3.fromRGB(255, 66, 34)
+local BROOD_ACCENT = Color3.fromRGB(96, 236, 48)
+
+local GUNMETAL = Color3.fromRGB(92, 99, 114)
+local DARKMETAL = Color3.fromRGB(58, 62, 74)
+local STEEL = Color3.fromRGB(132, 140, 156)
+local RUST = Color3.fromRGB(214, 120, 48)
+local EYE_RED = COG_ACCENT
 local CELL_ORANGE = Color3.fromRGB(255, 160, 50)
 local SHIELD_BLUE = Color3.fromRGB(86, 112, 140)
 
@@ -41,7 +46,7 @@ local TEAL = Color3.fromRGB(44, 134, 134)
 local DARKTEAL = Color3.fromRGB(26, 80, 88)
 local BONE = Color3.fromRGB(214, 202, 168)
 local SOFTPINK = Color3.fromRGB(150, 96, 98)
-local GLOW = Color3.fromRGB(140, 255, 58)
+local GLOW = BROOD_ACCENT
 
 export type RigEntry = {
 	part: BasePart,
@@ -255,8 +260,13 @@ end
 -- Bastion emplacement (static, part-built, 11 x 11 footprint, ~10 studs tall). Front = -Z: sloped glacis with two red cannon
 -- eyes (zone "eye", the client flares them during the 0.8 s wind-up: parts EyeL / EyeR). Rear: glowing heat vent behind
 -- grille bars (zone "vent"). Troopers cannot walk through it: one invisible vertical collision cylinder ("Hull", CanQuery off so
--- bullets still hit the visible parts) centred on the root, so the slow turn never sweeps a corner into anyone.
--- The whole block turns slowly to face its target (EnemyAI, def.turn), so the vent swings away from a flanker.
+-- bullets still hit the visible parts) centred on the root.
+-- The base never turns. Only the turret does (part "Turret", Motor6D "Turret" inside it, joint on the vertical axis through the
+-- root at BASTION_YAW_Y): the eyes, barrels, glacis and the rear vent ride on it, so the vent still swings away from a flanker.
+-- EnemyAI writes the model attribute TurretYaw (world yaw); rigTurret snaps the motor C0 to it on the server (hit boxes) and
+-- client/Fx/EnemyAnim smooths the rest locally through Motor6D.Transform.
+local BASTION_YAW_Y = 2.2
+
 local function addBastionHull(c: Ctx)
 	local hull = c.add("Hull", V(7.5, 10, 10), CFrame.new(0, 3.75, 0) * CFrame.Angles(0, 0, math.rad(90)), DARKMETAL)
 	hull.Shape = Enum.PartType.Cylinder
@@ -269,23 +279,50 @@ end
 local function buildBastion(c: Ctx)
 	c.rig.bob = 0
 	addBastionHull(c)
+	-- fixed base: plinth, round drum (so the turret never sweeps through a corner), low side skirts
 	c.add("Plinth", V(11, 2, 11), at(0, 1, 0), DARKMETAL, SLATE)
-	c.add("Bunker", V(9, 5, 8.4), at(0, 4.5, 0.3), GUNMETAL)
-	c.add("Glacis", V(9, 4.6, 1.2), CFrame.new(0, 4.6, -4.2) * CFrame.Angles(math.rad(22), 0, 0), DARKMETAL)
-	c.add("Roof", V(7.4, 1.2, 7), at(0, 7.6, 0.6), DARKMETAL)
-	c.add("Stripe", V(9.2, 0.5, 2), at(0, 6.4, 1.6), RUST)
-	c.add("EyePlate", V(6.4, 2.6, 1), at(0, 5.7, -5.1), GUNMETAL)
-	c.add("EyeL", V(1.9, 1.9, 1.9), at(-1.7, 5.7, -5.6), EYE_RED, NEON, "eye", true)
-	c.add("EyeR", V(1.9, 1.9, 1.9), at(1.7, 5.7, -5.6), EYE_RED, NEON, "eye", true)
-	c.add("BarrelL", V(0.7, 0.7, 2.6), at(-1.7, 5.7, -6.9), RUST)
-	c.add("BarrelR", V(0.7, 0.7, 2.6), at(1.7, 5.7, -6.9), RUST)
-	c.add("Vent", V(4.4, 2.2, 0.5), at(0, 4.8, 4.6), CELL_ORANGE, NEON, "vent")
-	c.add("Grille1", V(4.8, 0.3, 0.3), at(0, 5.4, 4.95), DARKMETAL, nil, "vent")
-	c.add("Grille2", V(4.8, 0.3, 0.3), at(0, 4.3, 4.95), DARKMETAL, nil, "vent")
-	c.add("SideL", V(1, 4, 7.6), CFrame.new(-5, 3.6, 0.2) * CFrame.Angles(0, 0, math.rad(-14)), STEEL)
-	c.add("SideR", V(1, 4, 7.6), CFrame.new(5, 3.6, 0.2) * CFrame.Angles(0, 0, math.rad(14)), STEEL)
-	c.add("Antenna", V(0.25, 2.4, 0.25), at(2.6, 9.4, 2.2), STEEL)
-	c.add("Lamp", V(0.6, 0.6, 0.6), at(2.6, 10.8, 2.2), EYE_RED, NEON, "body", true)
+	local drum = c.add("Bunker", V(5, 8.4, 8.4), CFrame.new(0, 4.5, 0) * CFrame.Angles(0, 0, math.rad(90)), GUNMETAL)
+	drum.Shape = Enum.PartType.Cylinder
+	c.add("SideL", V(1, 2, 7.6), CFrame.new(-5, 2.6, 0.2) * CFrame.Angles(0, 0, math.rad(-14)), STEEL)
+	c.add("SideR", V(1, 2, 7.6), CFrame.new(5, 2.6, 0.2) * CFrame.Angles(0, 0, math.rad(14)), STEEL)
+	-- turret (front = -Z): everything below is welded to the Turret part, which yaws on its Motor6D
+	local turret = c.add("Turret", V(7.4, 1.2, 7), at(0, 7.6, 0.6), DARKMETAL)
+	local hung = {
+		c.add("Glacis", V(9, 4.6, 1.2), CFrame.new(0, 4.6, -4.2) * CFrame.Angles(math.rad(22), 0, 0), DARKMETAL),
+		c.add("Stripe", V(7.6, 0.5, 2), at(0, 7.0, 1.6), RUST),
+		c.add("EyePlate", V(6.4, 2.6, 1), at(0, 5.7, -5.1), GUNMETAL),
+		c.add("EyeL", V(1.9, 1.9, 1.9), at(-1.7, 5.7, -5.6), EYE_RED, NEON, "eye", true),
+		c.add("EyeR", V(1.9, 1.9, 1.9), at(1.7, 5.7, -5.6), EYE_RED, NEON, "eye", true),
+		c.add("BarrelL", V(0.7, 0.7, 2.6), at(-1.7, 5.7, -6.9), RUST),
+		c.add("BarrelR", V(0.7, 0.7, 2.6), at(1.7, 5.7, -6.9), RUST),
+		c.add("Vent", V(4.4, 2.2, 0.5), at(0, 4.8, 4.6), CELL_ORANGE, NEON, "vent"),
+		c.add("Grille1", V(4.8, 0.3, 0.3), at(0, 5.4, 4.95), DARKMETAL, nil, "vent"),
+		c.add("Grille2", V(4.8, 0.3, 0.3), at(0, 4.3, 4.95), DARKMETAL, nil, "vent"),
+		c.add("Antenna", V(0.25, 2.4, 0.25), at(2.6, 9.4, 2.2), STEEL),
+		c.add("Lamp", V(0.6, 0.6, 0.6), at(2.6, 10.8, 2.2), EYE_RED, NEON, "body", true),
+	}
+	-- root and the base stay anchored; the turret hangs off the root (root is at the origin while building)
+	turret.Anchored = false
+	turret.Massless = true
+	local j = CFrame.new(0, BASTION_YAW_Y, 0)
+	local m = Instance.new("Motor6D")
+	m.Name = "Turret"
+	m.Part0 = c.root
+	m.Part1 = turret
+	m.C0 = c.root.CFrame:Inverse() * j
+	m.C1 = turret.CFrame:Inverse() * j
+	m.Parent = turret
+	for _, p in hung do
+		p.Anchored = false
+		p.Massless = true
+		local w = Instance.new("Weld")
+		w.Name = "W_" .. p.Name
+		w.Part0 = turret
+		w.Part1 = p
+		w.C0 = turret.CFrame:Inverse() * p.CFrame
+		w.C1 = CFrame.new()
+		w.Parent = p
+	end
 end
 
 -- SKITTER BROOD ----------------------------------------------------------------------
@@ -506,9 +543,10 @@ end
 -- COG weak spots (eyes, cores, joints) come out of the manifest orange-yellow, which bloom washes out into big
 -- yellow-white discs. Recolour them a deep red so they read as menacing eyes, and shrink the oversized Tinker eye.
 -- Same for BROOD: lime (140,255,60) blooms to flat yellow blobs; a deeper acid green keeps its colour.
+-- The accents are a touch brighter than pure deep red / dark green so they still read against the dark terrain.
 local GLOW_FIX: { [string]: { color: Color3, shrink: { [string]: number } } } = {
-	COG = { color = Color3.fromRGB(235, 34, 24), shrink = { TINKER_Eye = 0.72 } },
-	BROOD = { color = Color3.fromRGB(70, 200, 40), shrink = { SKITTER_Eye = 0.7 } },
+	COG = { color = COG_ACCENT, shrink = { TINKER_Eye = 0.72 } },
+	BROOD = { color = BROOD_ACCENT, shrink = { SKITTER_Eye = 0.7 } },
 }
 local function tuneGlow(kindId: string, def: any, part: BasePart)
 	local fix = GLOW_FIX[def.faction]
@@ -533,7 +571,8 @@ end
 -- The client does not animate these (no Rigged attribute): the server swings the courier legs through rig.motors (EnemyModels.animate).
 local KIT_KEY: { [string]: string } = { BASTION = "bastion_cog", LOOT_COG = "courier_cog" }
 local KIT_PARENT: { [string]: { [string]: string } } = {
-	BASTION = { Heatsink = "Turret", Vent = "Turret", EyeL = "Turret", EyeR = "Turret" },
+	-- the Bastion's Glow (stack embers, eye lens, beacon) sits on the turret in the Blender kit, so it turns with it
+	BASTION = { Heatsink = "Turret", Vent = "Turret", EyeL = "Turret", EyeR = "Turret", Glow = "Turret" },
 }
 local KIT_ZONE: { [string]: { [string]: string } } = {
 	BASTION = { Heatsink = "vent", Vent = "vent", EyeL = "eye", EyeR = "eye" },
@@ -729,6 +768,36 @@ local function scaleBuilt(model: Model, rig: Rig, scale: number)
 	end
 end
 
+-- Bastion turret yaw on the server: the model attribute TurretYaw (world yaw, atan2(-look.X, -look.Z)) is turned into a yaw of
+-- the Turret motor relative to the root, written to Motor6D.C0 so the server's hit boxes (eyes, rear vent) follow the turret.
+-- The motor carries attribute BaseRot (its unturned C0 rotation) so the client can tell how far C0 is already turned and
+-- smooth the remainder with Transform. Steps at the rate EnemyAI writes the attribute; nothing runs while it is unchanged.
+local function rigTurret(model: Model)
+	local turret = model:FindFirstChild("Turret")
+	local motor = turret and turret:FindFirstChild("Turret")
+	local root = model.PrimaryPart
+	if not (motor and motor:IsA("Motor6D") and root) then
+		return
+	end
+	local m: Motor6D = motor
+	local baseRot = m.C0.Rotation
+	m:SetAttribute("BaseRot", baseRot)
+	model:SetAttribute("TurretRig", true)
+	local function apply()
+		local yaw = model:GetAttribute("TurretYaw")
+		if type(yaw) ~= "number" or not m.Parent then
+			return
+		end
+		local look = root.CFrame.LookVector
+		local rel = yaw - math.atan2(-look.X, -look.Z)
+		rel = (rel + math.pi) % (2 * math.pi) - math.pi
+		-- C0 = joint position * base rotation * yaw: ScaleTo may have moved the joint position, so keep the current one
+		m.C0 = CFrame.new(m.C0.Position) * baseRot * CFrame.Angles(0, rel, 0)
+	end
+	model:GetAttributeChangedSignal("TurretYaw"):Connect(apply)
+	apply()
+end
+
 function EnemyModels.build(kindId: string, enemyId: number, scale: number?): (Model, Rig)
 	local model, rig = EnemyModels.buildUnscaled(kindId, enemyId)
 	if scale and scale ~= 1 then
@@ -736,6 +805,9 @@ function EnemyModels.build(kindId: string, enemyId: number, scale: number?): (Mo
 		if not ok then
 			warn("[EnemyModels] scaling failed for", kindId, err)
 		end
+	end
+	if kindId == "BASTION" then
+		rigTurret(model)
 	end
 	return model, rig
 end

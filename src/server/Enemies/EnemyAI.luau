@@ -1,4 +1,4 @@
--- Per-enemy behaviour. Not a registered service: EnemyService requires this and drives it.
+-- Per-enemy behaviour. Not a registered service: EnemyService requires this and drives it each frame.
 -- Think at ~10 Hz (staggered per enemy), move/animate every Heartbeat via PivotTo.
 --
 -- Attack kinds (Data/Enemies): bolt, burst, cannon, mortar, sweep, stomp, melee, bite (Brood ground bite), leap, spit, charge, summon.
@@ -23,6 +23,10 @@ local Config = require(Shared.Config)
 local EnemyModels = require(script.Parent.EnemyModels)
 local LumenAI = require(script.Parent.LumenAI) -- LUMEN hook: Lumen Concord attack kinds + blink / nodes
 local Decoys = require(script.Parent.Parent.Decoys) -- Holo Decoy call-in: extra targets (empty list = nothing below runs)
+-- AWARENESS: guard / patrol / suspicious / alert / search per unit (fodder and loot runners skip it and are always alert)
+local Awareness = require(script.Parent.Awareness)
+-- TACTICS: cover / flank movement for alert ranged units, optional melee approach (fodder keeps the cheap built-in moves)
+local Tactician = require(script.Parent.Tactician)
 local EnemyData = require(Shared.Data.Enemies)
 local AIM = EnemyData.Aim
 local AimDefault = EnemyData.AimDefault
@@ -47,6 +51,18 @@ local NOMOVE = {
 local MELEE_KINDS = { melee = true, leap = true, bite = true, stomp = true, charge = true }
 local MAP_HALF = Config.MapSize / 2 - 6
 local ROBOT_BOLT = Color3.fromRGB(255, 84, 58)
+
+-- VOLLEYS (bolt / burst shooters): a charge-up of at least MIN_WINDUP (clients show a muzzle glow), a short volley, then a
+-- clear pause. The pause counts from the end of the volley: cooldown = windup + volley time + max(atk.cooldown, pause).
+local VOLLEY = {
+	minWindup = 0.35,
+	burstMax = 2, -- shots per burst volley (Data count is capped to this)
+	burstGap = 0.22, -- seconds between the shots of a burst
+	pause = { bolt = 1.4, burst = 2.4 }, -- shortest quiet time after a volley
+}
+-- AWARENESS reaction: stop and turn to the target for this long before the first attack after noticing it
+local NOTICE = { 0.4, 0.6 }
+local LOST_AFTER = 4 -- s with no line of sight to the target while alert -> Awareness.lost (search)
 
 -- Per-frame caches ------------------------------------------------------------------
 -- A Holo Decoy is a Target with `decoy` set and no `p`. It is NOT in `targets` (those stay players only); it lives in
@@ -180,6 +196,10 @@ local function muzzleWorld(e: any, name: string?): Vector3
 	local off = EnemyModels.Offsets[e.kind]
 	local o = off and off[name or "muzzle"]
 	if o then
+		if e.def.static then
+			-- emplacements: the body never turns, the turret does (TurretYaw); the muzzle swings with the turret
+			return CFrame.new(e.pos) * CFrame.Angles(0, e.turretYaw or e.yaw, 0) * o
+		end
 		return rootCF(e) * o
 	end
 	return e.pos + Vector3.new(0, e.def.size * 1.2, 0)
@@ -282,6 +302,28 @@ function EnemyAI.register(e: any, cf: CFrame, opts: any)
 	e.meleeGate = melee < math.huge and not e.def.keepDistance and (e.class == "regular" or e.class == "medium")
 	e.los = true
 	LumenAI.register(e) -- LUMEN hook (no-op for other factions)
+	-- AWARENESS / TACTICS: fodder and loot runners keep the cheap always-alert behaviour
+	e.baseAggro = e.aggro
+	e.hpSeen = e.hp
+	e.losAt = now
+	e.hadTarget = false
+	e.aware = false
+	e.tactician = false
+	if not e.fodder and e.def.behavior ~= "flee" then
+		Awareness.register(e, opts)
+		e.aware = true
+		Tactician.register(e, opts)
+		e.tactician = true
+	end
+	-- units that arrive already hunting (waves, breaches, summons) skip the notice pause
+	e.wasAlert = opts.aggro == true or opts.posture == "hunt" or opts.target ~= nil
+	-- emplacements: the pivot keeps its spawn yaw for good; only the turret turns (model attribute TurretYaw)
+	if e.def.static then
+		e.baseYaw = e.yaw
+		e.turretYaw = e.yaw
+		e.turretSent = e.yaw
+		e.model:SetAttribute("TurretYaw", e.yaw)
+	end
 end
 
 function EnemyAI.unregister(e: any)
@@ -290,6 +332,14 @@ function EnemyAI.unregister(e: any)
 	e.slot = nil
 	e.circling = nil
 	LumenAI.unregister(e) -- LUMEN hook
+	if e.aware then
+		e.aware = false
+		Awareness.unregister(e)
+	end
+	if e.tactician then
+		e.tactician = false
+		Tactician.unregister(e)
+	end
 end
 
 function EnemyAI.clear()
@@ -474,7 +524,7 @@ end
 -- burst: n shots spaced out
 FIRE.burst = function(e, a, atk, now)
 	a.phase = "active"
-	a.shots = atk.count or 3
+	a.shots = math.min(atk.count or 3, VOLLEY.burstMax)
 	a.nextShot = now
 end
 ACTIVE.burst = function(e, a, atk, dt, now)
@@ -484,7 +534,7 @@ ACTIVE.burst = function(e, a, atk, dt, now)
 			shootBolt(e, atk, t, 3)
 		end
 		a.shots -= 1
-		a.nextShot = now + 0.13
+		a.nextShot = now + VOLLEY.burstGap
 		if a.shots <= 0 or not t then
 			e.act = nil
 		end
@@ -499,7 +549,8 @@ PREP.cannon = function(e, a, atk, now)
 		return
 	end
 	local from = muzzleWorld(e)
-	local speed = atk.speed or 90
+	-- the shell flies at the Projectiles speed (slowed for dodging), so the ground circle lasts until it really lands
+	local speed = (atk.speed or 90) * (if S.Projectiles.speedMul then S.Projectiles.speedMul("cannon", "cannon") else 1)
 	local flight = (t.pos - from).Magnitude / speed
 	local pt = aimPoint(from, t, speed, 0.9) -- lead only mildly: player can still dodge
 	local gy = groundAt(pt.X, pt.Z, t.pos.Y)
@@ -973,6 +1024,9 @@ FIRE.screech = function(e, a, _atk, now)
 				o.rallyMul = sc.speed
 				o.aggro = true
 				o.crossUntil = nil
+				if o.aware then
+					Awareness.alert(o, nil, e.pos, "screech")
+				end
 			end
 		end
 	end
@@ -988,9 +1042,8 @@ local function startScreech(e: any, now: number)
 	e.model:SetAttribute("AtkSeq", e.atkSeq)
 end
 
--- the bolt wind-up exists so clients can show the eye charge-up telegraph (client/Fx/EnemyAnim windupGlow); its cooldown
--- overlaps the wind-up (see startAttack) so the rate of fire is unchanged
-local DEFAULT_WINDUP = { bolt = 0.3, burst = 0.25, melee = 0.3, summon = 1.0, leap = 0.25, bite = 0.3, stomp = 0.8, charge = 0.9 }
+-- the bolt / burst wind-up is the muzzle charge-up telegraph on clients (never shorter than VOLLEY.minWindup)
+local DEFAULT_WINDUP = { bolt = 0.4, burst = 0.45, melee = 0.3, summon = 1.0, leap = 0.25, bite = 0.3, stomp = 0.8, charge = 0.9 }
 
 -- LUMEN hook: LumenAI adds needle / beam / pulse / rift to PREP/FIRE/ACTIVE using these helpers
 LumenAI.install({
@@ -1003,6 +1056,10 @@ LumenAI.install({
 
 local function startAttack(e: any, idx: number, atk: any, now: number)
 	local windup = atk.windup or DEFAULT_WINDUP[atk.kind] or 0.4
+	local volley = atk.kind == "bolt" or atk.kind == "burst"
+	if volley then
+		windup = math.max(windup, VOLLEY.minWindup)
+	end
 	local a: any = {
 		idx = idx,
 		kind = atk.kind,
@@ -1013,7 +1070,11 @@ local function startAttack(e: any, idx: number, atk: any, now: number)
 		noMove = NOMOVE[atk.kind] == true,
 	}
 	e.act = a
-	local cdBase = if atk.kind == "bolt" and not atk.windup then math.max(atk.cooldown, windup) else windup + atk.cooldown
+	local cdBase = windup + atk.cooldown
+	if volley then
+		local shots = if atk.kind == "burst" then math.min(atk.count or 3, VOLLEY.burstMax) else 1
+		cdBase = windup + (shots - 1) * VOLLEY.burstGap + math.max(atk.cooldown, VOLLEY.pause[atk.kind])
+	end
 	e.cd[idx] = now + cdBase * (e.cdMul or 1) * rng:NextNumber(0.9, 1.15) -- cdMul: elite SWIFT
 	e.gcd = now + windup + 0.35
 	-- replicated to clients: client/Fx/EnemyAnim.luau plays the attack pose (arm recoil / lunge) on AtkSeq changes
@@ -1025,9 +1086,12 @@ local function startAttack(e: any, idx: number, atk: any, now: number)
 	if prep then
 		prep(e, a, atk, now)
 	end
-	if e.class == "heavy" or e.class == "behemoth" then
-		if atk.kind ~= "bolt" and atk.kind ~= "burst" and atk.kind ~= "melee" then
-			sendAttackFx(e, atk.kind, windup)
+	if volley then
+		-- muzzle charge-up telegraph on clients (unreliable: many shooters, and AtkSeq above covers a dropped one)
+		S.Fx.playU("EnemyAttack", { id = e.id, kind = atk.kind, e = e.kind, p = muzzleWorld(e), t = windup })
+	elseif e.class == "heavy" or e.class == "behemoth" then
+		if atk.kind ~= "melee" then
+			sendAttackFx(e, atk.kind, windup, { m = muzzleWorld(e) })
 		end
 	end
 end
@@ -1088,11 +1152,18 @@ local function eligible(e: any, atk: any, dist: number, aimErr: number, los: boo
 end
 
 -- Think ------------------------------------------------------------------------------
-local function alertNearby(e: any)
-	for _, o in snapshot do
-		if o ~= e and o.alive and not o.aggro and o.faction == e.faction then
-			if flat(o.pos - e.pos).Magnitude < 75 then -- the whole squad piles in (was 50)
-				o.aggro = true
+-- Spotted / hit: aware units pass it on through Awareness (squad + nearby); fodder still wakes nearby fodder the old way
+-- (aware neighbours hear the fight through Awareness.noise instead).
+local function alertNearby(e: any, player: Player?, pos: Vector3?, reason: string)
+	local useAware = tacMode ~= "off"
+	if e.aware and useAware then
+		Awareness.alert(e, player, pos, reason)
+	else
+		for _, o in snapshot do
+			if o ~= e and o.alive and not o.aggro and not (o.aware and useAware) and o.faction == e.faction then
+				if flat(o.pos - e.pos).Magnitude < 75 then -- the whole squad piles in (was 50)
+					o.aggro = true
+				end
 			end
 		end
 	end
@@ -1189,6 +1260,38 @@ local function steer(e: any, dir: Vector3): Vector3
 		end
 	end
 	return -dir
+end
+
+-- Same probe as steer, a little longer: is there a wall / prop right behind or beside the unit along d?
+local function probeBlocked(e: any, d: Vector3): boolean
+	local h = math.min(e.def.size, 3) + 0.5
+	local r = workspace:Raycast(e.pos + Vector3.new(0, h, 0), d * (e.def.size * 1.4 + 6), envParams)
+	return r ~= nil and math.abs(r.Normal.Y) < 0.65
+end
+
+-- Backing away from the target (moveDir points away from `dir`): if a wall is behind, slide sideways instead, or stand.
+-- -> (move dir or nil, changed?)  Only costs raycasts while a unit is actually backing off.
+local function safeBackoff(e: any, moveDir: Vector3?, dir: Vector3): (Vector3?, boolean)
+	if not moveDir then
+		return nil, false
+	end
+	local m = flat(moveDir)
+	if m.Magnitude < 0.01 then
+		return moveDir, false
+	end
+	m = m.Unit
+	if m:Dot(dir) > -0.2 or not probeBlocked(e, m) then
+		return moveDir, false
+	end
+	local side = Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir
+	if not probeBlocked(e, side) then
+		return side, true
+	end
+	if not probeBlocked(e, -side) then
+		e.strafeDir = -e.strafeDir
+		return -side, true
+	end
+	return nil, true
 end
 
 local function separation(e: any): Vector3
@@ -1390,6 +1493,9 @@ local function callout(e: any, t: Target, radius: number, now: number)
 			if flat(o.pos - e.pos).Magnitude < r then
 				o.aggro = true
 				o.crossUntil = nil
+				if o.aware then
+					Awareness.alert(o, t.p, t.pos, "callout")
+				end
 				o.goal = t.pos
 				o.goalSpeed = 1
 				o.goalRefresh = now + 4
@@ -1476,6 +1582,54 @@ local function spreadApproach(e: any, tac: any, dir: Vector3, dist: number): Vec
 	return CFrame.Angles(0, ang * k * strongMul("spread"), 0) * dir
 end
 
+-- AWARENESS: not alert (guard / patrol / suspicious / search). No target, no attacks; Awareness.idle drives move + facing.
+-- Convoy walkers keep their route, and Director crossing patrols finish walking to their dest while calm.
+local function unawareThink(e: any, now: number)
+	e.target = nil
+	e.aimAt = nil
+	e.tacKey = nil
+	e.seenT = 0
+	e.slot = nil
+	e.circling = nil
+	e.noticeUntil = nil
+	if e.wasAlert then
+		-- calmed down (search over): back to the spawn rule, forget call-out walk goals
+		e.wasAlert = false
+		e.aggro = e.baseAggro
+		e.hadTarget = false
+		e.goal = nil
+	end
+	e.faceDir = nil
+	if e.routeTo then
+		local rt = flat(e.routeTo - e.pos)
+		if rt.Magnitude > 1 then
+			setWish(e, rt, e.routeSpeed or 0.5)
+			return
+		end
+	end
+	local st = e.awareState
+	if e.goal and (st == nil or st == "guard" or st == "patrol") then
+		local to = flat(e.goal - e.pos)
+		if to.Magnitude < 6 then
+			e.goal = nil
+			e.home = e.pos
+		else
+			setWish(e, to, e.goalSpeed)
+			return
+		end
+	end
+	local wish, mul, face = Awareness.idle(e, now)
+	if face and flat(face).Magnitude > 0.05 then
+		e.faceDir = flat(face).Unit
+		e.faceHard = true -- update(): keep this facing even while walking (look-around on patrol)
+	end
+	if e.def.static then
+		setWish(e, nil, 0) -- emplacements only turn
+	else
+		setWish(e, wish, mul or 0)
+	end
+end
+
 local function think(e: any, now: number)
 	local def = e.def
 
@@ -1492,6 +1646,22 @@ local function think(e: any, now: number)
 		S.Enemies.damage(e, (burn.mag or 15) * (now - last), 6, burn.source or { kind = "callin" }, "body")
 		if not e.alive then
 			return
+		end
+	end
+	e.faceHard = nil
+	-- took damage since the last think: alert (spreads to the squad) + let the tactics react (cover / dodge)
+	local hpSeen = e.hpSeen or e.hp
+	e.hpSeen = e.hp
+	if e.hp < hpSeen and tacMode ~= "off" then
+		local hb = e.lastHitBy
+		local hbe = if hb then tmap[hb] else nil
+		local from = if hbe then hbe.pos else e.pos
+		if e.tactician then
+			Tactician.onDamaged(e, from)
+		end
+		if e.aware and (now >= (e.hitAlertAt or 0) or not Awareness.isAlert(e)) then
+			e.hitAlertAt = now + 1
+			Awareness.alert(e, hb, if hbe then from else nil, "damage")
 		end
 	end
 	if e.status.stun then
@@ -1544,15 +1714,35 @@ local function think(e: any, now: number)
 		return
 	end
 
-	-- target -----------------------------------------------------------------------
-	if e.lastHitBy and not e.aggro then
+	-- awareness ----------------------------------------------------------------------
+	-- Aware units fight only while Awareness says alert; otherwise they guard / patrol / investigate / search.
+	-- Fodder, loot runners and Feel_EnemyTactics "off" use the old rule: a hit or a trooper in range wakes them.
+	local useAware = e.aware and tacMode ~= "off"
+	if useAware then
+		Awareness.sense(e, now)
+		if not Awareness.isAlert(e) then
+			unawareThink(e, now)
+			return
+		end
+		e.aggro = true -- alert: the long pick range (pickTarget)
+		if not e.wasAlert then
+			-- just noticed: stop and turn to it for a moment before the first shot / bite
+			e.wasAlert = true
+			e.noticeUntil = now + rng:NextNumber(NOTICE[1], NOTICE[2])
+			e.losAt = now
+			e.hadTarget = false
+			alertNearby(e, e.awareTarget, e.lastKnown, "spotted")
+		end
+	elseif e.lastHitBy and not e.aggro then
 		e.aggro = true
-		alertNearby(e)
+		alertNearby(e, e.lastHitBy, nil, "damage")
 	end
+
+	-- target -----------------------------------------------------------------------
 	local t, nearest = pickTarget(e)
 	if t and not e.aggro then
 		e.aggro = true
-		alertNearby(e)
+		alertNearby(e, t.p, t.pos, "spotted")
 	end
 	e.target = if t then (t.p or t.decoy) else nil -- decoy: the decoy table (see Target); players: the Player as always
 	if t and t.decoy then
@@ -1567,6 +1757,24 @@ local function think(e: any, now: number)
 		e.faceDir = nil
 		e.slot = nil
 		e.circling = nil
+		-- alert with nobody in reach: a guard / patrol (or a unit that lost its target) heads for the last known spot and
+		-- gives up into a search after LOST_AFTER s; hunters (e.patrol) keep walking at the squad below
+		if useAware and (e.hadTarget or not e.patrol) then
+			if now - e.losAt > LOST_AFTER then
+				e.losAt = now
+				e.hadTarget = false
+				Awareness.lost(e, now)
+			else
+				local lk = e.lastKnown
+				if lk and not e.routeTo and not def.static then
+					local to = flat(lk - e.pos)
+					if to.Magnitude > 6 then
+						setWish(e, to, 0.9)
+						return
+					end
+				end
+			end
+		end
 		-- idle / patrol movement
 		if e.routeTo then
 			-- convoy walkers (side objective): follow the route (SideConvoy sets routeTo / routeSpeed)
@@ -1654,6 +1862,17 @@ local function think(e: any, now: number)
 	else
 		e.los = true
 	end
+	-- out of sight too long while alert: search (Awareness walks it to the last known spot, then back to its post)
+	if useAware then
+		e.hadTarget = true
+		if e.los then
+			e.losAt = now
+		elseif now - e.losAt > LOST_AFTER then
+			e.losAt = now
+			e.hadTarget = false
+			Awareness.lost(e, now)
+		end
+	end
 
 	-- aim state for shootBolt: a new target starts wide with fresh warning shots; out of sight restarts the tighten clock,
 	-- and a long time out of sight (EnemyData.Aim.reacquire) re-arms the warning shots
@@ -1687,13 +1906,37 @@ local function think(e: any, now: number)
 		end
 	end
 
+	-- notice pause: the unit just became alert; it stands and turns to the target before it acts
+	if now < (e.noticeUntil or 0) then
+		setWish(e, nil, 0)
+		return
+	end
+
 	-- movement decision ---------------------------------------------------------------
 	local moveDir: Vector3? = nil
 	local moveSpeed = 0
+	local fireOk = true -- false = Tactician is moving the unit between covers: no new ranged attack this think
+	local useTac = e.tactician and tacMode ~= "off"
 	local kd = def.keepDistance
-	if kd and tac and (tac.hold or tac.push or tac.flank or tac.retreatAt) then
-		moveDir, moveSpeed = tacticalRanged(e, tac, t, dist, dir, kd, now)
-	elseif kd then
+	local decided = false
+	if def.static then
+		decided = true -- emplacements only turn
+	elseif kd and useTac then
+		local ok: boolean?
+		moveDir, moveSpeed, ok = Tactician.ranged(e, t, dist, dir, now)
+		fireOk = ok ~= false
+		decided = true
+	elseif kd and tac and (tac.hold or tac.push or tac.flank or tac.retreatAt) then
+		moveDir, moveSpeed = tacticalRanged(e, tac, t, dist, dir, kd, now) -- fodder shooters
+		decided = true
+	elseif not kd and useTac then
+		local md, ms = Tactician.melee(e, t, dist, dir, now)
+		if ms ~= nil then
+			moveDir, moveSpeed = md, ms
+			decided = true
+		end
+	end
+	if not decided and kd then
 		-- ranged units close in tighter (advance beyond 0.95 kd instead of 1.15, back off only inside 0.5 kd) and strafe
 		-- faster, so they keep pressure on the squad instead of plinking from max range
 		if not e.los or dist > kd * 0.95 then
@@ -1710,9 +1953,9 @@ local function think(e: any, now: number)
 			moveDir = Vector3.new(-dir.Z, 0, dir.X) * e.strafeDir
 			moveSpeed = 0.75
 		end
-	elseif e.meleeGate and not t.decoy then
+	elseif not decided and e.meleeGate and not t.decoy then
 		moveDir, moveSpeed = meleeMove(e, t, dist, dir, e.stopDist or 4, now)
-	else
+	elseif not decided then
 		local stop = e.stopDist or 4
 		if dist > stop then
 			moveDir = dir
@@ -1730,6 +1973,11 @@ local function think(e: any, now: number)
 	if tac and tac.spread and moveDir == dir and not t.decoy then
 		moveDir = spreadApproach(e, tac, dir, dist)
 	end
+	-- backing away: never into a wall (slide sideways or stand instead)
+	local backed = false
+	if moveDir and not def.static then
+		moveDir, backed = safeBackoff(e, moveDir, dir)
+	end
 	-- convoy walkers (side objective): keep marching along the route while shooting back
 	if e.routeTo then
 		local rt = flat(e.routeTo - e.pos)
@@ -1740,10 +1988,19 @@ local function think(e: any, now: number)
 	end
 	-- stuck detection: wiggle out
 	if now >= e.stuckT then
-		if moveSpeed > 0.3 and flat(e.pos - e.stuckPos).Magnitude < def.speed * 0.25 then
+		if moveDir and moveSpeed > 0.3 and flat(e.pos - e.stuckPos).Magnitude < def.speed * 0.25 then
 			e.stuckUntil = now + 0.9
-			local ang = rng:NextNumber(0, math.pi * 2)
-			e.stuckDir = Vector3.new(math.cos(ang), 0, math.sin(ang))
+			-- up to 3 random headings, first one with no wall in front wins
+			local pick: Vector3? = nil
+			for _ = 1, 3 do
+				local ang = rng:NextNumber(0, math.pi * 2)
+				local d = Vector3.new(math.cos(ang), 0, math.sin(ang))
+				pick = d
+				if not probeBlocked(e, d) then
+					break
+				end
+			end
+			e.stuckDir = pick
 		end
 		e.stuckPos = e.pos
 		e.stuckT = now + 1
@@ -1753,7 +2010,7 @@ local function think(e: any, now: number)
 		moveSpeed = 0.9
 	end
 	-- fodder inside FodderSteerRange: plain seek, no obstacle raycasts
-	setWish(e, moveDir, moveSpeed, now < e.stuckUntil or (e.fodder == true and dist <= Config.Action.FodderSteerRange))
+	setWish(e, moveDir, moveSpeed, backed or now < e.stuckUntil or (e.fodder == true and dist <= Config.Action.FodderSteerRange))
 
 	-- attack decision -------------------------------------------------------------------
 	if e.act or now < e.gcd then
@@ -1775,7 +2032,7 @@ local function think(e: any, now: number)
 		if ok then
 			if MELEE_KINDS[atk.kind] and atk.kind ~= "charge" then
 				table.insert(close, { idx = i, atk = atk })
-			else
+			elseif fireOk then
 				table.insert(far, { idx = i, atk = atk })
 			end
 		end
@@ -1867,7 +2124,7 @@ local function update(e: any, dt: number, now: number)
 
 	-- facing
 	local want: Vector3? = e.faceDirOverride or e.faceDir
-	if (not want or (e.wishSpeed > 0.3 and not e.target)) and e.vel.Magnitude > 1 then
+	if (not want or (e.wishSpeed > 0.3 and not e.target and not e.faceHard)) and e.vel.Magnitude > 1 then
 		want = e.vel
 	end
 	if stunned then
@@ -1883,6 +2140,15 @@ local function update(e: any, dt: number, now: number)
 		local diff = wrapPi(yawOf(want) - e.yaw)
 		local rate = (def.turn or TURN[e.class]) * (if e.status.slow then 0.6 else 1)
 		e.yaw += math.clamp(diff, -rate * dt, rate * dt)
+	end
+	-- emplacements: e.yaw is the turret's aim; clients turn the turret parts to TurretYaw (sent at think rate, on change)
+	if def.static then
+		e.turretYaw = e.yaw
+		if now >= (e.turretSendAt or 0) and math.abs(wrapPi(e.yaw - (e.turretSent or 0))) > 0.02 then
+			e.turretSendAt = now + THINK
+			e.turretSent = e.yaw
+			e.model:SetAttribute("TurretYaw", e.yaw)
+		end
 	end
 
 	snapGround(e, dt, e.needSnap)
@@ -1904,17 +2170,18 @@ local function update(e: any, dt: number, now: number)
 	local move = math.min(speed / (def.speed * 0.7), 1.3)
 	local bobY = if moving then math.abs(math.sin(e.animT)) * e.rig.bob * math.min(move, 1) else 0
 	local pos = e.pos + Vector3.new(0, bobY + e.air, 0)
-	local cf = CFrame.new(pos) * CFrame.Angles(0, e.yaw, 0)
+	local pivotYaw = if def.static then (e.baseYaw or e.yaw) else e.yaw -- emplacement body never turns
+	local cf = CFrame.new(pos) * CFrame.Angles(0, pivotYaw, 0)
 	if e.tumble then
 		cf *= e.tumble -- blast tumble (ACTIVE.fling)
 	end
 	local last = e.lastCF
-	if not last or moving or e.windupV > 0.01 or e.air > 0 or e.tumble ~= nil or (last.Position - pos).Magnitude > 0.01 or math.abs(wrapPi(e.lastYaw - e.yaw)) > 0.002 then
+	if not last or moving or e.windupV > 0.01 or e.air > 0 or e.tumble ~= nil or (last.Position - pos).Magnitude > 0.01 or math.abs(wrapPi(e.lastYaw - pivotYaw)) > 0.002 then
 		-- perf saver: far enemies skip the model write every 2nd frame (lastCF / lastYaw stay stale, so the next frame writes)
 		if not e.skipMove then
 			e.model:PivotTo(cf)
 			e.lastCF = cf
-			e.lastYaw = e.yaw
+			e.lastYaw = pivotYaw
 			if (moving or e.windupV > 0.01) and e.near then
 				EnemyModels.animate(e.rig, cf, e.animT, move, e.windupV)
 			end
@@ -2066,6 +2333,8 @@ end
 function EnemyAI.init(s: { [string]: any })
 	S = s
 	LumenAI.init(s) -- LUMEN hook
+	Awareness.init(s)
+	Tactician.init(s)
 	rebuildFilter()
 	local function hook(p: Player)
 		p.CharacterAdded:Connect(function()

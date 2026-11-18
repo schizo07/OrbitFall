@@ -38,6 +38,14 @@
 --   Director.meleeSlots()                max melee attackers per player (EnemyAI)
 --   Heavy / behemoth units that spawn during BUILD / BREACH get an entrance (roar, ground burst or drop pod, shake) and the
 --   players within Intensity.Heavy.calloutRange get an Fx "HeavyContact" callout.
+--
+-- ENCOUNTERS (Config.Encounters): fewer, tougher enemies. Director.start places GARRISONS (server/Enemies/Garrisons.luau: guard
+--   posts at the sites, patrol squads walking between them) instead of the old patrol-point guard groups. The live cap and every
+--   composed budget are scaled down (CapMult / BudgetMult), fodder batches are smaller (FodderMult), CALM is much longer early in
+--   the mission (CalmEarly easing to CalmLate over RampTime), roaming crossing patrols are rarer / smaller and spotted calls have a
+--   longer cooldown. Garrison units that have not joined the fight do not use up the live cap (up to GarrisonFreeLoad) and are
+--   never trimmed / recycled. Every wave / breach / reinforcement unit spawns with posture "hunt"; roaming patrols with posture
+--   "patrol" and a route. Explosions make nearby unaware enemies suspicious (Awareness.noise, radius x NOISE_MULT).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
@@ -47,7 +55,30 @@ local Config = require(Shared.Config)
 local EnemyData = require(Shared.Data.Enemies)
 local IT = require(Shared.Data.Intensity)
 local BreachSources = require(script.Parent.BreachSources)
+local Garrisons = require(script.Parent.Garrisons)
 local AirDefence = require(script.Parent.Parent.AirDefence)
+
+local ENC = Config.Encounters
+local NOISE_MULT = 4 -- explosion noise radius = blast radius x this
+
+-- Awareness (server/Enemies/Awareness.luau) is required on first use, so a missing / failing module never stops the Director
+local awarenessMod: any = nil
+local awarenessTried = false
+local function awareness(): any
+	if not awarenessTried then
+		awarenessTried = true
+		local mod = script.Parent:FindFirstChild("Awareness")
+		if mod and mod:IsA("ModuleScript") then
+			local ok, res = pcall(require, mod)
+			if ok then
+				awarenessMod = res
+			else
+				warn("[Director] Awareness require failed:", res)
+			end
+		end
+	end
+	return awarenessMod
+end
 
 local Director = {}
 
@@ -102,7 +133,8 @@ local nextProximity = 0
 
 local MAP_HALF = Config.MapSize / 2 - 12
 local MIN_PLAYER_DIST = 45
-local INITIAL_CAP_FRACTION = 0.65
+local INITIAL_CAP_FRACTION = 0.65 -- fallback guard groups (no garrison could be placed)
+local CAP_MARGIN = math.max(2, math.ceil(6 * ENC.CapMult)) -- room a roaming patrol / spotted call needs under the live cap
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -201,13 +233,14 @@ end
 -- Live enemy cap scales with party size and difficulty (1-5), never above Config.MaxEnemies. It is counted in LOAD (fodder = 0.5).
 local function liveCap(): number
 	local A = Config.Action
-	local base = math.min(A.CapMax, A.CapBase + A.CapPerPlayer * #Players:GetPlayers() + A.CapPerDifficulty * difficulty)
+	local cm = ENC.CapMult
+	local base = math.floor(math.min(A.CapMax, A.CapBase + A.CapPerPlayer * #Players:GetPlayers() + A.CapPerDifficulty * difficulty) * cm)
 	if istate == "breach" then
 		-- a breach may briefly overfill the field so the wave really "pours in"
 		local mult = if extractHold then IT.Extract.capMult else IT.BreachWave.capMult
-		local cap = math.min(math.floor(base * mult), A.CapMax + IT.BreachWave.capOver)
+		local cap = math.min(math.floor(base * mult), math.floor((A.CapMax + IT.BreachWave.capOver) * cm))
 		if extractHold then
-			cap = math.max(cap, IT.Extract.capFloor)
+			cap = math.max(cap, math.floor(IT.Extract.capFloor * cm))
 		end
 		return cap
 	end
@@ -215,8 +248,9 @@ local function liveCap(): number
 end
 Director.liveCap = liveCap -- S.Director.liveCap(): EnemyAI caps summons with it
 
+-- live load minus garrison units still at their posts (they hold the map; they do not use up the room for waves / breaches)
 local function loadNow(): number
-	return S.Enemies.load()
+	return S.Enemies.load() - math.min(Garrisons.idleLoad(), ENC.GarrisonFreeLoad)
 end
 
 -- Composition ------------------------------------------------------------------------
@@ -240,7 +274,7 @@ local function compose(budget: number, faction: string, heavyChance: number?, be
 	local behSlots = Config.MaxBehemoths - counts.behemoth - pending.behemoth
 	local room = math.floor(liveCap() - loadNow() - pendingLoad())
 	local list: { string } = {}
-	local b = budget
+	local b = budget * ENC.BudgetMult
 
 	if b >= 28 and behSlots > 0 and rng:NextNumber() < (behemothChance or 0.4) then
 		table.insert(list, roster.behemoth)
@@ -450,13 +484,16 @@ local function heavyArrival(kindId: string, pos: Vector3)
 end
 
 -- method: "ground" (walk in), "drop" (cargo drone), "breach" (burrow)
--- opts: aggro, patrol, dest (walk target, then they idle), crossFor (seconds they ignore the squad while walking to dest)
+-- opts: aggro, patrol, dest (walk target, then they idle), crossFor (seconds they ignore the squad while walking to dest),
+-- posture / route / squad (Awareness; aggro = true always means posture "hunt")
+local deliverSeq = 0
 local function deliver(kinds: { string }, base: Vector3, method: string, opts: any)
 	if #kinds == 0 then
 		return
 	end
 	local myGen = gen
 	local spots = unitPositions(kinds, base)
+	deliverSeq += 1
 	local spawnOpts = {
 		aggro = opts.aggro == true,
 		patrol = opts.patrol ~= false,
@@ -465,6 +502,9 @@ local function deliver(kinds: { string }, base: Vector3, method: string, opts: a
 		dest = opts.dest,
 		crossFor = opts.crossFor,
 		reinforced = opts.reinforced == true, -- delivered by a spotted call: such a unit may only chain one further call per breach
+		posture = if opts.aggro == true then "hunt" else opts.posture,
+		route = opts.route,
+		squad = opts.squad or ("dlv" .. gen .. "_" .. deliverSeq), -- one delivery = one squad (shared alerts)
 	}
 	for _, k in kinds do
 		pending[pendKey(k)] += 1
@@ -749,7 +789,7 @@ end
 local function emitFodder(src: any, n: number): number
 	local room = math.floor((liveCap() - loadNow() - pendingLoad()) / Config.Action.FodderCost)
 	-- small squads get thinner bursts (solo 60 %, a full squad 100 %)
-	local pmult = math.min(1, IT.Sources.fodderSoloMult + IT.Sources.fodderPerPlayerMult * (playerScale() - 1))
+	local pmult = math.min(1, IT.Sources.fodderSoloMult + IT.Sources.fodderPerPlayerMult * (playerScale() - 1)) * ENC.FodderMult
 	n = math.min(math.max(1, math.floor(n * pmult + 0.5)), room)
 	if n <= 0 then
 		return 0
@@ -762,7 +802,7 @@ local function emitFodder(src: any, n: number): number
 		task.delay((i - 1) * 0.06, function()
 			pending.fodder = math.max(pending.fodder - 1, 0)
 			if running and gen == myGen and not src.closed and loadNow() < liveCap() then
-				spawnUnit(kind, ringSpot(src, ring.min, ring.max), { aggro = true, patrol = true, hunt = true, home = src.pos })
+				spawnUnit(kind, ringSpot(src, ring.min, ring.max), { aggro = true, posture = "hunt", patrol = true, hunt = true, home = src.pos })
 			end
 		end)
 	end
@@ -774,7 +814,7 @@ local function emitElite(src: any)
 		return
 	end
 	local kind = EnemyData.Factions[src.faction].roster.medium
-	spawnUnit(kind, ringSpot(src, 3, 6), { aggro = true, patrol = true, hunt = true, home = src.pos })
+	spawnUnit(kind, ringSpot(src, 3, 6), { aggro = true, posture = "hunt", patrol = true, hunt = true, home = src.pos })
 end
 
 -- the breach's heavy: telegraphed at a source, arrives like any other entrance
@@ -796,7 +836,7 @@ local function fireSourceHeavy(): boolean
 	task.delay(IT.Heavy.extraDelay, function()
 		pending.heavy = math.max(pending.heavy - 1, 0)
 		if running and gen == myGen then
-			spawnUnit(kind, pos, { aggro = true, patrol = true, hunt = true, home = src.pos })
+			spawnUnit(kind, pos, { aggro = true, posture = "hunt", patrol = true, hunt = true, home = src.pos })
 			heavyArrival(kind, pos)
 		end
 	end)
@@ -852,7 +892,7 @@ local function sourceTick(src: any, t: number)
 		emitFodder(src, rng:NextInteger(SC.fodderCount.min, SC.fodderCount.max))
 	end
 	if t >= em.nextElite then
-		em.nextElite = t + SC.eliteEvery
+		em.nextElite = t + SC.eliteEvery * ENC.EliteEveryMult
 		emitElite(src)
 	end
 end
@@ -862,6 +902,14 @@ function Director.onExplosion(pos: Vector3, radius: number, core: number, dmg: n
 	if running then
 		BreachSources.onExplosion(pos, radius, core, dmg, source)
 	end
+	-- loud: unaware enemies around the blast turn to look (Awareness contract: noise(pos, radius, player?))
+	local A = awareness()
+	if A and A.noise then
+		local okN, errN = pcall(A.noise, pos, (radius or 6) * NOISE_MULT, source and source.player or nil)
+		if not okN then
+			warn("[Director] Awareness.noise failed:", errN)
+		end
+	end
 end
 
 -- Phases ---------------------------------------------------------------------------------
@@ -870,8 +918,11 @@ local function startCalm(first: boolean?)
 	pendingForcedBuild = nil
 	local dur = randIn(IT.Calm) / scale()
 	dur = math.max(dur, IT.CalmMinScaled)
+	-- encounters: waves are rare early (the squad explores and meets garrisons), more frequent as the mission goes on
+	local ramp = math.clamp((now() - startedAt) / ENC.RampTime, 0, 1)
+	dur *= ENC.CalmEarly + (ENC.CalmLate - ENC.CalmEarly) * ramp
 	if first then
-		dur *= 0.9
+		dur *= ENC.FirstCalmMult
 	end
 	if timerCritical then
 		dur = math.max(dur * IT.TimerCriticalCalmMult, 10)
@@ -883,7 +934,7 @@ local function startCalm(first: boolean?)
 		pendingForcedBuild = q.delay
 	end
 	setPhase("calm", dur)
-	nextPatrol = now() + (if first then IT.Patrol.firstDelay else rng:NextNumber(6, 10))
+	nextPatrol = now() + (if first then ENC.PatrolFirstDelay else rng:NextNumber(18, 30))
 end
 
 local function startBuild(dur: number?)
@@ -931,15 +982,21 @@ local function trimStragglers()
 		return
 	end
 	local R = IT.Relax
-	local keep = rng:NextInteger(R.stragglersMin, R.stragglersMax)
-	local all = S.Enemies.getAll()
+	local keep = math.max(2, math.floor(rng:NextInteger(R.stragglersMin, R.stragglersMax) * ENC.CapMult + 0.5))
+	local all = {}
+	for _, e in S.Enemies.getAll() do
+		if not e.garrison then
+			table.insert(all, e)
+		end
+	end
 	local excess = #all - keep
 	if excess <= 0 then
 		return
 	end
 	local rows = {}
 	for _, e in all do
-		if (e.class == "regular" or e.class == "medium") and not e.def.loot then -- fodder counts as regular; loot runners keep their own timer
+		-- fodder counts as regular; loot runners keep their own timer; garrisons hold their posts
+		if (e.class == "regular" or e.class == "medium") and not e.def.loot and not e.garrison then
 			table.insert(rows, { e = e, d = minDistTo(ps, e.pos or e.root.Position) })
 		end
 	end
@@ -1277,7 +1334,7 @@ local function patrol()
 		return
 	end
 	local ps = playerPositions()
-	if #ps == 0 or loadNow() >= liveCap() - 6 then
+	if #ps == 0 or loadNow() >= liveCap() - CAP_MARGIN then
 		return
 	end
 	local P = IT.Patrol
@@ -1313,8 +1370,9 @@ local function patrol()
 	local ahead = if fwd then fwd * randIn(P.ahead) else Vector3.zero
 	local want = c + ahead - spawnDir * randIn(P.overshoot)
 	local dest = groundPos(want.X, want.Z) or want
-	local kinds = patrolKinds(rng:NextInteger(P.count.min, P.count.max))
-	deliver(kinds, spot, "ground", { aggro = false, patrol = false, dest = dest, crossFor = P.crossFor })
+	local kinds = patrolKinds(rng:NextInteger(ENC.PatrolCount[1], ENC.PatrolCount[2]))
+	-- a roaming patrol: walks spot -> dest (across the squad's path) and back, until it notices someone
+	deliver(kinds, spot, "ground", { aggro = false, patrol = false, dest = dest, crossFor = P.crossFor, posture = "patrol", route = { dest, spot } })
 end
 
 -- Spotted -> reinforce -------------------------------------------------------------------
@@ -1436,10 +1494,10 @@ function Director.onSpotted(e: any): boolean
 	if istate == "relax" or inLull(t) or pendingCall or breachWindow(t) then
 		return false
 	end
-	if t - lastReinforce < A.ReinforceCooldown then
+	if t - lastReinforce < ENC.ReinforceCooldown then
 		return false
 	end
-	if loadNow() >= liveCap() - 6 then
+	if loadNow() >= liveCap() - CAP_MARGIN then
 		return false
 	end
 	-- units that arrived with a call chain at most A.ReinforceChainMax further calls per breach cycle (then they just fight)
@@ -1514,7 +1572,7 @@ local function proximityPass()
 	local A = Config.Action
 	local far = {}
 	for _, e in S.Enemies.getAll() do
-		if (e.class == "regular" or e.class == "medium") and not e.def.loot and minDistTo(ps, e.pos or e.root.Position) > A.RecycleDist then
+		if (e.class == "regular" or e.class == "medium") and not e.def.loot and not e.garrison and minDistTo(ps, e.pos or e.root.Position) > A.RecycleDist then
 			table.insert(far, e)
 			if #far >= A.RecycleMax then
 				break
@@ -1528,7 +1586,7 @@ local function proximityPass()
 		end
 		local kind = e.spawnKind or e.kind
 		S.Enemies.despawn(e)
-		spawnUnit(kind, spot, { aggro = true, patrol = true, hunt = true, home = spot })
+		spawnUnit(kind, spot, { aggro = true, posture = "hunt", patrol = true, hunt = true, home = spot })
 	end
 end
 
@@ -1596,7 +1654,7 @@ local function loop(myGen: number)
 		end
 		if t >= nextPatrol then
 			local P = IT.Patrol
-			local interval = (if istate == "build" then P.buildInterval else P.calmInterval) / pressure
+			local interval = (if istate == "build" then P.buildInterval else P.calmInterval) * ENC.PatrolIntervalMult / pressure
 			nextPatrol = t + interval * rng:NextNumber(0.85, 1.15)
 			if (istate == "calm" or istate == "build") and not extractHold then
 				guarded("patrol", patrol, t)
@@ -1701,7 +1759,7 @@ function Director.start(m: any, faction: string, diff: number, opts: any?)
 	pressure = 1
 	startedAt = now()
 	nextPatrol = startedAt + IT.Patrol.firstDelay
-	lastReinforce = startedAt - Config.Action.ReinforceCooldown * 0.5
+	lastReinforce = startedAt - ENC.ReinforceCooldown * 0.5
 	for k in pending do
 		pending[k] = 0
 	end
@@ -1733,7 +1791,8 @@ function Director.start(m: any, faction: string, diff: number, opts: any?)
 	BreachSources.clear()
 	startCalm(true)
 
-	-- initial guard groups around the patrol points, away from the insertion zone
+	-- garrisons (guard posts + patrol squads) hold the map; the old guard groups around the patrol points are the fallback
+	Garrisons.clear()
 	task.spawn(function()
 		if opts and opts.noInitial then
 			return
@@ -1743,6 +1802,19 @@ function Director.start(m: any, faction: string, diff: number, opts: any?)
 			if not okB then
 				warn("[Director] placeBastions failed:", errB)
 			end
+		end
+		local okG, placedG = pcall(Garrisons.place, m, factionId, difficulty, {
+			groundPos = groundPos,
+			spots = unitPositions,
+			alive = function(): boolean
+				return running and gen == myGen
+			end,
+			players = playerScale(),
+		})
+		if not okG then
+			warn("[Director] Garrisons.place failed:", placedG)
+		elseif placedG > 0 then
+			return
 		end
 		local ins = m and m.insertion and m.insertion.Position or Vector3.zero
 		local points: { Vector3 } = {}
@@ -1777,7 +1849,7 @@ function Director.start(m: any, faction: string, diff: number, opts: any?)
 			if g then
 				local kinds = compose(perGroup, factionId)
 				-- keep initial heavies rare: one behemoth at most is handled by compose()
-				deliver(kinds, g, "ground", { aggro = false, patrol = false })
+				deliver(kinds, g, "ground", { aggro = false, patrol = false, posture = "guard" })
 			end
 			task.wait(0.05)
 		end
@@ -1805,11 +1877,13 @@ function Director.stop(clearEnemies: boolean?)
 	end
 	if clearEnemies and S.Enemies then
 		S.Enemies.clear()
+		Garrisons.clear()
 	end
 end
 
 function Director.init(s: { [string]: any })
 	S = s
+	Garrisons.init(s)
 	BreachSources.init(s, { groundPos = groundPos })
 	BreachSources.onOpen = function(src)
 		pushSourceEvent("open", src)

@@ -1,7 +1,11 @@
 --!nonstrict
 -- Client renderers for enemy Fx kinds (server: src/server/Enemies/*).
---   Bolt      {id, a, v, g, style, c, life, r}     moving projectile  (pos = a + v t - (0, g t^2 / 2, 0))
---   BoltEnd   {id, p, style, r, pd?, miss?, blocked?}
+--   Bolt      {id, a, v, g, style, c, life, r, o?} moving projectile  (pos = a + v t - (0, g t^2 / 2, 0)); o = owner enemy id
+--   BoltEnd   {id, p, style, r, pd?, miss?, blocked?, hit?}   hit = struck a trooper / decoy (bigger impact)
+--   EnemyAttack kinds bolt / burst / cannon / needle with t > 0: muzzle charge-up glow over the wind-up t. Muzzle = d.m
+--             (world Vector3) when sent, else d.p for bolt / burst, else the spot that kind's last bolt left from (cached
+--             from Bolt.o), else a guess.
+--   Straight bolts passing within ~5 studs of the local trooper play a whiz and flash the screen edge on that side.
 --   Telegraph {shape="circle", p, r, t} | {shape="line", a, b, w, t}   red ground warning that fills over t
 --   DropShip  {a, b, t?, hold?}            robot cargo drone flies in from a, drops a pod at b
 --   Breach    {p}                          burrow breach (ground burst + rocks)
@@ -11,8 +15,11 @@
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local PlayersService = game:GetService("Players")
+local SoundService = game:GetService("SoundService")
 
 local CallInModels = require(script.Parent.Parent:WaitForChild("CallInModels"))
+local EnemyDefs = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Enemies"))
 
 local EnemyFx = {}
 
@@ -34,7 +41,7 @@ local In = Enum.EasingDirection.In
 
 local MAX_BOLTS = 140
 local MAX_TELEGRAPHS = 48
-local MAX_LIT_BOLTS = 6 -- bolts that carry a PointLight at once
+local MAX_LIT_BOLTS = 8 -- bolts that carry a PointLight at once
 local litBolts = 0
 local BOLT_CORE = C3(255, 90, 40) -- robot laser: red-orange body ...
 local BOLT_HOT = C3(255, 200, 170) -- ... with a warm white-hot centre (pure white Neon blooms into a blown-out blob)
@@ -164,6 +171,9 @@ local function destroyBolt(b: any)
 	if b.halo then
 		b.halo:Destroy()
 	end
+	if b.tail then
+		b.tail:Destroy()
+	end
 	if b.lit then
 		litBolts -= 1
 	end
@@ -177,11 +187,127 @@ local function removeBolt(id: any, b: any)
 	end
 end
 
+-- Near miss: whiz + screen-edge flash on the side the shot passed ------------------------------------
+local WHIZ_ID = "rbxassetid://123402454968182" -- short whoosh arc
+local WHIZ_NEAR = 5 -- studs from the trooper's root
+local WHIZ_HIT = 2.4 -- closer than this the server counts a hit (hitRadius ~2.2): no whiz
+local lastWhiz = 0
+local whizAtt: Attachment? = nil
+local whizSound: Sound? = nil
+local edgeGui: ScreenGui? = nil
+local edges: { [string]: Frame } = {}
+
+local function whizAudio(at: Vector3)
+	if not whizAtt or not whizAtt.Parent then
+		local att = Instance.new("Attachment")
+		att.Name = "BoltWhiz"
+		att.Parent = workspace.Terrain
+		local s = Instance.new("Sound")
+		s.SoundId = WHIZ_ID
+		s.Volume = 0.7
+		s.RollOffMinDistance = 6
+		s.RollOffMaxDistance = 45
+		local master = SoundService:FindFirstChild("OrbitMaster")
+		local group = master and master:FindFirstChild("Enemies")
+		if group and group:IsA("SoundGroup") then
+			s.SoundGroup = group
+		end
+		s.Parent = att
+		whizAtt = att
+		whizSound = s
+	end
+	local att = whizAtt :: Attachment
+	local s = whizSound :: Sound
+	att.WorldPosition = at
+	s.PlaybackSpeed = 1.45 + math.random() * 0.3
+	s.TimePosition = 0
+	s:Play()
+end
+
+local function edgeFrame(gui: ScreenGui, name: string, pos: UDim2, size: UDim2, rot: number): Frame
+	local f = Instance.new("Frame")
+	f.Name = name
+	f.BorderSizePixel = 0
+	f.BackgroundColor3 = BOLT_RED
+	f.BackgroundTransparency = 1
+	f.Position = pos
+	f.Size = size
+	local g = Instance.new("UIGradient")
+	g.Rotation = rot
+	g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
+	g.Parent = f
+	f.Parent = gui
+	return f
+end
+
+local function edgeHint(side: string, color: Color3)
+	local lp = PlayersService.LocalPlayer
+	local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
+	if not pg then
+		return
+	end
+	if not edgeGui or edgeGui.Parent ~= pg then
+		if edgeGui then
+			edgeGui:Destroy()
+		end
+		local gui = Instance.new("ScreenGui")
+		gui.Name = "BoltWhizHint"
+		gui.IgnoreGuiInset = true
+		gui.ResetOnSpawn = false
+		gui.DisplayOrder = 2
+		gui.Parent = pg
+		edgeGui = gui
+		edges = {
+			left = edgeFrame(gui, "Left", UDim2.fromScale(0, 0), UDim2.fromScale(0.07, 1), 0),
+			right = edgeFrame(gui, "Right", UDim2.fromScale(0.93, 0), UDim2.fromScale(0.07, 1), 180),
+			top = edgeFrame(gui, "Top", UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.09), 90),
+			bottom = edgeFrame(gui, "Bottom", UDim2.fromScale(0, 0.91), UDim2.fromScale(1, 0.09), 270),
+		}
+	end
+	local f = edges[side]
+	if not f then
+		return
+	end
+	f.BackgroundColor3 = color
+	f.BackgroundTransparency = 0.45
+	TweenService:Create(f, TweenInfo.new(0.4, Quad, Out), { BackgroundTransparency = 1 }):Play()
+end
+
+-- q = closest point of the pass, lp = trooper root position
+local function nearMiss(q: Vector3, lp: Vector3, color: Color3)
+	local now = os.clock()
+	if now - lastWhiz < 0.12 then
+		return
+	end
+	lastWhiz = now
+	whizAudio(q)
+	local cam = workspace.CurrentCamera
+	if not cam then
+		return
+	end
+	local off = q - lp
+	local rx = off:Dot(cam.CFrame.RightVector)
+	local uy = off.Y
+	local side = if math.abs(rx) >= math.abs(uy) * 0.8 then (if rx >= 0 then "right" else "left")
+		else (if uy >= 0 then "top" else "bottom")
+	edgeHint(side, color)
+end
+
+local function closestOnSeg(a: Vector3, b: Vector3, p: Vector3): (Vector3, number)
+	local ab = b - a
+	local denom = ab:Dot(ab)
+	local t = 0
+	if denom > 1e-6 then
+		t = math.clamp((p - a):Dot(ab) / denom, 0, 1)
+	end
+	return a + ab * t, t
+end
+
 -- returns true when the bolt is finished
 -- Studio A/B Feel_PerfSaver ("touch" = phones only, "all" = everywhere): bolts more than SAVER_FAR studs from the camera
 -- raycast every 2nd frame; the ray then sweeps from the last checked position, so the doubled segment cannot tunnel.
 local SAVER_FAR = 60
-local function stepBolt(b: any, now: number, camPos: Vector3?): boolean
+local function stepBolt(b: any, now: number, camPos: Vector3?, viewPos: Vector3?, lpPos: Vector3?): boolean
 	local t = now - b.t0
 	if t > b.life + 0.15 or not b.part.Parent then
 		return true
@@ -205,14 +331,47 @@ local function stepBolt(b: any, now: number, camPos: Vector3?): boolean
 			return true -- reached the ground: the slug vanishes there (BoltEnd plays the impact)
 		end
 	end
+	-- near miss: straight shots only, once per bolt, only when the segment passes the trooper
+	local lastPos = b.lastPos
+	b.lastPos = pos
+	if lpPos and lastPos and not b.whizzed and b.oriented and b.g <= 0 then
+		local dl = pos - lpPos
+		if dl:Dot(dl) < 900 then
+			local q, u = closestOnSeg(lastPos, pos, lpPos)
+			local d = (q - lpPos).Magnitude
+			if u > 0 and u < 1 and d <= WHIZ_NEAR and d >= WHIZ_HIT then
+				b.whizzed = true
+				nearMiss(q, lpPos, b.col)
+			end
+		end
+	end
 	if not skipRay then
 		b.prev = pos
+	end
+	-- far bolts get a fatter shell / tail so they stay readable (cross-section only, updated in steps)
+	if viewPos and (b.halo or b.tail) then
+		local k = math.clamp((pos - viewPos).Magnitude / 70, 1, 1.7)
+		if math.abs(k - b.k) > 0.12 then
+			b.k = k
+			if b.halo then
+				local s = b.haloSize
+				b.halo.Size = Vector3.new(s.X, s.Y * k, s.Z * k)
+			end
+			if b.tail then
+				local s = b.tailSize
+				b.tail.Size = Vector3.new(s.X, s.Y * k, s.Z * k)
+			end
+		end
 	end
 	local cf
 	if b.oriented and vel.Magnitude > 0.1 then
 		local dir = vel.Unit
 		local c = pos - dir * b.back -- the head of the slug sits on the projectile position, the body trails behind it
 		cf = CFrame.lookAt(c, c + dir) * CYL_ALONG_Z
+		if b.tail then
+			local ct = pos - dir * b.tailBack
+			b.tail.CFrame = CFrame.lookAt(ct, ct + dir) * CYL_ALONG_Z
+		end
 	else
 		cf = CFrame.new(pos)
 	end
@@ -243,14 +402,22 @@ local function step(dt: number)
 		-- perf saver (on for phones / tablets; Studio A/B Feel_PerfSaver "off" / "all"): far bolts raycast every 2nd
 		-- frame; camPos stays nil when the saver is off
 		local camPos: Vector3? = nil
+		local cam = workspace.CurrentCamera
+		local viewPos: Vector3? = if cam then cam.CFrame.Position else nil
 		local mode = if RunService:IsStudio() then workspace:GetAttribute("Feel_PerfSaver") else nil
 		if mode == "all" or (mode ~= "off" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) then
-			local cam = workspace.CurrentCamera
-			camPos = if cam then cam.CFrame.Position else nil
+			camPos = viewPos
+		end
+		local lpPos: Vector3? = nil
+		local lp = PlayersService.LocalPlayer
+		local ch = lp and lp.Character
+		local root = ch and ch:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			lpPos = root.Position
 		end
 		-- one bad bolt must never abort the loop (that would freeze every bolt after it in place, forever)
 		for id, b in bolts do
-			local ok, done = pcall(stepBolt, b, now, camPos)
+			local ok, done = pcall(stepBolt, b, now, camPos, viewPos, lpPos)
 			if not ok then
 				stepWarn("bolt", done)
 			end
@@ -315,6 +482,67 @@ local function flash(p: Vector3, color: Color3, size: number, life: number)
 	end)
 end
 
+-- Enemy models by EnemyId (workspace.Enemies), rescanned on a miss at most 4x a second
+local idModels: { [any]: Model } = {}
+local lastScan = 0
+local function modelById(id: any): Model?
+	if id == nil then
+		return nil
+	end
+	local m = idModels[id]
+	if m and m.Parent then
+		return m
+	end
+	local now = os.clock()
+	if now - lastScan < 0.25 then
+		return nil
+	end
+	lastScan = now
+	table.clear(idModels)
+	local f = workspace:FindFirstChild("Enemies")
+	if not f then
+		return nil
+	end
+	for _, c in f:GetChildren() do
+		if c:IsA("Model") then
+			local cid = c:GetAttribute("EnemyId")
+			if cid ~= nil then
+				idModels[cid] = c
+			end
+		end
+	end
+	return idModels[id]
+end
+
+-- the frame a muzzle offset is stored in: the model pivot, or for a turret (TurretYaw attribute) its yawed base
+local function muzzleFrame(m: Model): CFrame
+	local pv = m:GetPivot()
+	local yaw = m:GetAttribute("TurretYaw")
+	if type(yaw) == "number" then
+		return CFrame.new(pv.Position) * CFrame.Angles(0, yaw, 0)
+	end
+	return pv
+end
+
+local function kindOf(m: Model, id: any): any
+	local k = m:GetAttribute("Kind")
+	return if type(k) == "string" then k else id
+end
+
+-- last seen muzzle offset + bolt colour per enemy kind (from Bolt.o), used by the charge-up glow
+local muzzleCache: { [any]: { off: Vector3, col: Color3 } } = {}
+local function rememberMuzzle(id: any, a: Vector3, col: Color3)
+	local m = modelById(id)
+	if not m then
+		return
+	end
+	local off = muzzleFrame(m):PointToObjectSpace(a)
+	if off.Magnitude > 80 then
+		return
+	end
+	muzzleCache[kindOf(m, id)] = { off = off, col = col }
+end
+
 local BOLT_SOUND = { bolt = "EnemyBolt", cannon = "EnemyCannon", acid = "AcidSpit", mortar = "Mortar" }
 
 local function onBolt(d: any)
@@ -336,28 +564,42 @@ local function onBolt(d: any)
 	local camDist = if Fx and Fx.camDistance then Fx.camDistance(d.a) else 0
 	local v0: Vector3 = d.v
 	local start = if v0.Magnitude > 0.1 then CFrame.lookAt(d.a, d.a + v0) * CYL_ALONG_Z else CFrame.new(d.a)
-	-- straight slug: white-hot rounded core inside a soft glowing halo, both oriented along the velocity
-	local function slug(len: number, coreW: number, haloW: number, haloCol: Color3, haloAlpha: number)
-		part = mk(Vector3.new(len, coreW, coreW), BOLT_HOT, start, Enum.PartType.Cylinder, nil, 0, partLife)
-		if hq >= 0.6 then
-			halo = mk(Vector3.new(len * 1.2, haloW, haloW), haloCol, start, Enum.PartType.Cylinder, nil, haloAlpha, partLife)
+	local tail: Part? = nil
+	local tailBack = 0
+	-- chunky energy round: short hot core inside a fatter soft shell, plus a short faint tail, all along the velocity.
+	-- Phones (low quality) keep core + shell, no tail.
+	local function slug(coreLen: number, coreW: number, shellLen: number, shellW: number, tailLen: number, col: Color3)
+		local hot = col:Lerp(BOLT_HOT, 0.6)
+		part = mk(Vector3.new(coreLen, coreW, coreW), hot, start, Enum.PartType.Cylinder, nil, 0, partLife)
+		if hq >= 0.45 then
+			halo = mk(Vector3.new(shellLen, shellW, shellW), col, start, Enum.PartType.Cylinder, nil, 0.45, partLife)
 		else
-			part.Color = haloCol
-			part.Size = Vector3.new(len, coreW * 1.6, coreW * 1.6)
+			part.Color = col
+			part.Size = Vector3.new(coreLen, shellW * 0.7, shellW * 0.7)
+		end
+		if hq >= 0.6 then
+			tail = mk(Vector3.new(tailLen, shellW * 0.45, shellW * 0.45), col, start, Enum.PartType.Cylinder, nil, 0.72, partLife)
 		end
 		oriented = v0.Magnitude > 0.1
-		back = len * 0.5
+		back = shellLen * 0.5
+		tailBack = shellLen * 0.6 + tailLen * 0.5
 	end
 	local col: Color3 = if typeof(d.c) == "Color3" then d.c else BOLT_CORE
 	if style == "bolt" then
-		slug(4, 0.3, 0.9, col, 0.45)
+		slug(1.5, 0.5, 2.3, 1.2, 3, col)
+		if camDist < 140 then
+			lightColor = col
+		end
 	elseif style == "cannon" then
-		slug(4, 0.8, 1.9, if typeof(d.c) == "Color3" then d.c else ORANGE, 0.5)
+		col = if typeof(d.c) == "Color3" then d.c else ORANGE
+		slug(2.1, 1.1, 3.2, 2.5, 4.5, col)
 		lightColor = ORANGE
 	elseif style == "mortar" then
-		slug(3.5, 1.0, 2.3, if typeof(d.c) == "Color3" then d.c else ORANGE, 0.5)
+		col = if typeof(d.c) == "Color3" then d.c else ORANGE
+		slug(1.9, 1.1, 3, 2.4, 3, col)
 		lightColor = ORANGE
 	else -- acid: green-yellow blob (wobbles in stepBolts), arcs with the projectile's gravity
+		col = ACID
 		style = "acid"
 		part = mk(Vector3.one * 1.3, C3(190, 240, 80), CFrame.new(d.a), Enum.PartType.Ball, nil, 0.05, partLife)
 		if hq >= 0.6 then
@@ -369,6 +611,14 @@ local function onBolt(d: any)
 	local b = {
 		part = part,
 		halo = halo,
+		tail = tail,
+		tailBack = tailBack,
+		haloSize = if halo then halo.Size else nil,
+		tailSize = if tail then tail.Size else nil,
+		k = 1,
+		col = col,
+		whizzed = false,
+		lastPos = nil,
 		lit = false,
 		a = d.a,
 		v = v0,
@@ -390,13 +640,16 @@ local function onBolt(d: any)
 		b.lit = true
 		local l = Instance.new("PointLight")
 		l.Color = lightColor
-		l.Range = 14
-		l.Brightness = 1.6
+		l.Range = if style == "bolt" then 9 else 14
+		l.Brightness = if style == "bolt" then 1.3 else 1.6
 		l.Shadows = false
 		l.Parent = part
 	end
+	if d.o ~= nil then
+		rememberMuzzle(d.o, d.a, col)
+	end
 	if style == "bolt" then
-		flash(d.a, col, 1.4, 0.08)
+		flash(d.a, col, 2.4, 0.1)
 	elseif style == "cannon" then
 		flash(d.a, ORANGE, 3.2, 0.12)
 	elseif style == "mortar" then
@@ -442,6 +695,7 @@ local function onBoltEnd(d: any)
 		return
 	end
 	local b = d.id ~= nil and bolts[d.id]
+	local bcol: Color3 = if b and typeof(b.col) == "Color3" then b.col else BOLT_RED
 	if b then
 		removeBolt(d.id, b)
 	end
@@ -458,9 +712,20 @@ local function onBoltEnd(d: any)
 		return
 	end
 	if style == "bolt" then
-		flash(p, BOLT_RED, 1.8, 0.14)
-		if Fx and Fx.burst then
-			Fx.burst("sparks", p, 4)
+		if d.hit then
+			-- struck a trooper: bigger pop
+			flash(p, bcol, 3.4, 0.18)
+			flash(p, bcol:Lerp(BOLT_HOT, 0.6), 1.6, 0.1)
+			if Fx and Fx.burst then
+				Fx.burst("sparks", p, 9, { color = bcol })
+			end
+		else
+			-- ground / wall: small spark puff
+			flash(p, bcol, 1.7, 0.12)
+			if Fx and Fx.burst and (not Fx.camDistance or Fx.camDistance(p) < 140) then
+				Fx.burst("sparks", p, 3, { color = bcol, scale = 0.7 })
+				Fx.burst("puff", p, 1, { scale = 0.5 })
+			end
 		end
 		if Audio then
 			Audio.play("BoltImpact", p)
@@ -484,7 +749,7 @@ local function onBoltEnd(d: any)
 		end
 	else
 		-- cannon / mortar: the server also sends a core Explosion; add a quick scorch flash
-		flash(p, ORANGE, math.max(d.r or 4, 3) * 1.2, 0.2)
+		flash(p, ORANGE, math.max(d.r or 4, 3) * (if d.hit then 1.5 else 1.2), 0.2)
 	end
 end
 
@@ -884,6 +1149,176 @@ local function onSweepBeam(d: any)
 	end, kill)
 end
 
+-- Muzzle charge-up: a glow ball (hot core + soft shell, small light) grows at the muzzle over the shot's wind-up and
+-- follows the enemy. Parts are pooled; parked parts sit outside the workspace.
+local CHARGE_KINDS = { bolt = true, burst = true, cannon = true, needle = true }
+local FACTION_CHARGE = { COG = C3(255, 110, 50), LUMEN = C3(110, 235, 255), BROOD = ACID }
+local MAX_CHARGES = 14
+local MAX_LIT_CHARGES = 6
+local GUESS_PARTS = { "Muzzle", "Gun", "BarrelL", "Barrel", "CannonA", "Eye" }
+local charges = 0
+local litCharges = 0
+local chargePool: { Part } = {}
+
+local function chargePart(color: Color3, alpha: number, life: number): Part
+	while #chargePool > 0 do
+		local p = table.remove(chargePool) :: Part
+		local ok = pcall(function()
+			p.Parent = getFolder()
+		end)
+		if ok then
+			expire(p, life)
+			p.Color = color
+			p.Transparency = alpha
+			return p
+		end
+	end
+	return mk(Vector3.one * 0.2, color, CFrame.new(), Enum.PartType.Ball, nil, alpha, life)
+end
+
+local function releaseCharge(p: Part)
+	expiry[p] = nil
+	local l = p:FindFirstChildOfClass("PointLight")
+	if l then
+		l.Enabled = false
+	end
+	local ok = pcall(function()
+		p.Parent = nil
+	end)
+	if ok and #chargePool < 24 then
+		table.insert(chargePool, p)
+	elseif ok then
+		p:Destroy()
+	end
+end
+
+-- local muzzle offset (in muzzleFrame) for a fresh charge-up
+local function guessMuzzle(m: Model, kind: any, def: any, frame: CFrame): Vector3
+	local cached = muzzleCache[kind]
+	if cached then
+		return cached.off
+	end
+	for _, name in GUESS_PARTS do
+		local part = m:FindFirstChild(name, true)
+		if part and part:IsA("BasePart") then
+			local s = part.Size
+			local front = part.Position + frame.LookVector * math.max(s.X, s.Y, s.Z) * 0.5
+			return frame:PointToObjectSpace(front)
+		end
+	end
+	local size = if def and type(def.size) == "number" then def.size else 2
+	return Vector3.new(0, size * 1.2, -size * 0.6)
+end
+
+local function chargeUp(d: any)
+	local windup = tonumber(d.t) or 0
+	if windup < 0.12 then
+		return
+	end
+	windup = math.min(windup, 3)
+	if charges >= MAX_CHARGES then
+		return
+	end
+	local m = modelById(d.id)
+	if not m then
+		return
+	end
+	local kind = if type(d.e) == "string" then d.e else kindOf(m, d.id)
+	local def = if type(kind) == "string" then EnemyDefs.get(kind) else nil
+	local heavy = d.kind == "cannon" or (def ~= nil and (def.class == "heavy" or def.class == "behemoth"))
+	local frame = muzzleFrame(m)
+	local off: Vector3
+	-- bolt / burst volleys send the muzzle point as p; other kinds send the enemy root there
+	local sent: Vector3? = if typeof(d.m) == "Vector3" then d.m
+		elseif (d.kind == "bolt" or d.kind == "burst") and typeof(d.p) == "Vector3" then d.p
+		else nil
+	if sent and (sent - frame.Position).Magnitude < 60 then
+		off = frame:PointToObjectSpace(sent)
+	else
+		off = guessMuzzle(m, kind, def, frame)
+	end
+	local start = frame * off
+	local dist = if Fx and Fx.camDistance then Fx.camDistance(start) else 0
+	if dist > (if heavy then 260 else 170) then
+		return
+	end
+	local cached = muzzleCache[kind]
+	local col: Color3 = if cached then cached.col
+		elseif d.kind == "cannon" then ORANGE
+		else (def and FACTION_CHARGE[def.faction]) or FACTION_CHARGE.COG
+	local hq = if Fx and type(Fx.quality) == "number" then Fx.quality else 1
+	local coreMax = if heavy then 1.5 else 0.75
+	local shellMax = if heavy then 3.4 else 1.7
+	-- far away the glow grows a little so it still reads
+	local far = math.clamp(dist / 80, 1, 1.6)
+	coreMax *= far
+	shellMax *= far
+	local life = windup + 0.6
+	charges += 1
+	local core = chargePart(col:Lerp(BOLT_HOT, 0.55), 0.15, life)
+	local shell: Part? = if hq >= 0.45 then chargePart(col, 0.85, life) else nil
+	local lit = false
+	if hq >= 0.75 and litCharges < MAX_LIT_CHARGES then
+		litCharges += 1
+		lit = true
+		local l = core:FindFirstChildOfClass("PointLight")
+		if not l then
+			local nl = Instance.new("PointLight")
+			nl.Shadows = false
+			nl.Parent = core
+			l = nl
+		end
+		local pl = l :: PointLight
+		pl.Color = col
+		pl.Range = if heavy then 16 else 9
+		pl.Brightness = 0
+		pl.Enabled = true
+	end
+	local t0 = os.clock()
+	local finished = false
+	local function done()
+		if finished then
+			return
+		end
+		finished = true
+		charges -= 1
+		if lit then
+			litCharges -= 1
+		end
+		releaseCharge(core)
+		if shell then
+			releaseCharge(shell)
+		end
+	end
+	addActor(function()
+		local u = (os.clock() - t0) / windup
+		if u >= 1.08 or not core.Parent or not m.Parent then
+			done()
+			return true
+		end
+		local pos = if m.Parent then muzzleFrame(m) * off else start
+		local e = math.clamp(u, 0, 1)
+		e = e * e
+		-- last tenth: a quick flicker so the release moment reads
+		local flick = if u > 0.9 then 1 + 0.18 * math.sin(os.clock() * 70) else 1
+		local cf = CFrame.new(pos)
+		core.Size = Vector3.one * (0.15 + (coreMax - 0.15) * e) * flick
+		core.CFrame = cf
+		if shell then
+			shell.Size = Vector3.one * (0.3 + (shellMax - 0.3) * e) * flick
+			shell.Transparency = 0.85 - 0.4 * e
+			shell.CFrame = cf
+		end
+		if lit then
+			local l = core:FindFirstChildOfClass("PointLight")
+			if l then
+				l.Brightness = (if heavy then 5 else 2.5) * e
+			end
+		end
+		return false
+	end, done)
+end
+
 local function onEnemyAttack(d: any)
 	local kind = d.kind
 	local e = d.e
@@ -891,6 +1326,12 @@ local function onEnemyAttack(d: any)
 	if kind == "sweepBeam" then
 		onSweepBeam(d)
 		return
+	end
+	if CHARGE_KINDS[kind] then
+		local ok, err = pcall(chargeUp, d)
+		if not ok then
+			stepWarn("charge", err)
+		end
 	end
 	if not Audio then
 		return

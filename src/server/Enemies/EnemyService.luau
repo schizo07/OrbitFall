@@ -10,7 +10,10 @@
 --   S.Enemies.kills                  total kills this mission (reset by clear())
 --   Fodder (def.fodder): model = the base unit scaled (def.modelKind / modelScale), e.kind stays the BASE kind (client anim / fx lookups),
 --   e.spawnKind = the id it was spawned as, e.fodder = true.
---   spawn opts: { dest: Vector3?, home: Vector3?, patrol: boolean?, aggro: boolean?, target: Player?, hpScale: number?, group: any? }
+--   spawn opts: { dest: Vector3?, home: Vector3?, patrol: boolean?, aggro: boolean?, target: Player?, hpScale: number?, group: any?,
+--                 posture: "guard" | "patrol" | "hunt"?, route: {Vector3}?, squad: any? }  (passed unchanged to EnemyAI.register /
+--                 Awareness; no posture = "hunt" when aggro or target is set, else "guard"). Waves / breaches / reinforcements
+--                 (Director) send aggro = true + posture "hunt"; garrisons (Garrisons.luau) "guard" / "patrol".
 --   explode opts.status entries: number (duration) | { d: number, m: number?, noBehemoth: boolean? }
 --   hit() returns result = "none" when the part no longer belongs to a live enemy.
 --   S.Enemies.push(e, velocity, dur)  outside push (Gravity Well pull); regular x1, medium x0.7, heavy x0.3, behemoth x0.08,

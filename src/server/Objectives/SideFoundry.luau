@@ -313,7 +313,7 @@ function SideFoundry.start(ctx: any, siteCF: CFrame, index: number): any
 				return
 			end
 			local yaw = ctx.rng:NextNumber(0, math.pi * 2)
-			local ok, e = pcall(S.Enemies.spawn, droneKind, CFrame.new(hatchPos) * CFrame.Angles(0, yaw, 0), { home = pos })
+			local ok, e = pcall(S.Enemies.spawn, droneKind, CFrame.new(hatchPos) * CFrame.Angles(0, yaw, 0), { home = pos, aggro = true })
 			if ok and e then
 				e.vel = Vector3.new(math.cos(yaw) * 6, 14, math.sin(yaw) * 6) -- pops up out of the hatch
 				table.insert(launched, e)
