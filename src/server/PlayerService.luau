@@ -382,7 +382,13 @@ function PlayerService.knock(p: Player, fromPos: Vector3, force: number)
 	S.Fx.to(p, v.Magnitude >= Config.Move.KnockdownSpeed and "Knockdown" or "Knock", { v = v })
 end
 
--- Drop capsule: anchors the character in the sky above `pos` then tweens it down.
+-- Drop capsule timing, matched to client/Fx/CallInFx (dropPodMesh): the door swings open over 0.45 s after impact
+local CAPSULE_DOOR_OPEN = 0.45
+local CAPSULE_STEP_OUT = 5 -- studs walked out through the door
+local ROOT_UP = 3.2 -- root height above the capsule floor (standing)
+
+-- Drop capsule: the trooper rides inside it. The server picks the fall path and sends it with the DropPod Fx, so the
+-- capsule the clients draw and the anchored character follow the same line; once the door is open they walk out.
 function PlayerService.dropTo(p: Player, pos: Vector3, fallTime: number?)
 	local r = recs[p]
 	if not r then
@@ -404,24 +410,27 @@ function PlayerService.dropTo(p: Player, pos: Vector3, fallTime: number?)
 			return
 		end
 		local ground = pos
-		local start = ground + Vector3.new(0, Config.DropHeight - ground.Y, 0)
+		local from = Vector3.new(ground.X + math.random(-30, 30), Config.DropHeight, ground.Z + math.random(-30, 30))
+		-- the capsule door faces the map centre (same rule as CallInFx)
+		local flat = Vector3.new(-ground.X, 0, -ground.Z)
+		local door = if flat.Magnitude > 5 then flat.Unit else Vector3.new(0, 0, -1)
+		local function rootAt(at: Vector3): CFrame
+			return CFrame.lookAt(at, at + door)
+		end
 		root.Anchored = true
-		c:PivotTo(CFrame.new(start))
-		S.Fx.play("DropPod", { p = ground, kind = "player", t = t, u = p.UserId })
+		c:PivotTo(rootAt(from + Vector3.new(0, ROOT_UP, 0)))
+		S.Fx.play("DropPod", { p = ground, from = from, kind = "player", t = t, u = p.UserId })
 		local t0 = os.clock()
 		while os.clock() - t0 < t do
 			local a = math.clamp((os.clock() - t0) / t, 0, 1)
-			local y = start.Y + (ground.Y + 3 - start.Y) * (a * a)
 			if c.Parent then
-				c:PivotTo(CFrame.new(ground.X, y, ground.Z))
+				c:PivotTo(rootAt(from:Lerp(ground, a ^ 1.6) + Vector3.new(0, ROOT_UP, 0)))
 			end
 			RunService.Heartbeat:Wait()
 		end
 		if c.Parent then
-			c:PivotTo(CFrame.new(ground + Vector3.new(0, 3.2, 0)))
-			root.Anchored = false
+			c:PivotTo(rootAt(ground + Vector3.new(0, ROOT_UP, 0)))
 		end
-		r.dropping = false
 		-- impact shockwave hurts enemies and knocks nearby squadmates (shared blast path: server/Explosions.luau)
 		if S.Explosions and S.Explosions.blast then
 			S.Explosions.blast(ground, {
@@ -440,6 +449,14 @@ function PlayerService.dropTo(p: Player, pos: Vector3, fallTime: number?)
 		end
 		S.Fx.play("Shockwave", { p = ground, r = 14 })
 		S.Fx.play("Shake", { p = ground, mag = 1.2, r = 60 })
+		-- held inside until the door is open, then walk out through it (the player can steer away at once)
+		task.wait(CAPSULE_DOOR_OPEN)
+		if c.Parent then
+			root.Anchored = false
+			-- clients own their characters: the walk out runs there (client/Movement.luau "CapsuleExit")
+			S.Fx.to(p, "CapsuleExit", { p = ground + door * CAPSULE_STEP_OUT })
+		end
+		r.dropping = false
 		PlayerService.publish(p)
 	end
 	task.spawn(go)

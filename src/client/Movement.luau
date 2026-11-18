@@ -1459,6 +1459,33 @@ function Movement.init()
 				Movement.knockdown(d.v, if type(d.t) == "number" then d.t else nil)
 			end
 		end)
+		-- drop capsule door is open: walk out through it. Humanoid:MoveTo gets cancelled by the default controls' per-frame
+		-- Move, so steer right after them instead; steering another way yourself ends it.
+		Fx.register("CapsuleExit", function(d)
+			if type(d) ~= "table" or typeof(d.p) ~= "Vector3" then
+				return
+			end
+			local target: Vector3 = d.p
+			local t0 = os.clock()
+			pcall(RunService.UnbindFromRenderStep, RunService, "CapsuleExit")
+			RunService:BindToRenderStep("CapsuleExit", Enum.RenderPriority.Input.Value + 1, function()
+				local _, hum, root = chr()
+				local done = not hum or not root or hum.Health <= 0 or os.clock() - t0 > 1.5
+				-- still anchored: the unanchor can replicate after this message
+				if not done and hum and root and not root.Anchored then
+					local to = Vector3.new(target.X - root.Position.X, 0, target.Z - root.Position.Z)
+					local own = hum.MoveDirection
+					if to.Magnitude < 0.8 or (own.Magnitude > 0.1 and own:Dot(to.Unit) < 0.7) then
+						done = true
+					else
+						hum:Move(to.Unit, false)
+					end
+				end
+				if done then
+					RunService:UnbindFromRenderStep("CapsuleExit")
+				end
+			end)
+		end)
 	else
 		warn("[Movement] Fx unavailable; knockdowns disabled")
 	end
