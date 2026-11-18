@@ -306,7 +306,15 @@ end
 -- ── haul objective carry pose (character attribute CarryCell, shared/Carry.luau) ─────────────────────────────
 -- Both hands on the core cell the server welds at Carry.HOLD in front of the belly; the gun is hidden (local
 -- transparency) meanwhile. SIDEARM rule with the pistol in hand: the normal pose, so the sidearm can aim.
-local CARRY_HAND = Vector3.new(Carry.SIZE.X / 2 + 0.14, 0.2, 0) -- wrist target in cell space (x mirrored for the left)
+-- Heavy-load look: the cell is hugged at the chest (elbows out, hands under its sides), the upper body leans back
+-- against the weight at a walk and hunches forward into a sprint, and it waddles side to side with the steps.
+local CARRY_HAND = Vector3.new(Carry.SIZE.X / 2 + 0.08, -0.2, 0.05) -- wrist target in cell space (x mirrored for the left)
+local CARRY_LEAN_BACK = 0.14 -- rad, walking / standing
+local CARRY_LEAN_RUN = -0.22 -- rad, sprinting (forward)
+local CARRY_ROLL = 0.09 -- rad of side-to-side waddle at full walk
+local CARRY_TWIST = 0.06 -- rad of shoulder twist with the steps
+local CARRY_STEP_RATE = 0.45 -- waddle phase (rad) per stud moved
+local carryState: { [Model]: { ph: number, lean: number } } = {}
 local function wantsCarry(r: Rig, handle: BasePart): boolean
 	if r.c:GetAttribute(Carry.ATTR) ~= true then
 		return false
@@ -324,9 +332,26 @@ end
 local function carryStep(r: Rig, dt: number)
 	r.pitch += (0 - r.pitch) * (1 - exp(-dt * 10))
 	r.low, r.ads = 0, 0
-	setC0(r.waist, r.waistBase * (if ArmorFx and ArmorFx.waistOffset then ArmorFx.waistOffset else CF0) * CFrame.Angles(-0.06, 0, 0))
+	local st = carryState[r.c]
+	if not st then
+		st = { ph = 0, lean = 0 }
+		carryState[r.c] = st
+	end
+	local v = r.hrp.AssemblyLinearVelocity
+	local speed = Vector3.new(v.X, 0, v.Z).Magnitude
+	local walk = clamp(speed / 10, 0, 1)
+	local run = clamp((speed - 13) / 4, 0, 1)
+	st.ph = (st.ph + dt * speed * CARRY_STEP_RATE) % (2 * math.pi)
+	local leanT = CARRY_LEAN_BACK + (CARRY_LEAN_RUN - CARRY_LEAN_BACK) * run
+	st.lean += (leanT - st.lean) * (1 - exp(-dt * 6))
+	local sw = math.sin(st.ph) * walk
+	setC0(
+		r.waist,
+		r.waistBase * (if ArmorFx and ArmorFx.waistOffset then ArmorFx.waistOffset else CF0) * CFrame.Angles(st.lean, sw * CARRY_TWIST, sw * CARRY_ROLL)
+	)
 	if r.neck and r.neckBase then
-		setC0(r.neck, r.neckBase)
+		-- the head stays level-ish over the load (counters most of the lean and waddle)
+		setC0(r.neck, r.neckBase * CFrame.Angles(-st.lean * 0.6, 0, -sw * CARRY_ROLL * 0.6))
 	end
 	local hrpCF = r.hrp.CFrame
 	local lower = hrpCF * r.root.C0 * r.root.Transform * r.root.C1:Inverse()
@@ -334,8 +359,9 @@ local function carryStep(r: Rig, dt: number)
 	local cell = upper * Carry.HOLD
 	local right, back, down = upper.RightVector, -upper.LookVector, -upper.UpVector
 	local h = tune("CarryHand", CARRY_HAND)
-	solveArm(r.R, upper, (cell * CFrame.new(h.X, h.Y, h.Z)).Position, down + right * 0.8 + back * 0.3, cell.Rotation)
-	solveArm(r.L, upper, (cell * CFrame.new(-h.X, h.Y, h.Z)).Position, down - right * 0.8 + back * 0.3, cell.Rotation)
+	-- elbows flared out to the sides and a little back: a two-armed hug, not a gun hold
+	solveArm(r.R, upper, (cell * CFrame.new(h.X, h.Y, h.Z)).Position, down * 0.5 + right * 1.3 + back * 0.4, cell.Rotation)
+	solveArm(r.L, upper, (cell * CFrame.new(-h.X, h.Y, h.Z)).Position, down * 0.5 - right * 1.3 + back * 0.4, cell.Rotation)
 	showGun(r, false)
 end
 
@@ -729,6 +755,11 @@ local function frame(dt: number)
 	for c, r in rigs do
 		if not c.Parent then
 			rigs[c] = nil
+		end
+	end
+	for c in carryState do
+		if not c.Parent or c:GetAttribute(Carry.ATTR) ~= true then
+			carryState[c] = nil
 		end
 	end
 	-- stim poses end on their own clock (also when the rig was released mid-way); the injector goes with them

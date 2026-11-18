@@ -1469,7 +1469,7 @@ function Movement.init()
 			pcall(RunService.UnbindFromRenderStep, RunService, "CapsuleExit")
 			RunService:BindToRenderStep("CapsuleExit", Enum.RenderPriority.Input.Value + 1, function()
 				local _, hum, root = chr()
-				local done = not hum or not root or hum.Health <= 0 or os.clock() - t0 > 1.5
+				local done = not hum or not root or hum.Health <= 0 or os.clock() - t0 > 2.5
 				-- still anchored: the unanchor can replicate after this message
 				if not done and hum and root and not root.Anchored then
 					local to = Vector3.new(target.X - root.Position.X, 0, target.Z - root.Position.Z)

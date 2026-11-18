@@ -68,6 +68,36 @@ local HEAD_ACCESSORIES: { [Enum.AccessoryType]: boolean } = {
 	[Enum.AccessoryType.Eyelash] = true,
 }
 local lowBlend = 0 -- prone / dive framing
+-- drop capsule ride (character attribute InCapsule, server/PlayerService.dropTo): the lens pulls far out above and
+-- behind the capsule so the map below is in view, then eases back to the shoulder once the door opens
+local capBlend = 0
+local wasInCapsule = false
+local CAP_DIST = 26
+local CAP_UP = 9
+local CAP_FOV_ADD = 6
+local CAP_PITCH = -0.5 -- look down toward the landing area when the ride starts
+-- while the lens eases back in from behind, the landed capsule (server/DropCapsule) is see-through locally
+local capFade = 0
+local function fadeOwnCapsule(v: number)
+	if v == capFade then
+		return
+	end
+	capFade = v
+	local map = workspace:FindFirstChild("Map")
+	local f = (map and map:FindFirstChild("DropCapsules")) or workspace:FindFirstChild("DropCapsules")
+	if not f then
+		return
+	end
+	for _, m in f:GetChildren() do
+		if m:GetAttribute("Owner") == player.UserId then
+			for _, p in m:GetDescendants() do
+				if p:IsA("BasePart") then
+					p.LocalTransparencyModifier = v
+				end
+			end
+		end
+	end
+end
 local side = 1 -- 1 = right shoulder, -1 = left (V / R3)
 local SHOULDER_LEAN = math.rad(4) -- held camera roll toward the shoulder side (x1.6 extra at the middle of a swap)
 local SHOULDER_DIP = 0.55 -- studs the lens drops while crossing behind the head
@@ -382,6 +412,25 @@ function CameraController.init()
 			low = Movement.getStance() == "prone" or mode == "dive"
 		end
 		lowBlend += ((low and 1 or 0) - lowBlend) * (1 - math.exp(-dt * 8))
+		local inCapsule = c ~= nil and c:GetAttribute("InCapsule") == true
+		if inCapsule and not wasInCapsule then
+			-- face the way the door opens (toward the map centre), looking down at where it lands
+			local rp = root and root.Position
+			if rp then
+				local flat = Vector3.new(-rp.X, 0, -rp.Z)
+				if flat.Magnitude > 5 then
+					yaw = math.atan2(-flat.X, -flat.Z)
+				end
+			end
+			pitch = CAP_PITCH
+		end
+		wasInCapsule = inCapsule
+		-- quick to pull out, slower and eased on the way back in
+		capBlend += ((inCapsule and 1 or 0) - capBlend) * (1 - math.exp(-dt * (if inCapsule then 6 else 2.2)))
+		if capBlend < 0.002 then
+			capBlend = 0
+		end
+		local capK = capBlend * capBlend * (3 - 2 * capBlend)
 		-- strafe roll: lean slightly into sideways motion
 		local rollT = 0
 		if root then
@@ -428,6 +477,12 @@ function CameraController.init()
 		end
 		local dip = if leanMode == "off" then 0 else SHOULDER_DIP * swapK
 		shoulder = Vector3.new(shoulder.X * sideBlend, shoulder.Y - dip, shoulder.Z)
+		if capK > 0 then
+			-- the height lets go later than the distance, so on the way back in the lens comes down over the capsule roof
+			shoulder = shoulder:Lerp(Vector3.new(0, CAP_UP, 0), capK ^ 0.4)
+			wantDist += (CAP_DIST - wantDist) * capK
+		end
+		fadeOwnCapsule(if inCapsule then 0 else math.min(1, capK * 2) * 0.85)
 		local desired = CFrame.new(focus) * rot * CFrame.new(shoulder + Vector3.new(0, 0, wantDist))
 		-- collision: pull in toward focus
 		refreshFilter()
@@ -461,7 +516,7 @@ function CameraController.init()
 		cf = cf * juiceCf
 		camera.CFrame = cf
 		camera.Focus = CFrame.new(focus)
-		local fov = tune("Fov", BASE_FOV) - ads * (tune("AdsFovDrop", ADS_FOV_DROP) + (zoomMult - 1) * 22) + SPRINT_FOV_ADD * sprint + Juice.getFov()
+		local fov = tune("Fov", BASE_FOV) - ads * (tune("AdsFovDrop", ADS_FOV_DROP) + (zoomMult - 1) * 22) + SPRINT_FOV_ADD * sprint + CAP_FOV_ADD * capK + Juice.getFov()
 		camera.FieldOfView = math.clamp(fov, 20, 100)
 
 		-- lens jammed against the trooper (wall pull-in): fade the local character so it never fills the screen

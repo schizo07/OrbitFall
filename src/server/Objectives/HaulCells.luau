@@ -217,6 +217,15 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			add(ctx.part(root, Vector3.new(0.16, Carry.SIZE.Y + 0.1, Carry.SIZE.Z + 0.1), cf * CFrame.new(sx * (Carry.SIZE.X / 2 - 0.05), 0, 0), STEEL, Enum.Material.Metal, { CanCollide = false, CanQuery = false, CastShadow = false }))
 		end
 		add(ctx.part(root, Vector3.new(0.9, 0.12, 0.14), cf * CFrame.new(0, Carry.SIZE.Y / 2 + 0.12, 0), STEEL, Enum.Material.Metal, { CanCollide = false, CanQuery = false, CastShadow = false }))
+		-- lights the carrier up while the cell is in their arms (on in pickup, off in detach)
+		local light = Instance.new("PointLight")
+		light.Name = "CarryLight"
+		light.Color = Carry.COLOR
+		light.Range = 10
+		light.Brightness = 1.6
+		light.Shadows = false
+		light.Enabled = false
+		light.Parent = case
 		local cell: Cell = {
 			id = id,
 			case = case,
@@ -307,7 +316,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		cache.anchor = pallet
 		local n = perCache[ci] or 0
 		for k = 1, n do
-			local x = (k - (n + 1) / 2) * 1.95
+			local x = (k - (n + 1) / 2) * 2.1
 			local cf = b * CFrame.new(x, 0.5 + Carry.SIZE.Y / 2 + 0.02, 0)
 			local cell = buildCell(cf, #cells + 1)
 			cell.cache = cache
@@ -363,6 +372,10 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		if cell.weld then
 			cell.weld:Destroy()
 			cell.weld = nil
+		end
+		local light = cell.case:FindFirstChild("CarryLight")
+		if light and light:IsA("PointLight") then
+			light.Enabled = false
 		end
 		if cell.above then
 			cell.above:Destroy()
@@ -446,6 +459,10 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		cell.weld = w
 		cell.carrier = p
 		cell.state = "carried"
+		local light = cell.case:FindFirstChild("CarryLight")
+		if light and light:IsA("PointLight") then
+			light.Enabled = true
+		end
 		carriers[p] = cell
 		local r = ctx.getRoot(p)
 		lastPos[p] = if r then r.Position else torso.Position

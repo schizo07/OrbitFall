@@ -10,6 +10,7 @@ local Weapons = require(Shared.Data.Weapons)
 local TrooperArmor = require(script.Parent.TrooperArmor)
 local Movement = require(script.Parent.MovementService) -- stamina + stance (does not require us back)
 local Downed = require(script.Parent.Downed) -- downed / bleed-out / revive (does not require us back)
+local DropCapsule = require(script.Parent.DropCapsule) -- the landed capsule that stays until its trooper dies
 local DownedRules = require(Shared.Downed) -- stim hold time (shared with the client)
 
 local PlayerService = {}
@@ -384,7 +385,7 @@ end
 
 -- Drop capsule timing, matched to client/Fx/CallInFx (dropPodMesh): the door swings open over 0.45 s after impact
 local CAPSULE_DOOR_OPEN = 0.45
-local CAPSULE_STEP_OUT = 5 -- studs walked out through the door
+local CAPSULE_STEP_OUT = 10 -- studs walked out through the door (about five steps)
 local ROOT_UP = 3.2 -- root height above the capsule floor (standing)
 
 -- Drop capsule: the trooper rides inside it. The server picks the fall path and sends it with the DropPod Fx, so the
@@ -417,7 +418,10 @@ function PlayerService.dropTo(p: Player, pos: Vector3, fallTime: number?)
 		local function rootAt(at: Vector3): CFrame
 			return CFrame.lookAt(at, at + door)
 		end
+		DropCapsule.clear(p)
 		root.Anchored = true
+		-- client/CameraController pulls the camera out behind the capsule while this is set
+		c:SetAttribute("InCapsule", true)
 		c:PivotTo(rootAt(from + Vector3.new(0, ROOT_UP, 0)))
 		S.Fx.play("DropPod", { p = ground, from = from, kind = "player", t = t, u = p.UserId })
 		local t0 = os.clock()
@@ -451,7 +455,11 @@ function PlayerService.dropTo(p: Player, pos: Vector3, fallTime: number?)
 		S.Fx.play("Shake", { p = ground, mag = 1.2, r = 60 })
 		-- held inside until the door is open, then walk out through it (the player can steer away at once)
 		task.wait(CAPSULE_DOOR_OPEN)
+		if c.Parent and h.Health > 0 then
+			DropCapsule.place(p, ground, door)
+		end
 		if c.Parent then
+			c:SetAttribute("InCapsule", nil)
 			root.Anchored = false
 			-- clients own their characters: the walk out runs there (client/Movement.luau "CapsuleExit")
 			S.Fx.to(p, "CapsuleExit", { p = ground + door * CAPSULE_STEP_OUT })
@@ -588,6 +596,7 @@ local function setupCharacter(p: Player, c: Model)
 		r.alive = false
 		r.deaths += 1
 		clearStim(r)
+		DropCapsule.clear(p) -- the next drop brings a fresh one
 		Downed.clear(p)
 		local root = c:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
@@ -615,6 +624,7 @@ function PlayerService.init(s)
 	S = s
 	Players.CharacterAutoLoads = false
 	Movement.init(s, PlayerService)
+	DropCapsule.init(s)
 	-- stim (client/Fx/VitalsFx: F, gamepad D-pad Left, touch STIM button). Denials go back so the client can say why.
 	-- Hold to stim (DownedRules.stimHold s, Config.Stims.Hold): the client sends "stimstart" on press, "stimcancel" on an
 	-- early release and "stim" when its fill completes; "stim" only goes through once the hold time has passed here

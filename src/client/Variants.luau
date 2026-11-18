@@ -23,16 +23,6 @@ local GROUPS = {
 	-- armour tag, skiff, player splash, mission time, left shoulder, stim pose, perf saver, ammo pack, colour grade picked
 	-- and baked into the code defaults (list: docs/playtest-verdicts-2026-11-15.md).
 	{
-		-- shared/Carry.speedMult (client/Movement): walk / sprint speed while carrying a core cell (haul objective)
-		name = "CARRY SPEED",
-		keys = { "Feel_CarryWalk", "Feel_CarrySprint" },
-		presets = {
-			{ name = "A walk x0.80, sprint x0.80", set = {} },
-			{ name = "B walk x0.85, sprint x0.75", set = { Feel_CarryWalk = 0.85, Feel_CarrySprint = 0.75 } },
-			{ name = "C walk x0.90, sprint x0.85", set = { Feel_CarryWalk = 0.9, Feel_CarrySprint = 0.85 } },
-		},
-	},
-	{
 		-- client/Fx/Blast.luau + Fx/CallInFx: camera shake of explosions (2026-11-15: "much stronger than x1.6")
 		name = "BLAST SHAKE",
 		keys = { "Feel_BlastShake" },

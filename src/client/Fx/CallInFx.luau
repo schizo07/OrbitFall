@@ -1116,9 +1116,32 @@ local function dropPodMesh(d: any, to: Vector3, fall: number, accent: Color3): b
 			end
 			place(to, motions)
 		end)
+		-- a player capsule hands over to the server's landed one (server/DropCapsule: stays until that trooper dies);
+		-- without it (asset not loaded there) it fades like the other pods
+		if capsule and d.u then
+			task.spawn(function()
+				local t0 = os.clock()
+				while model.Parent and os.clock() - t0 < 3 do
+					local map = workspace:FindFirstChild("Map")
+					local f = (map and map:FindFirstChild("DropCapsules")) or workspace:FindFirstChild("DropCapsules")
+					if f then
+						for _, m in f:GetChildren() do
+							if m:GetAttribute("Owner") == d.u then
+								model:Destroy()
+								return
+							end
+						end
+					end
+					task.wait(0.05)
+				end
+			end)
+		end
 		-- the capsule stays open a moment (the trooper steps out); other pods hand over to the thing they carried
-		local hold = if capsule then 1.4 elseif d.kind == "supply" then 0.25 else 0.6
+		local hold = if capsule then 3.2 elseif d.kind == "supply" then 0.25 else 0.6
 		task.delay(0.45 + hold, function()
+			if not model.Parent then
+				return
+			end
 			for _, p in model:GetDescendants() do
 				if p:IsA("BasePart") and p.Transparency < 1 then
 					tween(p, 0.4, { Transparency = 1 })
