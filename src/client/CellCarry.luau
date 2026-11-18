@@ -6,7 +6,7 @@
 --   * Sidearm rule: picking a cell up switches to the secondary.
 --   * Studio A/B "CARRY RULES" (client/Variants.luau, workspace attribute CarryTune_Rule) is forwarded to the server,
 --     which owns the rule (workspace attribute HaulCarryRule).
--- Speed x0.8 / no sprint lives in client/Movement.luau, the carry pose in client/CombatPose.luau.
+-- Carry speed (walk and sprint, shared/Carry.speedMult) lives in client/Movement.luau, the carry pose in client/CombatPose.luau.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")

@@ -107,8 +107,8 @@ function MovementService.init(s, playerService)
 		end
 		local m = get(p)
 		m.stance = stance
+		-- (core-cell carriers sprint too, slower: shared/Carry.luau; stamina drains the same)
 		m.sprinting = sprinting == true and stance == "stand" and not m.exhausted
-			and p:GetAttribute("CarryCell") ~= true -- haul: a core-cell carrier can't sprint (shared/Carry.luau)
 		setAttr(p, stance)
 		clearTwist(p, stance)
 		PS.publish(p)

@@ -31,7 +31,7 @@ local M = Config.Move
 local Movement = {}
 local player = Players.LocalPlayer
 local actionEv: RemoteEvent? = nil
-local CARRY_SPEED = require(Shared.Carry).SPEED_MULT -- haul objective carrier speed factor
+local Carry = require(Shared.Carry) -- haul objective carrier speed factors
 
 -- R15 joints are Motor6D on classic rigs and AnimationConstraint on the upgraded avatar joints (same C0/C1/Transform API)
 local function isJoint(x: Instance?): boolean
@@ -776,7 +776,7 @@ local function step(dt: number)
 
 	-- (body facing / twist: twistStep, which runs earlier in the frame than this handler)
 
-	-- haul objective: a core-cell carrier walks at x0.8 and can't sprint (shared/Carry.luau; server mirrors the sprint)
+	-- haul objective: a core-cell carrier walks and sprints slower (shared/Carry.luau)
 	local carrying = player:GetAttribute("CarryCell") == true
 
 	-- stamina (prediction; server reconciles through `me`) ---------------------------------------------------
@@ -787,7 +787,6 @@ local function step(dt: number)
 		and not aiming
 		and not firing
 		and not exhausted
-		and not carrying
 		and Store.get("stimHold") == nil -- holding the stim key (Fx/VitalsFx): walk, no sprint
 	boosted = boostEnd > 0 and workspace:GetServerTimeNow() < boostEnd
 	if boosted then
@@ -829,7 +828,7 @@ local function step(dt: number)
 		speed = math.min(speed, M.LimpSpeed)
 	end
 	if carrying then
-		speed *= CARRY_SPEED
+		speed *= Carry.speedMult(sprintApplied)
 	end
 	if isDowned() and mode == "none" then
 		speed = Config.Downed.CrawlSpeed
