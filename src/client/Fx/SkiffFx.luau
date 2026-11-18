@@ -1,11 +1,14 @@
 -- Client visuals for the Skiff while it holds over a hot extraction zone (server/Objectives/Extraction.luau):
 --   Fx "SkiffHover" {on = true, root = BasePart, p = Vector3}   engine loop following the hull + rotor-wash dust on the
 --                    pad below it until {on = false} (or the root is destroyed)
---   Fx "SkiffGun"   {a = Vector3, b = Vector3, m = "metal"|"goo"|"ground"}   one door-gun round: muzzle flash, heavy
+--   Fx "SkiffGun"   {a = Vector3, b = Vector3, m = "metal"|"goo"|"ground"}   one chin-gun round: muzzle flash, heavy
 --                    tracer, impact puff (m = impact material)
+--   Fx "SkiffBoard" {p = Vector3, foot = Vector3, m = Model}   (to the boarding trooper only) walk to the ramp's foot,
+--                    then up it to p inside the bay; the server fades the character out once there
 -- Studio only: mirrors the Feel_SkiffMode attribute (Variants group "SKIFF") to the server via Action "studioFeel".
 
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -128,10 +131,70 @@ local function onGun(d: any)
 	end
 end
 
+-- boarding -----------------------------------------------------------------------------------------------------------------
+-- Walks the local trooper to the foot of the ramp, then up it into the bay (straight to the bay once they stand on the
+-- Skiff). A short hop when blocked gets them onto a ramp end that hangs above uneven ground. Humanoid:MoveTo is cancelled
+-- by the default controls' per-frame Move, so this steers right after them each frame (until there, boarded or 4 s).
+local BOARD_STEP = "SkiffBoard"
+local boardRay = RaycastParams.new()
+boardRay.FilterType = Enum.RaycastFilterType.Include
+
+local function onBoard(d: any)
+	if type(d) ~= "table" or typeof(d.p) ~= "Vector3" or typeof(d.foot) ~= "Vector3" then
+		return
+	end
+	local bay: Vector3, foot: Vector3 = d.p, d.foot
+	local skiff = if typeof(d.m) == "Instance" then d.m else nil
+	local t0 = os.clock()
+	local atFoot = false
+	local lastPos: Vector3? = nil
+	local lastCheck, lastHop = os.clock(), 0
+	pcall(RunService.UnbindFromRenderStep, RunService, BOARD_STEP)
+	RunService:BindToRenderStep(BOARD_STEP, Enum.RenderPriority.Input.Value + 1, function()
+		local ch = Players.LocalPlayer.Character
+		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+		local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not ch or not hum or not root or hum.Health <= 0 or os.clock() - t0 > 4 or ch:GetAttribute("Boarded") == true then
+			RunService:UnbindFromRenderStep(BOARD_STEP)
+			return
+		end
+		local pos = root.Position
+		-- standing on the ramp / in the hull already: no need to go round by the foot
+		if not atFoot and skiff and skiff.Parent then
+			boardRay.FilterDescendantsInstances = { skiff }
+			if workspace:Raycast(pos, Vector3.new(0, -5, 0), boardRay) then
+				atFoot = true
+			end
+		end
+		local target = if atFoot then bay else foot
+		local to = Vector3.new(target.X - pos.X, 0, target.Z - pos.Z)
+		if to.Magnitude < 1 then
+			if atFoot then
+				RunService:UnbindFromRenderStep(BOARD_STEP)
+				return
+			end
+			atFoot = true
+			return
+		end
+		hum:Move(to.Unit, false)
+		-- blocked (ramp edge, step): hop
+		local c = os.clock()
+		if c - lastCheck >= 0.3 then
+			if lastPos and (Vector3.new(pos.X - lastPos.X, 0, pos.Z - lastPos.Z)).Magnitude < 0.6 and c - lastHop > 0.8 then
+				hum.Jump = true
+				lastHop = c
+			end
+			lastPos = pos
+			lastCheck = c
+		end
+	end)
+end
+
 function SkiffFx.init(Fx: any, audio: any, _juice: any)
 	FxApi = Fx
 	Audio = audio
 	Fx.register("SkiffGun", onGun)
+	Fx.register("SkiffBoard", onBoard)
 	Fx.register("SkiffHover", function(d: any)
 		if type(d) ~= "table" then
 			return
