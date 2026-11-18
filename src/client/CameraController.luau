@@ -68,6 +68,9 @@ local HEAD_ACCESSORIES: { [Enum.AccessoryType]: boolean } = {
 	[Enum.AccessoryType.Eyelash] = true,
 }
 local lowBlend = 0 -- prone / dive framing
+local carryBlend = 0 -- core cell carry framing (wider, trooper nearer the middle)
+local CARRY_DIST_ADD = 4
+local CARRY_SHOULDER = Vector3.new(1.2, 2.4, 0)
 -- drop capsule ride (character attribute InCapsule, server/PlayerService.dropTo): the lens pulls far out above and
 -- behind the capsule so the map below is in view, then eases back to the shoulder once the door opens
 local capBlend = 0
@@ -462,6 +465,14 @@ function CameraController.init()
 		local hipShoulder = baseShoulder:Lerp(baseShoulder * SPRINT_SHOULDER_SCALE, sprint)
 		hipDist += (LOW_DIST - hipDist) * lowBlend
 		hipShoulder = hipShoulder:Lerp(LOW_SHOULDER, lowBlend)
+		-- carrying a core cell (no fighting): pull back and in toward the middle so the trooper and the load are in view
+		local carrying = player:GetAttribute("CarryCell") == true
+		carryBlend += ((carrying and 1 or 0) - carryBlend) * (1 - math.exp(-dt * 4))
+		if carryBlend > 0.001 then
+			local k = carryBlend * carryBlend * (3 - 2 * carryBlend)
+			hipDist += CARRY_DIST_ADD * k
+			hipShoulder = hipShoulder:Lerp(CARRY_SHOULDER, k)
+		end
 		-- aim-down-sights: pull in tight over the right shoulder (fixed ADS distance, independent of wheel zoom)
 		local ads = aimBlend * aimBlend * (3 - 2 * aimBlend) -- smoothstep: snappy in the middle, soft ends
 		local wantDist = hipDist + (tune("AdsDist", ADS_DIST) - hipDist) * ads
