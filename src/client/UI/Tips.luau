@@ -78,8 +78,21 @@ local function inCombat(): boolean
 	return st == "Active" or st == "Extract"
 end
 
+-- phones (new layouts): the card sits under the crosshair, where the downed panel and its stim prompt go, and a short
+-- phone has no room for all three, so cards wait while downed there (the downed hint is not queued then: the panel and
+-- the prompt already say what to do). Follows the layout the card was built with.
+local underCrosshair = false
+
+local function downedOnPhone(): boolean
+	if not underCrosshair then
+		return false
+	end
+	local me = Store.get("me")
+	return type(me) == "table" and me.downed == true
+end
+
 local function canShow(): boolean
-	return inCombat() and not Store.get("menuOpen")
+	return inCombat() and not Store.get("menuOpen") and not downedOnPhone()
 end
 
 -- ---------------------------------------------------------------- text
@@ -116,8 +129,9 @@ local function build()
 	local gui = Theme.gui("OrbitTips", { DisplayOrder = 11, Insets = "CoreUISafeInsets" })
 	ui.gui = gui
 	local root = Theme.root(gui, "hud")
-	-- new layouts (UI STYLE A-C): one scale, no content x0.8; the card sits at HudLayout "tips" (phone y 110, under the feed)
+	-- new layouts (UI STYLE A-C): one scale, no content x0.8; the card sits at HudLayout "tips" (phone: under the crosshair)
 	local isNew = InfoLayer.isNew()
+	underCrosshair = isNew and touch
 	local content = if isNew then root else Style.content(root, touch)
 
 	local group = Instance.new("CanvasGroup")
@@ -335,7 +349,7 @@ local function pollMe()
 	end
 	local now = workspace:GetServerTimeNow()
 	local downed = me.downed == true
-	if edge("downed", downed) then
+	if edge("downed", downed) and not underCrosshair then
 		fire("downed")
 	end
 	-- ammo (weapon in hand)

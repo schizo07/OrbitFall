@@ -195,9 +195,12 @@ local PHONE = {
 		Size = UDim2.fromOffset(ph(240), ph(10)),
 		HeadingSize = ph(12),
 	},
+	-- The column under the compass starts below its heading readout (tape bottom ph(18) + the 16 px chip) and sits left
+	-- of centre (x 0.44, tips 0.42): the touch cluster's CROUCH / STIM column reaches to about 64 % of the width on
+	-- 680-830 px phones (measured on the S22 Ultra, iPhone 17 Pro / 16 Pro Max).
 	goal = {
 		-- the text is 14 px; the tap box (mission sheet) is 44 px tall around it
-		Position = UDim2.new(0.5, 0, 0, ph(22)),
+		Position = UDim2.new(0.44, 0, 0, ph(34)),
 		AnchorPoint = Vector2.new(0.5, 0),
 		Size = UDim2.fromOffset(ph(300), ph(18)),
 		MaxWidth = ph(300),
@@ -207,32 +210,34 @@ local PHONE = {
 		HitHeight = ph(44),
 	},
 	progress = {
-		Position = UDim2.new(0.5, 0, 0, ph(40)),
+		Position = UDim2.new(0.44, 0, 0, ph(52)),
 		AnchorPoint = Vector2.new(0.5, 0),
 		Size = UDim2.fromOffset(ph(220), 2),
 		Height = 2,
 	},
 	side = {
 		-- phones have no room for a side line under the goal; it shares the feed rows
-		Position = UDim2.new(0.5, 0, 0, ph(68)),
+		Position = UDim2.new(0.44, 0, 0, ph(82)),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromOffset(ph(300), ph(15)),
-		MaxWidth = ph(300),
+		Size = UDim2.fromOffset(ph(280), ph(15)),
+		MaxWidth = ph(280),
 		TextSize = ph(12),
 		NextGap = ph(2),
 	},
 	alert = {
-		Position = UDim2.new(0.5, 0, 0, ph(44)),
+		Position = UDim2.new(0.44, 0, 0, ph(58)),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromOffset(ph(300), ph(20)),
+		Size = UDim2.fromOffset(ph(280), ph(20)),
 		BarHeight = ph(20),
 		TextSize = ph(12),
 		CalloutHeight = ph(16),
 	},
 	tips = {
-		Position = UDim2.new(0.5, 0, 0, ph(110)),
+		-- no room above the crosshair on short phones: just under it, left of centre, clear of SPRINT / UPLINK on the
+		-- right and above the downed panel. The crosshair is at the screen centre, ~29 px above 50 % of this inset frame.
+		Position = UDim2.new(0.42, 0, 0.5, ph(2)),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromOffset(ph(320), 0),
+		Size = UDim2.fromOffset(ph(280), 0),
 	},
 	timer = {
 		Position = UDim2.new(1, -ph(10), 0, ph(8)),
@@ -248,9 +253,9 @@ local PHONE = {
 		TextSize = ph(12),
 	},
 	feed = {
-		Position = UDim2.new(0.5, 0, 0, ph(68)),
+		Position = UDim2.new(0.44, 0, 0, ph(82)),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromOffset(ph(300), ph(2 * 15 + 2)),
+		Size = UDim2.fromOffset(ph(280), ph(2 * 15 + 2)),
 		Lines = 2,
 		LineHeight = ph(15),
 		Gap = ph(2),
@@ -315,8 +320,8 @@ local PHONE = {
 		Size = UDim2.fromOffset(270, 3),
 	},
 	prompt = {
-		-- centred at x 360 of 800 (left of the SIDE chip at x 458), y 330
-		Position = UDim2.new(0.45, 0, 1, -ph(50)),
+		-- centred at 40 % of the width (the longest prompt, HOLD CROUCH, ends left of the SIDE chip on 680-830 px phones)
+		Position = UDim2.new(0.4, 0, 1, -ph(50)),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Size = UDim2.fromOffset(ph(200), ph(22)),
 		MaxWidth = ph(200),
