@@ -988,6 +988,22 @@ local PETAL_OUT = {
 	Petal_4 = Vector3.new(1, 0, 0),
 }
 
+-- The trooper riding a player capsule (anchored while inside, server/PlayerService.dropTo). The capsule tracks their
+-- replicated root instead of its own clock, so the two never drift apart whatever the network delay.
+local RIDER_UP = 3.2 -- root height above the capsule floor
+local function riderRoot(d: any): BasePart?
+	if d.kind ~= "player" or not d.u then
+		return nil
+	end
+	local pl = game:GetService("Players"):GetPlayerByUserId(d.u)
+	local c = pl and pl.Character
+	local root = c and c:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") and root.Anchored then
+		return root
+	end
+	return nil
+end
+
 local function dropPodMesh(d: any, to: Vector3, fall: number, accent: Color3): boolean
 	if d.kind == "hostile" then
 		return false
@@ -1006,7 +1022,8 @@ local function dropPodMesh(d: any, to: Vector3, fall: number, accent: Color3): b
 	end
 	model.Parent = getFolder()
 
-	local from = to + Vector3.new(rand(-30, 30), 460, rand(-30, 30))
+	-- the player capsule follows the path the server gives it (the trooper rides inside, server/PlayerService.dropTo)
+	local from: Vector3 = d.from or to + Vector3.new(rand(-30, 30), 460, rand(-30, 30))
 	local yaw = CFrame.Angles(0, rand(0, math.pi * 2), 0)
 	if capsule then
 		-- door toward the map centre
@@ -1065,7 +1082,8 @@ local function dropPodMesh(d: any, to: Vector3, fall: number, accent: Color3): b
 	place(from)
 	snd("PodFall", body, to)
 	animate(fall, function(a)
-		place(from:Lerp(to, a ^ 1.6))
+		local rider = riderRoot(d)
+		place(if rider then rider.Position - Vector3.new(0, RIDER_UP, 0) else from:Lerp(to, a ^ 1.6))
 	end, function()
 		snd("PodImpact", to)
 		shake(1.3, 0.45, to)
@@ -1120,7 +1138,7 @@ local function registerPods(Fx: any)
 		if dropPodMesh(d, to, fall, accent) then
 			return
 		end
-		local from = to + Vector3.new(rand(-30, 30), 460, rand(-30, 30))
+		local from: Vector3 = d.from or to + Vector3.new(rand(-30, 30), 460, rand(-30, 30))
 		local dir = (to - from).Unit
 		local hull = Color3.fromRGB(70, 76, 88)
 		-- nose along local -Z
@@ -1172,7 +1190,8 @@ local function registerPods(Fx: any)
 		model:PivotTo(CFrame.lookAt(from, from + dir))
 		snd("PodFall", root, to)
 		animate(fall, function(a)
-			local pos = from:Lerp(to + Vector3.new(0, 3.5, 0), a ^ 1.6)
+			local rider = riderRoot(d)
+			local pos = if rider then rider.Position else from:Lerp(to + Vector3.new(0, 3.5, 0), a ^ 1.6)
 			local cf = CFrame.lookAt(pos, pos + dir)
 			model:PivotTo(cf)
 			flame.CFrame = cf * CFrame.new(0, 0, 6.5)
