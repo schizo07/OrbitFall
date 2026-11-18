@@ -1074,17 +1074,79 @@ local function dropPodMesh(d: any, to: Vector3, fall: number, accent: Color3): b
 	tr.Transparency = seq(0.2, 1)
 	tr.Parent = body
 
+	-- steerable player capsule: four bottom thrusters (rear, front, left, right) fire with the rider's input, and the
+	-- capsule leans with it. The server publishes the input as character attribute CapsuleSteer = (turn, 0, thrust).
+	local jets: { { part: Part, o: Vector3, em: ParticleEmitter } } = {}
+	local tilt = Vector3.zero -- smoothed (turn, 0, thrust)
+	if capsule then
+		for _, o in { Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0), Vector3.new(0, 0, 1), Vector3.new(0, 0, -1) } do
+			local jp = mkPart({ Size = Vector3.new(0.5, 0.5, 0.5), Transparency = 1, CFrame = CFrame.new(from) }, model)
+			local em = emitter(jp, {
+				Texture = TEX_FIRE,
+				Color = ColorSequence.new(Color3.fromRGB(255, 230, 150), Color3.fromRGB(255, 110, 40)),
+				Size = seq(1.4, 0.3),
+				Transparency = seq(0.05, 1),
+				Lifetime = NumberRange.new(0.12, 0.24),
+				Speed = NumberRange.new(16, 24),
+				SpreadAngle = Vector2.new(10, 10),
+				Rate = 0,
+				LightEmission = 1,
+				EmissionDirection = Enum.NormalId.Front,
+			})
+			table.insert(jets, { part = jp, o = o, em = em })
+		end
+	end
+	local JET_R, JET_UP, TILT_MAX, TILT_PIVOT = 3.2, 0.9, math.rad(12), 5
+
 	local function place(pos: Vector3, motions: { [string]: CFrame }?)
 		local cf = CFrame.new(pos) * yaw.Rotation
+		-- lean: nose down under forward thrust, up under reverse, and a little into turns
+		local lean = yaw.Rotation:VectorToWorldSpace(Vector3.new(tilt.X * 0.6, 0, -tilt.Z))
+		if lean.Magnitude > 0.01 then
+			local axis = Vector3.new(0, 1, 0):Cross(lean)
+			if axis.Magnitude > 1e-3 then
+				local piv = Vector3.new(0, TILT_PIVOT, 0)
+				cf = CFrame.new(pos + piv) * CFrame.fromAxisAngle(axis.Unit, math.min(lean.Magnitude, 1) * TILT_MAX) * CFrame.new(-piv) * yaw.Rotation
+			end
+		end
 		CallInModels.pose(rig, cf, motions)
 		flame.CFrame = CFrame.new(pos + Vector3.new(0, 1, 0))
+		for _, j in jets do
+			local at = j.o * JET_R + Vector3.new(0, JET_UP, 0)
+			j.part.CFrame = cf * CFrame.lookAt(at, at + j.o + Vector3.new(0, -0.6, 0))
+			-- W fires the rear jet, S the front one, A the right one (turns left), D the left one
+			local k = if j.o.Z ~= 0 then j.o.Z * tilt.Z else -j.o.X * tilt.X
+			j.em.Rate = math.max(0, k) * 110
+		end
 	end
 	place(from)
 	snd("PodFall", body, to)
-	animate(fall, function(a)
+	animate(fall, function(a, dt)
 		local rider = riderRoot(d)
+		if capsule and #jets > 0 then
+			-- input (turn, 0, thrust) published by the server, smoothed; the capsule faces the rider's heading
+			local s = rider and rider.Parent and rider.Parent:GetAttribute("CapsuleSteer")
+			local want = if typeof(s) == "Vector3" then s else Vector3.zero
+			tilt += (want - tilt) * (1 - math.exp(-(dt or 1 / 60) * 8))
+			if rider then
+				local lv = rider.CFrame.LookVector
+				local flatLv = Vector3.new(lv.X, 0, lv.Z)
+				if flatLv.Magnitude > 0.1 then
+					yaw = CFrame.lookAt(Vector3.zero, flatLv.Unit)
+				end
+			end
+		end
 		place(if rider then rider.Position - Vector3.new(0, RIDER_UP, 0) else from:Lerp(to, a ^ 1.6))
 	end, function()
+		-- a steered capsule comes down where its rider is, not where it was aimed
+		local rider = riderRoot(d)
+		if rider then
+			to = rider.Position - Vector3.new(0, RIDER_UP, 0)
+		end
+		tilt = Vector3.zero
+		for _, j in jets do
+			j.em.Rate = 0
+		end
 		snd("PodImpact", to)
 		shake(1.3, 0.45, to)
 		dustBurst(to, 36, 5)

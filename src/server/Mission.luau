@@ -425,10 +425,10 @@ function Mission.start(p: Player?, args)
 			local y = map.groundY and map.groundY(x, z) or ins.Y
 			S.Players.applyLoadout(pl)
 			setDeploy(pl, "dropping")
-			S.Players.dropTo(pl, Vector3.new(x, y, z), 2.2)
+			S.Players.dropTo(pl, Vector3.new(x, y, z), 3.8) -- steerable ride down (PlayerService.dropTo)
 		end
 		S.Fx.play("Sound", { k = "MissionStart" })
-		task.wait(2.6)
+		task.wait(4.2)
 		if token ~= my then
 			return
 		end

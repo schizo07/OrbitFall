@@ -387,6 +387,36 @@ end
 local CAPSULE_DOOR_OPEN = 0.45
 local CAPSULE_STEP_OUT = 10 -- studs walked out through the door (about five steps)
 local ROOT_UP = 3.2 -- root height above the capsule floor (standing)
+-- steerable capsule: long enough a fall to pick a spot; the stick moves the landing point
+local DROP_TIME = 3.8 -- s, at least
+-- Controls (client/CapsuleSteer sends Vector3(turn, 0, thrust), each -1..1): A / D turn the capsule, W / S thrust it
+-- forward / back along the way it faces; it drifts (the velocity eases toward heading * thrust speed).
+local STEER_TURN = math.rad(110) -- turn rate at full A / D, rad/s
+local STEER_SPEED = 55 -- studs/s at full W
+local STEER_BACK = 25 -- studs/s at full S
+local STEER_ACCEL = 2.2 -- how quickly the velocity follows the thrust (exp rate, 1/s)
+local STEER_MAX = 170 -- studs the landing point can move from where it was aimed
+local STEER_FADE = 0.12 -- the last 12% of the fall: steering fades out
+local capSteer: { [Player]: Vector3 } = {}
+
+-- ground height under (x, z) for a steered landing: map geometry and terrain only, not too steep
+local groundRay = RaycastParams.new()
+groundRay.FilterType = Enum.RaycastFilterType.Include
+local function capsuleGroundAt(x: number, z: number, _c: Model): number?
+	local list: { Instance } = { workspace.Terrain }
+	for _, n in { "Map", "ObjectiveObjects", "ExtractionObjects" } do
+		local f = workspace:FindFirstChild(n)
+		if f then
+			table.insert(list, f)
+		end
+	end
+	groundRay.FilterDescendantsInstances = list
+	local hit = workspace:Raycast(Vector3.new(x, Config.DropHeight + 50, z), Vector3.new(0, -(Config.DropHeight + 400), 0), groundRay)
+	if hit and hit.Normal.Y >= 0.6 and not (hit.Instance and hit.Instance:FindFirstAncestor("DropCapsules")) then
+		return hit.Position.Y
+	end
+	return nil
+end
 
 -- Drop capsule: the trooper rides inside it. The server picks the fall path and sends it with the DropPod Fx, so the
 -- capsule the clients draw and the anchored character follow the same line; once the door is open they walk out.
@@ -395,7 +425,7 @@ function PlayerService.dropTo(p: Player, pos: Vector3, fallTime: number?)
 	if not r then
 		return
 	end
-	local t = fallTime or 1.8
+	local t = math.max(fallTime or 0, DROP_TIME)
 	r.dropping = true
 	r.alive = true
 	local function go()
@@ -415,26 +445,84 @@ function PlayerService.dropTo(p: Player, pos: Vector3, fallTime: number?)
 		-- the capsule door faces the map centre (same rule as CallInFx)
 		local flat = Vector3.new(-ground.X, 0, -ground.Z)
 		local door = if flat.Magnitude > 5 then flat.Unit else Vector3.new(0, 0, -1)
+		local heading = door -- the way the capsule (and its door) faces; A / D turn it during the fall
 		local function rootAt(at: Vector3): CFrame
-			return CFrame.lookAt(at, at + door)
+			return CFrame.lookAt(at, at + heading)
 		end
 		DropCapsule.clear(p)
 		root.Anchored = true
-		-- client/CameraController pulls the camera out behind the capsule while this is set
+		-- client/CameraController puts the camera on top of the capsule while this is set; client/CapsuleSteer sends
+		-- the steering ("capsuleSteer") meanwhile
 		c:SetAttribute("InCapsule", true)
+		capSteer[p] = nil
 		c:PivotTo(rootAt(from + Vector3.new(0, ROOT_UP, 0)))
 		S.Fx.play("DropPod", { p = ground, from = from, kind = "player", t = t, u = p.UserId })
+		-- steering moves the landing point around (up to STEER_MAX from where it was aimed, inside the map); the ground
+		-- height under it is probed as it moves. The capsule's XZ is the straight fall plus that offset, so steering
+		-- answers at once, and it fades out over the last bit so touchdown is not a sideways slide.
+		local off, vel = Vector3.zero, Vector3.zero
+		local goodOff = Vector3.zero
+		local gY, gYs = ground.Y, ground.Y
+		local half = Config.MapSize / 2 - 12
+		local probeAt = 0
+		local sentSteer = Vector3.zero
 		local t0 = os.clock()
-		while os.clock() - t0 < t do
-			local a = math.clamp((os.clock() - t0) / t, 0, 1)
+		local last = t0
+		local land = ground
+		while true do
+			local now = os.clock()
+			local dt = math.min(now - last, 0.1)
+			last = now
+			local a = math.clamp((now - t0) / t, 0, 1)
+			local auth = math.clamp((1 - a) / STEER_FADE, 0, 1)
+			local want = (capSteer[p] or Vector3.zero) * auth
+			local turn, thrust = math.clamp(want.X, -1, 1), math.clamp(want.Z, -1, 1)
+			heading = CFrame.Angles(0, -turn * STEER_TURN * dt, 0):VectorToWorldSpace(heading)
+			local spd = if thrust >= 0 then thrust * STEER_SPEED else thrust * STEER_BACK
+			vel += (heading * spd - vel) * (1 - math.exp(-dt * STEER_ACCEL))
+			off += vel * dt
+			if off.Magnitude > STEER_MAX then
+				off = off.Unit * STEER_MAX
+			end
+			local lx = math.clamp(ground.X + off.X, -half, half)
+			local lz = math.clamp(ground.Z + off.Z, -half, half)
+			off = Vector3.new(lx - ground.X, 0, lz - ground.Z)
+			if now >= probeAt then
+				probeAt = now + 0.1
+				local y = capsuleGroundAt(lx, lz, c)
+				if y then
+					gY = y
+					goodOff = off
+				else
+					-- too steep / no ground there: back to the last good spot
+					off, vel = goodOff, Vector3.zero
+					lx, lz = ground.X + off.X, ground.Z + off.Z
+				end
+			end
+			gYs += (gY - gYs) * (1 - math.exp(-dt * 8))
+			local e = a ^ 1.6
+			land = Vector3.new(lx, gY, lz)
+			local pos = Vector3.new(from.X + (ground.X - from.X) * e + off.X, from.Y + (gYs - from.Y) * e, from.Z + (ground.Z - from.Z) * e + off.Z)
 			if c.Parent then
-				c:PivotTo(rootAt(from:Lerp(ground, a ^ 1.6) + Vector3.new(0, ROOT_UP, 0)))
+				c:PivotTo(rootAt((if a >= 1 then land else pos) + Vector3.new(0, ROOT_UP, 0)))
+				-- which bottom thrusters fire (client/Fx/CallInFx): the steering input, in 0.1 steps
+				local q = Vector3.new(math.round(want.X * 10) / 10, 0, math.round(want.Z * 10) / 10)
+				if q ~= sentSteer then
+					sentSteer = q
+					c:SetAttribute("CapsuleSteer", q)
+				end
+			end
+			if a >= 1 then
+				break
 			end
 			RunService.Heartbeat:Wait()
 		end
+		capSteer[p] = nil
 		if c.Parent then
-			c:PivotTo(rootAt(ground + Vector3.new(0, ROOT_UP, 0)))
+			c:SetAttribute("CapsuleSteer", nil)
 		end
+		ground = land
+		door = heading -- the door opens the way the capsule ended up facing
 		-- impact shockwave hurts enemies and knocks nearby squadmates (shared blast path: server/Explosions.luau)
 		if S.Explosions and S.Explosions.blast then
 			S.Explosions.blast(ground, {
@@ -625,6 +713,21 @@ function PlayerService.init(s)
 	Players.CharacterAutoLoads = false
 	Movement.init(s, PlayerService)
 	DropCapsule.init(s)
+	-- drop capsule steering (client/CapsuleSteer): Vector3(turn, 0, thrust), length <= 1, only used while dropping
+	S.Actions.on("capsuleSteer", function(p, v)
+		if typeof(v) ~= "Vector3" or v.X ~= v.X or v.Z ~= v.Z then
+			return
+		end
+		local r = recs[p]
+		if not r or not r.dropping then
+			return
+		end
+		local f = Vector3.new(v.X, 0, v.Z)
+		capSteer[p] = if f.Magnitude > 1 then f.Unit else f
+	end)
+	Players.PlayerRemoving:Connect(function(p)
+		capSteer[p] = nil
+	end)
 	-- stim (client/Fx/VitalsFx: F, gamepad D-pad Left, touch STIM button). Denials go back so the client can say why.
 	-- Hold to stim (DownedRules.stimHold s, Config.Stims.Hold): the client sends "stimstart" on press, "stimcancel" on an
 	-- early release and "stim" when its fill completes; "stim" only goes through once the hold time has passed here

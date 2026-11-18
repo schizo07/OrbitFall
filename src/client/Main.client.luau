@@ -88,6 +88,12 @@ end
 safeCall("Camera", Cam.init)
 local MovementMod = safeRequire(root:FindFirstChild("Movement")) or {}
 safeCall("Movement", MovementMod.init) -- stamina, stances, dive, mantle, knockdown
+do -- drop capsule steering while riding down (client/CapsuleSteer.luau)
+	local Steer = safeRequire(root:FindFirstChild("CapsuleSteer"))
+	if Steer then
+		safeCall("CapsuleSteer", Steer.init)
+	end
+end
 do -- two-handed weapon hold + aim pose for every armed character (client/CombatPose.luau)
 	local Pose = safeRequire(root:FindFirstChild("CombatPose"))
 	local fxFolder = root:FindFirstChild("Fx")

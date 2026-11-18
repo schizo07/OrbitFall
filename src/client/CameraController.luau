@@ -71,14 +71,16 @@ local lowBlend = 0 -- prone / dive framing
 local carryBlend = 0 -- core cell carry framing (wider, trooper nearer the middle)
 local CARRY_DIST_ADD = 4
 local CARRY_SHOULDER = Vector3.new(1.2, 2.4, 0)
--- drop capsule ride (character attribute InCapsule, server/PlayerService.dropTo): the lens pulls far out above and
--- behind the capsule so the map below is in view, then eases back to the shoulder once the door opens
+-- drop capsule ride (character attribute InCapsule, server/PlayerService.dropTo): the camera sits on top of the
+-- capsule looking down at the ground ahead (steering: client/CapsuleSteer), then eases back to the shoulder once the
+-- door opens
 local capBlend = 0
 local wasInCapsule = false
-local CAP_DIST = 26
-local CAP_UP = 9
-local CAP_FOV_ADD = 6
-local CAP_PITCH = -0.5 -- look down toward the landing area when the ride starts
+local CAP_DIST = 15 -- lens behind the top of the capsule
+local CAP_LIFT = Vector3.new(0, 6, 0) -- camera-space lift: the capsule sits low in the frame, the ground ahead shows
+local CAP_TOP = 8.5 -- focus lifted from the trooper to the capsule's roof
+local CAP_FOV_ADD = 10
+local CAP_PITCH = -0.85 -- look down toward the landing area when the ride starts
 -- while the lens eases back in from behind, the landed capsule (server/DropCapsule) is see-through locally
 local capFade = 0
 local function fadeOwnCapsule(v: number)
@@ -416,16 +418,21 @@ function CameraController.init()
 		end
 		lowBlend += ((low and 1 or 0) - lowBlend) * (1 - math.exp(-dt * 8))
 		local inCapsule = c ~= nil and c:GetAttribute("InCapsule") == true
-		if inCapsule and not wasInCapsule then
-			-- face the way the door opens (toward the map centre), looking down at where it lands
-			local rp = root and root.Position
-			if rp then
-				local flat = Vector3.new(-rp.X, 0, -rp.Z)
-				if flat.Magnitude > 5 then
-					yaw = math.atan2(-flat.X, -flat.Z)
+		if inCapsule and root then
+			-- the camera rides behind the capsule's heading (A / D turn it, client/CapsuleSteer); pitch stays free
+			local lv = root.CFrame.LookVector
+			if Vector3.new(lv.X, 0, lv.Z).Magnitude > 0.1 then
+				local want = math.atan2(-lv.X, -lv.Z)
+				if not wasInCapsule then
+					yaw = want
+				else
+					local d = (want - yaw + math.pi) % (2 * math.pi) - math.pi
+					yaw += d * (1 - math.exp(-dt * 10))
 				end
 			end
-			pitch = CAP_PITCH
+			if not wasInCapsule then
+				pitch = CAP_PITCH
+			end
 		end
 		wasInCapsule = inCapsule
 		-- quick to pull out, slower and eased on the way back in
@@ -434,6 +441,10 @@ function CameraController.init()
 			capBlend = 0
 		end
 		local capK = capBlend * capBlend * (3 - 2 * capBlend)
+		if capK > 0 then
+			-- the roof lets go later than the distance, so on the way back in the lens comes down over the capsule
+			focus += Vector3.new(0, CAP_TOP * capK ^ 0.4, 0)
+		end
 		-- strafe roll: lean slightly into sideways motion
 		local rollT = 0
 		if root then
@@ -489,8 +500,7 @@ function CameraController.init()
 		local dip = if leanMode == "off" then 0 else SHOULDER_DIP * swapK
 		shoulder = Vector3.new(shoulder.X * sideBlend, shoulder.Y - dip, shoulder.Z)
 		if capK > 0 then
-			-- the height lets go later than the distance, so on the way back in the lens comes down over the capsule roof
-			shoulder = shoulder:Lerp(Vector3.new(0, CAP_UP, 0), capK ^ 0.4)
+			shoulder = shoulder:Lerp(CAP_LIFT, capK)
 			wantDist += (CAP_DIST - wantDist) * capK
 		end
 		fadeOwnCapsule(if inCapsule then 0 else math.min(1, capK * 2) * 0.85)
