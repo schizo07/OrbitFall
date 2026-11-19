@@ -7,6 +7,7 @@
 local Players = game:GetService("Players")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Carry = require(Shared.Carry)
 
 local M = Config.Move
 local MovementService = {}
@@ -115,9 +116,12 @@ function MovementService.init(s, playerService)
 			return
 		end
 		local m = get(p)
+		if stance == "prone" and Carry.isCarrying(p) then
+			stance = if m.stance == "crouch" then "crouch" else "stand"
+		end
 		m.stance = stance
-		-- (core-cell carriers sprint too, slower: shared/Carry.luau; stamina drains the same)
-		m.sprinting = sprinting == true and stance == "stand" and not m.exhausted
+		-- (1 cell can sprint slower; 2 cells blocks sprint: shared/Carry.luau)
+		m.sprinting = sprinting == true and stance == "stand" and not m.exhausted and Carry.canSprint(p)
 		setAttr(p, stance)
 		setSprintAttr(p, m.sprinting)
 		clearTwist(p, stance)
@@ -210,6 +214,15 @@ end
 -- Called by PlayerService's 10 Hz tick.
 function MovementService.step(p: Player, dt: number)
 	local m = get(p)
+	if m.stance == "prone" and Carry.isCarrying(p) and p:GetAttribute("Downed") ~= true then
+		m.stance = "stand"
+		setAttr(p, "stand")
+		clearTwist(p, "stand")
+	end
+	if m.sprinting and not Carry.canSprint(p) then
+		m.sprinting = false
+		setSprintAttr(p, false)
+	end
 	local t = now()
 	local before = m.exhausted
 	local root = PS.getRoot(p)

@@ -43,7 +43,11 @@ local function slot(): number?
 end
 
 function CellCarry.isCarrying(): boolean
-	return player:GetAttribute(Carry.ATTR) == true
+	return Carry.isCarrying(player)
+end
+
+function CellCarry.carryCount(who: Instance?): number
+	return Carry.count(who or player)
 end
 
 function CellCarry.setLocal(sprinting: boolean, grounded: boolean, stance: string, busy: boolean)
@@ -249,9 +253,9 @@ local function releaseRig(r: Rig)
 	showGun(r, true)
 end
 
--- True while this character is in the two-handed cell carry pose (CombatPose yields to this).
+-- True while this character is in a cell carry pose (CombatPose yields to this).
 function CellCarry.ownsPose(c: Model?): boolean
-	if not c or c:GetAttribute(Carry.ATTR) ~= true or c:GetAttribute(DownedRules.ATTR) == true then
+	if not c or not Carry.isCarrying(c) or c:GetAttribute(DownedRules.ATTR) == true then
 		return false
 	end
 	local hum = c:FindFirstChildOfClass("Humanoid")
@@ -273,7 +277,7 @@ function CellCarry.ownsPose(c: Model?): boolean
 			return false
 		end
 	end
-	if Carry.rule() == "SIDEARM" then
+	if Carry.rule() == "SIDEARM" and Carry.count(c) < Carry.MAX_CELLS then
 		local gun = c:FindFirstChild("Gun")
 		local handle = gun and gun:FindFirstChild("Handle")
 		local muzzle = handle and handle:FindFirstChild("Muzzle")
@@ -299,12 +303,17 @@ end
 
 local function stepRig(r: Rig, dt: number, isLocal: boolean)
 	r.active = true
+	local count = Carry.count(r.c)
+	local twoHands = count >= Carry.MAX_CELLS
+	local weight = if twoHands then 1 else 0.58
 	local v = r.hrp.AssemblyLinearVelocity
 	local speed = Vector3.new(v.X, 0, v.Z).Magnitude
 	local grounded = if isLocal then localGrounded else (r.hum.FloorMaterial ~= Enum.Material.Air)
 	local crouching = if isLocal then (localStance == "crouch") else (r.c:GetAttribute("Stance") == "crouch")
 	local sprinting: boolean
-	if isLocal then
+	if twoHands then
+		sprinting = false
+	elseif isLocal then
 		sprinting = localSprinting and speed > 2
 	else
 		local sAttr = r.c:GetAttribute("Sprinting")
@@ -323,27 +332,27 @@ local function stepRig(r: Rig, dt: number, isLocal: boolean)
 
 	local sw = math.sin(r.ph) * r.walkW
 	local bounce = 0.5 * (1 - math.cos(2 * r.ph))
-	local leanT = CARRY_LEAN_BACK + (CARRY_LEAN_SPRINT - CARRY_LEAN_BACK) * r.sprintW
+	local leanT = (CARRY_LEAN_BACK + (CARRY_LEAN_SPRINT - CARRY_LEAN_BACK) * r.sprintW) * weight
 	if crouching then
-		leanT = CARRY_LEAN_BACK * 0.5
+		leanT = CARRY_LEAN_BACK * 0.5 * weight
 	end
 	r.lean += (leanT - r.lean) * (1 - exp(-dt * 7))
 
 	-- Pelvis: slower, bouncier walk bob + lateral weight shift + sprint tilt
 	local rawRoot = r.root.Transform
 	if not crouching then
-		local bobAmp = CARRY_BOB_WALK + (CARRY_BOB_SPRINT - CARRY_BOB_WALK) * r.sprintW
+		local bobAmp = (CARRY_BOB_WALK + (CARRY_BOB_SPRINT - CARRY_BOB_WALK) * r.sprintW) * weight
 		local bobY = (0.35 - bounce) * bobAmp * r.walkW
-		local swayX = sw * (CARRY_SWAY_LAT + 0.03 * r.sprintW)
-		local pelvisPitch = -0.07 * r.sprintW
-		local pelvisRoll = -sw * 0.045
+		local swayX = sw * (CARRY_SWAY_LAT + 0.03 * r.sprintW) * weight
+		local pelvisPitch = -0.07 * r.sprintW * weight
+		local pelvisRoll = -sw * 0.045 * weight
 		r.root.Transform = CFrame.new(swayX, bobY, 0) * CFrame.Angles(pelvisPitch, 0, pelvisRoll) * CF0:Lerp(rawRoot, 0.75)
 
 		-- Heavier step: extra hip/knee compression on each footstrike (especially while sprinting)
 		if r.walkW > 0.01 then
-			local hipExtra = (0.08 + 0.12 * r.sprintW) * bounce * r.walkW
-			local kneeExtra = -(0.14 + 0.22 * r.sprintW) * bounce * r.walkW
-			local stanceOut = 0.05 * r.walkW
+			local hipExtra = (0.08 + 0.12 * r.sprintW) * bounce * r.walkW * weight
+			local kneeExtra = -(0.14 + 0.22 * r.sprintW) * bounce * r.walkW * weight
+			local stanceOut = 0.05 * r.walkW * weight
 			if r.lHip then
 				r.lHip.Transform = r.lHip.Transform * CFrame.Angles(hipExtra, 0, -stanceOut)
 			end
@@ -360,9 +369,9 @@ local function stepRig(r: Rig, dt: number, isLocal: boolean)
 	end
 
 	-- Upper body: slight lean back at walk/idle, forward lean when sprinting, side-to-side sway & heavy step nod
-	local stepPitch = -(0.03 + 0.06 * r.sprintW) * bounce * r.walkW
-	local roll = sw * (CARRY_ROLL + 0.025 * r.sprintW)
-	local twist = sw * (CARRY_TWIST + 0.02 * r.sprintW)
+	local stepPitch = -(0.03 + 0.06 * r.sprintW) * bounce * r.walkW * weight
+	local roll = sw * (CARRY_ROLL + 0.025 * r.sprintW) * weight + (if twoHands then 0 else -0.04)
+	local twist = sw * (CARRY_TWIST + 0.02 * r.sprintW) * weight
 	local stagger = if isLocal and ArmorFx and ArmorFx.waistOffset then ArmorFx.waistOffset else CF0
 	r.waist.Transform = CF0:Lerp(r.waist.Transform, 0.2) * stagger * CFrame.Angles(r.lean + stepPitch, twist, roll)
 
@@ -371,19 +380,27 @@ local function stepRig(r: Rig, dt: number, isLocal: boolean)
 		r.neck.Transform = CF0:Lerp(r.neck.Transform, 0.35) * CFrame.Angles(-(r.lean + stepPitch) * 0.65, 0, -roll * 0.55)
 	end
 
-	-- Arms: cell held up at chest height, elbows flared out so the carry silhouette reads clearly from behind
+	-- Arms: 2 cells = two-handed chest carry; 1 cell = left hand at the hip, right arm free-ish
 	local hrpCF = r.hrp.CFrame
 	local lower = hrpCF * c0Of(r.root) * r.root.Transform * c1Of(r.root):Inverse()
 	local upper = lower * c0Of(r.waist) * r.waist.Transform * c1Of(r.waist):Inverse()
-	local cell = upper * Carry.HOLD
 	local right, back, up = upper.RightVector, -upper.LookVector, upper.UpVector
-	local h = tune("CarryHand", CARRY_HAND) :: Vector3
-	local rPole = right * 1.55 + back * 0.45 + up * 0.12
-	local lPole = -right * 1.55 + back * 0.45 + up * 0.12
-	local rRot = cell.Rotation * CFrame.Angles(-0.35, 0, -0.25)
-	local lRot = cell.Rotation * CFrame.Angles(-0.35, 0, 0.25)
-	solveArm(r.R, upper, (cell * CFrame.new(h.X, h.Y, h.Z)).Position, rPole, rRot)
-	solveArm(r.L, upper, (cell * CFrame.new(-h.X, h.Y, h.Z)).Position, lPole, lRot)
+	if twoHands then
+		local cell = upper * Carry.HOLD
+		local h = tune("CarryHand", CARRY_HAND) :: Vector3
+		local rPole = right * 1.55 + back * 0.45 + up * 0.12
+		local lPole = -right * 1.55 + back * 0.45 + up * 0.12
+		local rRot = cell.Rotation * CFrame.Angles(-0.35, 0, -0.25)
+		local lRot = cell.Rotation * CFrame.Angles(-0.35, 0, 0.25)
+		solveArm(r.R, upper, (cell * CFrame.new(h.X, h.Y, h.Z)).Position, rPole, rRot)
+		solveArm(r.L, upper, (cell * CFrame.new(-h.X, h.Y, h.Z)).Position, lPole, lRot)
+	else
+		local cell = upper * Carry.HOLD_ONE
+		local gripPos = (cell * CFrame.new(0, Carry.SIZE.Y / 2 + 0.10, 0)).Position
+		local lPole = -right * 1.15 + back * 0.85 + up * 0.10
+		local lRot = upper.Rotation * CFrame.Angles(-0.15, 0, 0.15)
+		solveArm(r.L, upper, gripPos, lPole, lRot)
+	end
 	showGun(r, false)
 end
 
@@ -468,18 +485,26 @@ function CellCarry.init()
 	Input.on("Interact", tryDrop)
 	Input.on("Grenade", tryDrop)
 
-	player:GetAttributeChangedSignal(Carry.ATTR):Connect(function()
-		if not CellCarry.isCarrying() then
-			return
-		end
-		Store.set("toast", "Core cell in hand. Load it at the cargo lifter. [" .. dropKeyText() .. "] drop")
-		if Carry.rule() == "SIDEARM" then
-			local m = Store.get("me")
-			if type(m) == "table" and m.weapons and m.weapons[2] and m.weapon ~= 2 and actionEv then
-				actionEv:FireServer("swap", 2)
+	local lastCount = Carry.count(player)
+	local function onCarryChange()
+		local cnt = Carry.count(player)
+		if cnt > lastCount then
+			if cnt >= Carry.MAX_CELLS then
+				Store.set("toast", "Carrying 2 core cells (heavy, no sprint). Load at the cargo lifter. [" .. dropKeyText() .. "] drop one")
+			else
+				Store.set("toast", "Core cell in hand (1/2). Grab another or load at the cargo lifter. [" .. dropKeyText() .. "] drop")
+				if Carry.rule() == "SIDEARM" then
+					local m = Store.get("me")
+					if type(m) == "table" and m.weapons and m.weapons[2] and m.weapon ~= 2 and actionEv then
+						actionEv:FireServer("swap", 2)
+					end
+				end
 			end
 		end
-	end)
+		lastCount = cnt
+	end
+	player:GetAttributeChangedSignal(Carry.COUNT_ATTR):Connect(onCarryChange)
+	player:GetAttributeChangedSignal(Carry.ATTR):Connect(onCarryChange)
 
 	if RunService:IsStudio() then
 		local function send()

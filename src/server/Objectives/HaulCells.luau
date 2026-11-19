@@ -16,6 +16,7 @@
 -- Receives `ctx` from ObjectiveService; returns a controller { entry, stop, drop, stepsDone, debugSolve }.
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
@@ -30,12 +31,15 @@ local HaulCells = {}
 local PLACES = { "spilled", "mesa", "quarry", "graveyard" } -- cell places, in the order the cells are numbered
 local PLACE_LABEL = { spilled = "DRONE WRECK", mesa = "SIGNAL MESA", quarry = "QUARRY", graveyard = "WALKER GRAVEYARD" }
 local PICK_HOLD = 0.5
+local PULL_TIME = 0.6 -- s "pull it out" beat when taking a cell from a cradle
 local LIFT_RADIUS = 7.5 -- horizontal studs from the cargo bed centre that load a carried cell
+local LIFT_DROP_RADIUS = LIFT_RADIUS + 2 -- dropping at or near the lifter still loads into the bed
 local LIFT_DY = 9
 local REPICK_LOCK = 0.6 -- s after a drop before that trooper can grab again (holding Interact to drop doesn't re-grab)
 local LAUNCH_SECONDS = (MapPlan.haul and MapPlan.haul.launchSeconds) or 50 -- last cell loaded -> defend while lifter climbs
 local DEBUG_LAUNCH_SECONDS = 5 -- same with the DebugFast attribute
-local PAD_H = 0.2 -- height of the dark pad a resting cell stands on
+local PAD_H = 0.36 -- height of the cradle plinth a resting cell sits on
+local TEX_SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local STEP_FMT = "Load cells into the cargo lifter [%d/%d]"
 local CHARGE_FMT = "LIFTER CHARGING %d/%d"
 local LAUNCH_FMT = "Defend the cargo lifter: climbing %d s"
@@ -49,14 +53,29 @@ local PAINT = Color3.fromRGB(226, 196, 92)
 local CONCRETE = Color3.fromRGB(122, 120, 116)
 local CALLOUT = Color3.fromRGB(244, 246, 250)
 
+type CradleArm = {
+	part: Part,
+	openCF: CFrame,
+}
+
+type Cradle = {
+	pos: Vector3,
+	arms: { CradleArm },
+	ring: Part,
+	steam: ParticleEmitter?,
+	opened: boolean,
+}
+
 type Cell = {
 	id: number,
 	case: Part,
 	parts: { BasePart },
 	prompt: ProximityPrompt,
-	state: string, -- "cache" | "carried" | "dropped" | "loaded"
+	state: string, -- "cache" | "picking" | "carried" | "dropped" | "loaded" | "locked"
 	home: CFrame,
 	cache: any,
+	cradle: Cradle?,
+	onBelt: boolean?,
 	carrier: Player?,
 	weld: Weld?,
 	marker: BillboardGui?,
@@ -131,7 +150,8 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	local delivered = 0
 
 	local cells: { Cell } = {}
-	local carriers: { [Player]: Cell } = {}
+	local carriers: { [Player]: { Cell } } = {}
+	local picking: { [Player]: number } = {}
 	local lastPos: { [Player]: Vector3 } = {}
 	local dropLock: { [Player]: number } = {}
 
@@ -405,15 +425,48 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		f.Parent = root
 		local spots: { CFrame } = cache.spots
 		for k, spot in spots do
-			-- a round dark pad with a glowing ring on the floor; the cell stands upright on it (yaw only, the anchor's tilt is dropped)
+			-- 5-part cradle (plinth, seat, faint glow ring, 2 clamp arms): cells rest in the cradle, not on the ground
 			local floor = spot.Position
 			local _, yaw = spot:ToOrientation()
 			local at = CFrame.new(floor) * CFrame.Angles(0, yaw, 0)
-			local padOpts = { CanCollide = false, CanQuery = false, CastShadow = false }
-			ctx.cyl(f, 3.4, PAD_H, at * CFrame.new(0, PAD_H / 2, 0), DARK, Enum.Material.SmoothPlastic, padOpts)
-			ctx.cyl(f, 2.7, PAD_H + 0.03, at * CFrame.new(0, PAD_H / 2, 0), Carry.COLOR, Enum.Material.Neon, { CanCollide = false, CanQuery = false, CastShadow = false, Transparency = 0.45 })
-			local cell = buildCell(at * CFrame.new(0, PAD_H + Carry.SIZE.Y / 2 + 0.02, 0), #cells + 1)
+			local cradleOpts = { CanCollide = false, CanQuery = false, CastShadow = false }
+			local plinth = ctx.cyl(f, 3.3, 0.26, at * CFrame.new(0, 0.13, 0), DARK, Enum.Material.Metal, cradleOpts)
+			ctx.part(f, Vector3.new(2.1, 0.12, 1.4), at * CFrame.new(0, 0.30, 0), STEEL, Enum.Material.Metal, cradleOpts)
+			local ring = ctx.cyl(f, 2.75, 0.05, at * CFrame.new(0, 0.285, 0), Carry.COLOR, Enum.Material.Neon, { CanCollide = false, CanQuery = false, CastShadow = false, Transparency = 0.6 })
+			local arms: { CradleArm } = {}
+			for _, sz in { -1, 1 } do
+				local closedCF = at * CFrame.new(0, PAD_H + 0.44, sz * (Carry.SIZE.Z / 2 + 0.14)) * CFrame.Angles(sz * math.rad(8), 0, 0)
+				local openCF = at * CFrame.new(0, PAD_H + 0.38, sz * (Carry.SIZE.Z / 2 + 0.56)) * CFrame.Angles(sz * math.rad(-28), 0, 0)
+				local arm = ctx.part(f, Vector3.new(0.46, 0.92, 0.22), closedCF, STEEL, Enum.Material.Metal, cradleOpts)
+				table.insert(arms, { part = arm, openCF = openCF })
+			end
+			local steam = Instance.new("ParticleEmitter")
+			steam.Name = "CradleSteam"
+			steam.Texture = TEX_SMOKE
+			steam.Rate = 0
+			steam.Enabled = false
+			steam.Lifetime = NumberRange.new(0.45, 0.75)
+			steam.Speed = NumberRange.new(3, 6)
+			steam.SpreadAngle = Vector2.new(38, 38)
+			steam.EmissionDirection = Enum.NormalId.Top
+			steam.Acceleration = Vector3.new(0, 2, 0)
+			steam.Drag = 2.5
+			steam.Rotation = NumberRange.new(0, 360)
+			steam.RotSpeed = NumberRange.new(-45, 45)
+			steam.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1.5) })
+			steam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.45), NumberSequenceKeypoint.new(1, 1) })
+			steam.Color = ColorSequence.new(Color3.fromRGB(220, 235, 245))
+			steam.Parent = plinth
+
+			local cell = buildCell(at * CFrame.new(0, PAD_H + Carry.SIZE.Y / 2 + 0.03, 0), #cells + 1)
 			cell.cache = cache
+			cell.cradle = {
+				pos = floor,
+				arms = arms,
+				ring = ring,
+				steam = steam,
+				opened = false,
+			}
 			table.insert(cache.cells, cell)
 			table.insert(cells, cell)
 			-- a short lamp post by the first cell carries the place's marker once revealed
@@ -429,6 +482,8 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	-- ============================================================ carry helpers
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Include
+	rayParams.RespectCanCollide = true
+	rayParams.IgnoreWater = true
 	local function groundAt(pos: Vector3): Vector3?
 		if pos.Y ~= pos.Y or pos.Y < -40 then
 			return nil
@@ -439,7 +494,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 		table.insert(list, lifter)
 		rayParams.FilterDescendantsInstances = list
-		local hit = Workspace:Raycast(pos + Vector3.new(0, 2, 0), Vector3.new(0, -40, 0), rayParams)
+		local hit = Workspace:Raycast(pos + Vector3.new(0, 2, 0), Vector3.new(0, -60, 0), rayParams)
 		if hit then
 			return hit.Position
 		end
@@ -449,14 +504,56 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		return nil
 	end
 
-	local function setCarryAttr(p: Player, on: boolean)
-		local v = if on then true else nil
+	local function isNearLifter(pos: Vector3, radius: number): boolean
+		local d = pos - liftPos
+		return Vector2.new(d.X, d.Z).Magnitude <= radius and math.abs(d.Y) <= LIFT_DY
+	end
+
+	local function carryCount(p: Player): number
+		local list = carriers[p]
+		return if list then #list else 0
+	end
+
+	local function setCarryAttr(p: Player, count: number)
+		local onVal: boolean? = if count > 0 then true else nil
+		local cntVal: number? = if count > 0 then count else nil
 		if p.Parent then
-			p:SetAttribute(Carry.ATTR, v)
+			p:SetAttribute(Carry.ATTR, onVal)
+			p:SetAttribute(Carry.COUNT_ATTR, cntVal)
 		end
 		local c = p.Character
 		if c then
-			c:SetAttribute(Carry.ATTR, v)
+			c:SetAttribute(Carry.ATTR, onVal)
+			c:SetAttribute(Carry.COUNT_ATTR, cntVal)
+		end
+	end
+
+	local function syncCarrierWelds(p: Player)
+		local list = carriers[p]
+		if not list or #list == 0 then
+			return
+		end
+		if #list == 1 then
+			local c1 = list[1]
+			if c1.weld then
+				c1.weld.C0 = Carry.HOLD_ONE
+			end
+			if not c1.above and p.Parent then
+				local above = billboard(c1.case, "CarrierIcon", nil, Vector3.new(0, 3.6, 0), 1000, 12)
+				above.PlayerToHideFrom = p
+				c1.above = above
+			end
+		else
+			if list[1].weld then
+				list[1].weld.C0 = Carry.HOLD_TWO_1
+			end
+			if list[2].weld then
+				list[2].weld.C0 = Carry.HOLD_TWO_2
+			end
+			if list[2].above then
+				list[2].above:Destroy()
+				list[2].above = nil
+			end
 		end
 	end
 
@@ -465,8 +562,18 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	local function detach(cell: Cell, cf: CFrame)
 		local p = cell.carrier
 		if p then
-			carriers[p] = nil
-			setCarryAttr(p, false)
+			local list = carriers[p]
+			if list then
+				local idx = table.find(list, cell)
+				if idx then
+					table.remove(list, idx)
+				end
+				if #list == 0 then
+					carriers[p] = nil
+				end
+			end
+			setCarryAttr(p, carryCount(p))
+			syncCarrierWelds(p)
 		end
 		cell.carrier = nil
 		if cell.weld then
@@ -494,16 +601,14 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 	end
 
-	-- drop the carried cell where its carrier stands (reason: "drop" | "down" | "leave")
-	local function drop(p: Player, reason: string)
-		local cell = carriers[p]
-		if not cell then
+	local load: (Cell, Player?) -> ()
+
+	local function placeDroppedCell(cell: Cell, pos: Vector3, p: Player?, reason: string)
+		if not finished and (isNearLifter(pos, LIFT_DROP_RADIUS) or isNearLifter(cell.case.Position, LIFT_DROP_RADIUS)) then
+			load(cell, p)
 			return
 		end
-		local r = ctx.getRoot(p)
-		local pos = if r and r.Parent then r.Position else (lastPos[p] or cell.case.Position)
 		local g = groundAt(pos)
-		dropLock[p] = os.clock()
 		if not g then
 			-- fell out of the world: back to its cache slot
 			detach(cell, cell.home)
@@ -519,10 +624,32 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			cell.prompt.Enabled = true
 			setDroppedMarker(cell, true)
 		end
-		if reason ~= "leave" then
+		if p and reason ~= "leave" then
 			callout(p, "Cell down!")
 		end
 		ctx.sound("Swap", cell.case.Position)
+	end
+
+	-- drop carried cell(s) where the carrier stands ("drop" drops one cell at a time; "down"/"leave" drops all)
+	local function drop(p: Player, reason: string)
+		local list = carriers[p]
+		if not list or #list == 0 then
+			return
+		end
+		local r = ctx.getRoot(p)
+		local basePos = if r and r.Parent then r.Position else (lastPos[p] or list[#list].case.Position)
+		dropLock[p] = os.clock()
+		if reason == "drop" then
+			placeDroppedCell(list[#list], basePos, p, reason)
+		else
+			local n = 0
+			while carriers[p] and #carriers[p] > 0 do
+				local c = carriers[p][#carriers[p]]
+				local offset = if n == 0 then Vector3.zero else Vector3.new(1.5, 0, 0)
+				n += 1
+				placeDroppedCell(c, basePos + offset, p, reason)
+			end
+		end
 	end
 	ctl.drop = drop
 
@@ -713,8 +840,58 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 	end
 
+	local function completeAttach(cell: Cell, p: Player, torso: BasePart, fromCache: boolean)
+		local list = carriers[p]
+		if not list then
+			list = {}
+			carriers[p] = list
+		end
+		table.insert(list, cell)
+		local holdCF = if #list >= Carry.MAX_CELLS then Carry.HOLD_TWO_2 else Carry.HOLD_ONE
+		-- unanchor first, weld in the same thread (no physics step in between)
+		cell.case.Anchored = false
+		cell.case.CFrame = torso.CFrame * holdCF
+		local w = Instance.new("Weld")
+		w.Name = "CarryWeld"
+		w.Part0 = torso
+		w.Part1 = cell.case
+		w.C0 = holdCF
+		w.Parent = cell.case
+		cell.weld = w
+		cell.carrier = p
+		cell.state = "carried"
+		local light = cell.case:FindFirstChild("CarryLight")
+		if light and light:IsA("PointLight") then
+			light.Enabled = true
+		end
+		local r = ctx.getRoot(p)
+		lastPos[p] = if r then r.Position else torso.Position
+		syncCarrierWelds(p)
+		setCarryAttr(p, #list)
+		if cell.cache then
+			if not cell.cache.revealed then
+				revealCache(cell.cache, "los")
+			else
+				refreshCacheMarker(cell.cache)
+				syncSiteMarkers(false)
+			end
+		end
+		callout(p, if #list >= Carry.MAX_CELLS then "Got a second cell." else "Cell secured.")
+		ctx.sound("Pickup", torso.Position)
+		if fromCache and cell.cache then
+			twists.onLift(cell.cache.name, p)
+			if encounters then
+				encounters.onCellLift(cell.cache, cell, p)
+			end
+		end
+		if not cell.everTaken then
+			cell.everTaken = true
+			ctx.intensity("SAMPLE") -- lifting a cell draws attention (same as a sample pickup)
+		end
+	end
+
 	pickup = function(cell: Cell, p: Player)
-		if finished or not alive or carriers[p] then
+		if finished or not alive or carryCount(p) + (picking[p] or 0) >= Carry.MAX_CELLS then
 			return
 		end
 		if cell.state ~= "cache" and cell.state ~= "dropped" then
@@ -732,52 +909,89 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			return
 		end
 		local fromCache = cell.state == "cache"
+		local cradle = cell.cradle
+		local fromCradle = fromCache and cradle ~= nil and not cell.onBelt and (cell.case.Position - cradle.pos).Magnitude < 2.5
+
 		cell.prompt.Enabled = false
 		setDroppedMarker(cell, false)
-		-- unanchor first, weld in the same thread (no physics step in between)
-		cell.case.Anchored = false
-		cell.case.CFrame = torso.CFrame * Carry.HOLD
-		local w = Instance.new("Weld")
-		w.Name = "CarryWeld"
-		w.Part0 = torso
-		w.Part1 = cell.case
-		w.C0 = Carry.HOLD
-		w.Parent = cell.case
-		cell.weld = w
-		cell.carrier = p
-		cell.state = "carried"
-		local light = cell.case:FindFirstChild("CarryLight")
-		if light and light:IsA("PointLight") then
-			light.Enabled = true
+
+		if not fromCradle then
+			completeAttach(cell, p, torso, fromCache)
+			return
 		end
-		carriers[p] = cell
-		local r = ctx.getRoot(p)
-		lastPos[p] = if r then r.Position else torso.Position
-		setCarryAttr(p, true)
-		-- small icon above the carrier's head for everybody else (the carrier sees the cell in their hands)
-		local above = billboard(cell.case, "CarrierIcon", nil, Vector3.new(0, 3.6, 0), 1000, 12)
-		above.PlayerToHideFrom = p
-		cell.above = above
-		if cell.cache then
-			if not cell.cache.revealed then
-				revealCache(cell.cache, "los")
-			else
-				refreshCacheMarker(cell.cache)
-				syncSiteMarkers(false)
+
+		-- ~0.6 s "pull it out" beat: open cradle clamps, steam puff + hiss, lift cell into hands
+		cell.state = "picking"
+		picking[p] = (picking[p] or 0) + 1
+		if cradle and not cradle.opened then
+			cradle.opened = true
+			for _, arm in cradle.arms do
+				if arm.part.Parent then
+					ctx.tween(arm.part, 0.28, { CFrame = arm.openCF }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+				end
 			end
-		end
-		callout(p, "Cell secured.")
-		ctx.sound("Pickup", torso.Position)
-		if fromCache and cell.cache then
-			twists.onLift(cell.cache.name, p)
-			if encounters then
-				encounters.onCellLift(cell.cache, cell, p)
+			if cradle.ring.Parent then
+				ctx.tween(cradle.ring, 0.4, { Transparency = 0.85 })
 			end
+			if cradle.steam and cradle.steam.Parent then
+				cradle.steam:Emit(14)
+			end
+			ctx.sound("GasHiss", cradle.pos)
 		end
-		if not cell.everTaken then
-			cell.everTaken = true
-			ctx.intensity("SAMPLE") -- lifting a cell draws attention (same as a sample pickup)
-		end
+
+		local startCF = cell.case.CFrame
+		local liftCF = startCF + Vector3.new(0, 1.35, 0)
+		task.spawn(function()
+			local t0 = os.clock()
+			while alive and ctx.alive() do
+				local elapsed = os.clock() - t0
+				if not p.Parent or not ctx.isAlive(p) or p:GetAttribute("Downed") == true
+					or (S and S.Players and S.Players.getStance and S.Players.getStance(p) == "down") then
+					picking[p] = math.max(0, (picking[p] or 1) - 1)
+					if picking[p] == 0 then
+						picking[p] = nil
+					end
+					placeDroppedCell(cell, cell.case.Position, nil, "down")
+					return
+				end
+				local curChar = p.Character
+				local curTorso = curChar and (curChar:FindFirstChild("UpperTorso") or curChar:FindFirstChild("HumanoidRootPart")) :: BasePart?
+				if not curTorso then
+					picking[p] = math.max(0, (picking[p] or 1) - 1)
+					if picking[p] == 0 then
+						picking[p] = nil
+					end
+					placeDroppedCell(cell, cell.case.Position, nil, "down")
+					return
+				end
+				if elapsed >= PULL_TIME then
+					picking[p] = math.max(0, (picking[p] or 1) - 1)
+					if picking[p] == 0 then
+						picking[p] = nil
+					end
+					if finished or carryCount(p) >= Carry.MAX_CELLS then
+						placeDroppedCell(cell, curTorso.Position, nil, "drop")
+					else
+						completeAttach(cell, p, curTorso, fromCache)
+					end
+					return
+				end
+				if elapsed < 0.24 then
+					local a = elapsed / 0.24
+					local ease = 1 - (1 - a) * (1 - a)
+					cell.case.CFrame = startCF:Lerp(liftCF, ease)
+				else
+					local a = (elapsed - 0.24) / (PULL_TIME - 0.24)
+					local ease = a * a * (3 - 2 * a)
+					local targetHold = if carryCount(p) >= 1 then Carry.HOLD_TWO_2 else Carry.HOLD_ONE
+					cell.case.CFrame = liftCF:Lerp(curTorso.CFrame * targetHold, ease)
+				end
+				RunService.Heartbeat:Wait()
+			end
+			if p.Parent and picking[p] then
+				picking[p] = nil
+			end
+		end)
 	end
 
 	-- ============================================================ delivery + completion
@@ -832,17 +1046,23 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		ctx.sound("Generator", liftPos)
 		ctx.sound("Alarm", liftPos)
 
-		-- Ignite thruster beam and begin gradual climb during the defense hold
+		-- Ignite thruster beam and begin gradual climb after the last cell settles into its bed slot (0.5 s tween)
 		local beam = ctx.glow(lifter, Vector3.new(2.8, 600, 2.8), CFrame.new(liftPos + Vector3.new(0, 300, 0)), PANEL_BLUE, { Transparency = 1 })
 		launchBeam = beam
 		ctx.tween(beam, 0.8, { Transparency = 0.42 })
-		local movers = collectMovers()
-		for _, m in movers do
-			if m.Parent then
-				m.CanCollide = false -- troopers standing on the bed stay on the plaza
-				ctx.tween(m, secs, { CFrame = m.CFrame + Vector3.new(0, 28, 0) }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+		task.delay(0.55, function()
+			if not alive or not ctx.alive() then
+				return
 			end
-		end
+			local climbSecs = math.max(1, secs - 0.55)
+			local movers = collectMovers()
+			for _, m in movers do
+				if m.Parent then
+					m.CanCollide = false -- troopers standing on the bed stay on the plaza
+					ctx.tween(m, climbSecs, { CFrame = m.CFrame + Vector3.new(0, 28, 0) }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+				end
+			end
+		end)
 
 		twists.finalWave(secs)
 		task.spawn(function()
@@ -874,7 +1094,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	end
 
 	local chargeGen = 0
-	local function load(cell: Cell, by: Player?)
+	load = function(cell: Cell, by: Player?)
 		if cell.state == "loaded" or finished then
 			return
 		end
@@ -947,8 +1167,8 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			return false
 		end
 		local held = carriers[player]
-		if held then
-			load(held, player)
+		if held and #held > 0 then
+			load(held[#held], player)
 			return true
 		end
 		for _, c in cells do
@@ -1050,23 +1270,37 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			if not alive or not ctx.alive() then
 				break
 			end
-			for p, cell in carriers do
+			for p, list in table.clone(carriers) do
 				if not p.Parent then
 					drop(p, "leave")
 					continue
 				end
 				local r = ctx.getRoot(p)
-				local w = cell.weld
 				local stance = if S and S.Players and S.Players.getStance then S.Players.getStance(p) else "stand"
-				if not ctx.isAlive(p) or not r or not w or not w.Parent or not w.Part0 or not w.Part0:IsDescendantOf(Workspace) or stance == "down"
-					or p:GetAttribute("Downed") == true then
+				local brokenWeld = false
+				for _, cell in list do
+					local w = cell.weld
+					if not w or not w.Parent or not w.Part0 or not w.Part0:IsDescendantOf(Workspace) then
+						brokenWeld = true
+						break
+					end
+				end
+				if not ctx.isAlive(p) or not r or brokenWeld or stance == "down" or p:GetAttribute("Downed") == true then
 					drop(p, "down")
 					continue
 				end
 				lastPos[p] = r.Position
-				local d = r.Position - liftPos
-				if Vector2.new(d.X, d.Z).Magnitude <= LIFT_RADIUS and math.abs(d.Y) <= LIFT_DY then
-					load(cell, p)
+				if isNearLifter(r.Position, LIFT_RADIUS) then
+					for _, cell in table.clone(list) do
+						load(cell, p)
+					end
+				end
+			end
+			if not finished then
+				for _, cell in cells do
+					if cell.state == "dropped" and isNearLifter(cell.case.Position, LIFT_DROP_RADIUS) then
+						load(cell, nil)
+					end
 				end
 			end
 
@@ -1128,6 +1362,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		if carriers[p] then
 			drop(p, "leave")
 		end
+		picking[p] = nil
 		lastPos[p] = nil
 		dropLock[p] = nil
 	end)
@@ -1153,14 +1388,17 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 		radarConn:Disconnect()
 		leaveConn:Disconnect()
-		for p, cell in carriers do
-			setCarryAttr(p, false)
-			if cell.weld then
-				cell.weld:Destroy()
-				cell.weld = nil
+		for p, list in carriers do
+			setCarryAttr(p, 0)
+			for _, cell in list do
+				if cell.weld then
+					cell.weld:Destroy()
+					cell.weld = nil
+				end
 			end
 		end
 		table.clear(carriers)
+		table.clear(picking)
 	end
 
 	return ctl

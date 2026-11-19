@@ -343,7 +343,7 @@ local function tryDive(): boolean
 		return false
 	end
 	local t = os.clock()
-	if not isSprinting(hum, root) or t - lastDive < M.DiveCooldown or stamina < M.DiveCost * 0.5 then
+	if not isSprinting(hum, root) or t - lastDive < M.DiveCooldown or stamina < M.DiveCost * 0.5 or Carry.isCarrying(player) then
 		return false
 	end
 	local v = flat(root.AssemblyLinearVelocity)
@@ -515,7 +515,7 @@ local function onProne(down: boolean)
 	end
 	if stance == "prone" then
 		standUp()
-	else
+	elseif not Carry.isCarrying(player) then
 		setStance("prone")
 	end
 end
@@ -682,10 +682,12 @@ local function step(dt: number)
 			standUp()
 		end
 	end
-	-- crouch held long enough -> prone
+	-- crouch held long enough -> prone (blocked while carrying a core cell)
 	if crouchDownAt and mode == "none" and t - crouchDownAt >= M.ProneHoldTime then
 		crouchDownAt = nil
-		setStance("prone")
+		if not Carry.isCarrying(player) then
+			setStance("prone")
+		end
 	end
 
 	-- special modes ------------------------------------------------------------------------------------------
@@ -780,8 +782,11 @@ local function step(dt: number)
 
 	-- (body facing / twist: twistStep, which runs earlier in the frame than this handler)
 
-	-- haul objective: a core-cell carrier walks and sprints slower (shared/Carry.luau)
-	local carrying = player:GetAttribute("CarryCell") == true
+	-- haul objective: a core-cell carrier walks and sprints slower, cannot go prone, and 2 cells block sprint (shared/Carry.luau)
+	local carrying = Carry.isCarrying(player)
+	if carrying and stance == "prone" and not isDowned() and mode == "none" then
+		standUp()
+	end
 
 	-- stamina (prediction; server reconciles through `me`) ---------------------------------------------------
 	sprintApplied = mode == "none"
@@ -791,6 +796,7 @@ local function step(dt: number)
 		and not aiming
 		and not firing
 		and not exhausted
+		and Carry.canSprint(player)
 		and Store.get("stimHold") == nil -- holding the stim key (Fx/VitalsFx): walk, no sprint
 	boosted = boostEnd > 0 and workspace:GetServerTimeNow() < boostEnd
 	if boosted then
@@ -832,7 +838,7 @@ local function step(dt: number)
 		speed = math.min(speed, M.LimpSpeed)
 	end
 	if carrying then
-		speed *= Carry.speedMult(sprintApplied)
+		speed *= Carry.speedMult(sprintApplied, player)
 	end
 	if isDowned() and mode == "none" then
 		speed = Config.Downed.CrawlSpeed
