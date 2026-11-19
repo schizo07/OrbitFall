@@ -244,6 +244,8 @@ local function updateNew(m: any, it: any, t: number)
 			goalText = "SKIFF INBOUND  " .. Theme.formatTime(ex.eta - t)
 		elseif type(ex.window) == "number" and t < ex.window then
 			goalText = "BOARD THE SKIFF  " .. Theme.formatTime(ex.window - t)
+		elseif type(ex.label) == "string" then
+			goalText = ex.label
 		end
 	end
 	GoalLine.setExtract(goalText)
