@@ -82,7 +82,7 @@ local C: { [string]: CallIn } = {
 		id = "ROCKETDROP", name = "Rocket Tube", category = "weapon", beacon = "supply",
 		delay = 4, cooldown = 300, icon = "➶", unlock = "armory", salvage = 600, rank = 1,
 		params = { weapon = "ROCKET" },
-		desc = "Drops the Breacher Rocket Tube. AP 5 — the eye-killer.",
+		desc = "Drops the Breacher Rocket Tube. AP: TANK — the eye-killer.",
 	},
 	GATLINGDROP = {
 		id = "GATLINGDROP", name = "Gatling MG", category = "weapon", beacon = "supply",

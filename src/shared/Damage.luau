@@ -42,6 +42,10 @@ function Damage.tierName(value: number): string
 	return "Tank"
 end
 
+function Damage.apLabel(value: number): string
+	return "AP: " .. string.upper(Damage.tierName(value))
+end
+
 -- Explosion falloff: full damage inside core, then a curve down to EDGE at radius, 0 outside.
 -- 2026-11-14 (footage pass): was linear 1 -> 0.25; now 1 -> 0.45 on a u^1.5 curve, so the damage stays high for most of
 -- the ring and only drops near the edge (u = 0.5 gives 0.81, was 0.625). `edge` overrides EDGE for one call.

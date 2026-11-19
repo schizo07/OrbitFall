@@ -241,17 +241,41 @@ local function statRow(parent: Instance, label: string, frac: number, valueText:
 		Size = UDim2.fromOffset(50, 20),
 		Parent = row,
 	})
-	local bar = Theme.bar({ Size = UDim2.new(1, -150, 0, 9), Position = UDim2.new(0, 54, 0.5, -4), Color = color, Parent = row })
+	local bar = Theme.bar({ Size = UDim2.new(1, -168, 0, 9), Position = UDim2.new(0, 54, 0.5, -4), Color = color, Parent = row })
 	bar:set(frac)
 	Theme.label({
 		Text = valueText,
 		Font = "Black",
 		TextSize = 13,
 		XAlign = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(90, 20),
-		Position = UDim2.new(1, -90, 0, 0),
+		Size = UDim2.fromOffset(108, 20),
+		Position = UDim2.new(1, -108, 0, 0),
 		Parent = row,
 	})
+end
+
+local function weaponApText(w: any): string?
+	if not w then
+		return nil
+	end
+	local hasDmg = (w.damage and w.damage > 0) or (w.splash and w.splash.damage and w.splash.damage > 0)
+	if not hasDmg and (w.ap or 0) <= 0 then
+		return nil
+	end
+	return Damage.apLabel(w.ap or 0)
+end
+
+local function callinApText(d: any): string?
+	if not d or not d.params then
+		return nil
+	end
+	if d.params.weapon then
+		return weaponApText(Weapons.get(d.params.weapon))
+	end
+	if type(d.params.ap) == "number" and d.params.ap > 0 then
+		return Damage.apLabel(d.params.ap)
+	end
+	return nil
 end
 
 local function weaponStats(parent: Instance, w: any, startOrder: number)
@@ -263,7 +287,10 @@ local function weaponStats(parent: Instance, w: any, startOrder: number)
 		dtxt = tostring(w.splash.damage)
 	end
 	statRow(parent, "DAMAGE", math.sqrt(math.min(dmg, 900) / 900), dtxt, C.Accent, startOrder)
-	statRow(parent, "ARMOUR PEN", w.ap / 5, string.upper(Damage.tierName(w.ap)) .. " (" .. tostring(w.ap) .. ")", C.Gold, startOrder + 1)
+	local apTag = weaponApText(w)
+	if apTag then
+		statRow(parent, "ARMOUR", math.clamp(w.ap / 5, 0, 1), apTag, C.Gold, startOrder + 1)
+	end
 	if w.rpm then
 		statRow(parent, "RATE", w.rpm / 900, tostring(w.rpm), C.Friendly, startOrder + 2)
 	end
@@ -282,6 +309,10 @@ local function callinStats(parent: Instance, d: any, startOrder: number)
 		{ "ARRIVAL", d.delay .. " s" },
 		{ "USES", d.uses and tostring(d.uses) or (d.charges and (d.charges .. " charges") or "Unlimited") },
 	}
+	local apTag = callinApText(d)
+	if apTag then
+		table.insert(rows, 2, { "ARMOUR PEN", apTag })
+	end
 	for i, r in rows do
 		local row = Instance.new("Frame")
 		row.BackgroundTransparency = 1
@@ -588,9 +619,10 @@ local function renderLoadout(parent: Instance)
 		local list = Weapons.list(slot)
 		for i, w in list do
 			if owned[w.id] then
+				local apTag = weaponApText(w)
 				card(g, {
 					Title = w.name,
-					Sub = string.upper(w.kind),
+					Sub = string.upper(w.kind) .. (if apTag then (" · " .. apTag) else ""),
 					Selected = (loadout :: any)[key] == w.id,
 					Order = i,
 					OnClick = function()
@@ -764,7 +796,12 @@ local function renderArmory(parent: Instance)
 		})
 		Theme.chip({ Glyph = it.glyph, Color = C.Navy, StrokeColor = it.color, Size = UDim2.fromOffset(52, 52), Position = UDim2.fromOffset(10, 10), Parent = card_ })
 		Theme.label({ Text = it.name, Font = "Black", TextSize = 15, XAlign = Enum.TextXAlignment.Left, Wrap = true, Size = UDim2.new(1, -80, 0, 22), Position = UDim2.fromOffset(70, 10), Parent = card_ })
-		Theme.label({ Text = string.upper(it.kind == "weapon" and (it.stats.slot .. " weapon") or (it.stats.category .. " call-in")), Font = "Medium", TextSize = 10, Color = C.Muted, XAlign = Enum.TextXAlignment.Left, Size = UDim2.new(1, -80, 0, 14), Position = UDim2.fromOffset(70, 34), Parent = card_ })
+		local apTag = if it.kind == "weapon" then weaponApText(it.stats) else callinApText(it.stats)
+		local subText = string.upper(it.kind == "weapon" and (it.stats.slot .. " weapon") or (it.stats.category .. " call-in"))
+		if apTag then
+			subText ..= " · " .. apTag
+		end
+		Theme.label({ Text = subText, Font = "Medium", TextSize = 11, Color = apTag and C.Gold or C.Muted, XAlign = Enum.TextXAlignment.Left, Size = UDim2.new(1, -80, 0, 14), Position = UDim2.fromOffset(70, 34), Parent = card_ })
 		Theme.label({ Text = it.desc, Font = "Medium", TextSize = 12, Color = Color3.fromHex("c5cddc"), Wrap = true, XAlign = Enum.TextXAlignment.Left, YAlign = Enum.TextYAlignment.Top, Size = UDim2.new(1, -20, 0, 44), Position = UDim2.fromOffset(10, 66), Parent = card_ })
 		local state
 		local canBuy = false
@@ -1015,7 +1052,15 @@ local function renderBonds(parent: Instance)
 			LayoutOrder = n,
 			Parent = g,
 		})
-		Theme.label({ Text = string.upper(it.grant.kind), Font = "Header", TextSize = 9, Color = bond.color, XAlign = Enum.TextXAlignment.Left, Size = UDim2.new(1, -16, 0, 14), Position = UDim2.fromOffset(10, 8), Parent = c })
+		local bondKind = string.upper(it.grant.kind)
+		local bondAp = if it.grant.kind == "weapon"
+			then weaponApText(Weapons.get(it.grant.id))
+			elseif it.grant.kind == "callin" then callinApText(CallIns.get(it.grant.id))
+			else nil
+		if bondAp then
+			bondKind ..= " · " .. bondAp
+		end
+		Theme.label({ Text = bondKind, Font = "Header", TextSize = 9, Color = bond.color, XAlign = Enum.TextXAlignment.Left, Size = UDim2.new(1, -16, 0, 14), Position = UDim2.fromOffset(10, 8), Parent = c })
 		Theme.label({ Text = it.name, Font = "Black", TextSize = 14, Wrap = true, XAlign = Enum.TextXAlignment.Left, YAlign = Enum.TextYAlignment.Top, Size = UDim2.new(1, -16, 0, 36), Position = UDim2.fromOffset(10, 22), Parent = c })
 		Theme.label({ Text = it.desc, Font = "Medium", TextSize = 11, Color = C.Muted, Wrap = true, XAlign = Enum.TextXAlignment.Left, YAlign = Enum.TextYAlignment.Top, Size = UDim2.new(1, -16, 0, 30), Position = UDim2.fromOffset(10, 58), Parent = c })
 		local text

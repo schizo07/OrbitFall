@@ -6,7 +6,7 @@
 --   phone, top-left under the health bar, one row:  24 / 180   GREN 3   MAG 6
 -- HUD keeps writing the same label roles it wrote on the old card (ui.ammoMag, ammoSpare, ammoName, ammoState,
 -- fireMode, cntNade, cntMags), so the ammo logic in HUD stays one code path.
---   WeaponBlock.build(parent, touch, onFireModeTap) -> labels { root, mag, spare, name, state, fireMode, nade, mags, stim }
+--   WeaponBlock.build(parent, touch, onFireModeTap) -> labels { root, mag, spare, name, ap, state, fireMode, nade, mags, stim }
 --   WeaponBlock.setGrenades(n)       grenade pips (PC)
 --   WeaponBlock.addCount(name)       an extra count cell after MAG (AmmoPackCount: "PACK"); nil before the block exists
 --   WeaponBlock.setVisible(on)
@@ -94,6 +94,8 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 		out.state = text({ Role = "label", Text = "", TextSize = lay.CountSize, ColorRole = "danger", H = lay.CountSize + 4, LayoutOrder = 6, Parent = holder })
 		fm.LayoutOrder = 7
 		fm.Parent = holder
+		out.ap = text({ Role = "label", Text = "", TextSize = lay.CountSize, ColorRole = "own", H = lay.CountSize + 4, LayoutOrder = 8, Parent = holder })
+		out.ap.Name = "ArmourPen"
 		-- the name is not shown on phones; HUD still writes it
 		out.name = HudSkin.label({ Text = "" })
 		ui.countRow = holder
@@ -135,6 +137,8 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 		out.name.TextTruncate = Enum.TextTruncate.AtEnd
 		fm.LayoutOrder = 3
 		fm.Parent = nameRow
+		out.ap = text({ Role = "label", Text = "", TextSize = lay.ModeSize, ColorRole = "own", H = lay.NameSize + 4, LayoutOrder = 4, Parent = nameRow })
+		out.ap.Name = "ArmourPen"
 
 		-- mag row: the mag number keeps a fixed box (HUD jitters / pops it per shot), the spare count sits right of it
 		local magRow = Instance.new("Frame")

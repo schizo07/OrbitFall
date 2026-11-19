@@ -213,13 +213,14 @@ local function buildCrosshair()
 	bscale.Parent = barrel
 	ui.barrelScale = bscale
 
-	-- hitmarker pool
+	-- hitmarker pool (pen = crisp X, partial = reduced amber X + hollow diamond, deflect = shield diamond + slash + sparks + ping)
+	local isTouch = Theme.isTouch()
 	for i = 1, 5 do
 		local hm = Instance.new("Frame")
 		hm.Name = "Hitmarker" .. i
 		hm.BackgroundTransparency = 1
 		hm.AnchorPoint = Vector2.new(0.5, 0.5)
-		hm.Size = UDim2.fromOffset(40, 40)
+		hm.Size = UDim2.fromOffset(44, 44)
 		hm.Visible = false
 		hm.Parent = cross
 		local sc = Instance.new("UIScale")
@@ -229,43 +230,143 @@ local function buildCrosshair()
 			for _, sy in { -1, 1 } do
 				local b = Instance.new("Frame")
 				b.AnchorPoint = Vector2.new(0.5, 0.5)
-				b.Size = UDim2.fromOffset(3, 9)
+				b.Size = UDim2.fromOffset(if isTouch then 4 else 3, if isTouch then 11 else 9)
 				b.Position = UDim2.new(0.5, sx * 8, 0.5, sy * 8)
 				b.Rotation = (sx * sy > 0) and 45 or -45
 				b.BackgroundColor3 = C.White
 				b.BorderSizePixel = 0
 				b.Parent = hm
-				Theme.stroke(b, C.Black, 1, 0.1)
-				table.insert(bars, b)
+				local st = Theme.stroke(b, C.Black, 1, 0.1)
+				table.insert(bars, { frame = b, stroke = st, sx = sx, sy = sy })
 			end
 		end
+		-- outer dark backing for deflect shield diamond so light steel pops on bright desert terrain
+		local diamondBg = Instance.new("Frame")
+		diamondBg.Name = "DiamondBg"
+		diamondBg.BackgroundTransparency = 1
+		diamondBg.AnchorPoint = Vector2.new(0.5, 0.5)
+		diamondBg.Position = UDim2.fromScale(0.5, 0.5)
+		diamondBg.Size = UDim2.fromOffset(if isTouch then 25 else 21, if isTouch then 25 else 21)
+		diamondBg.Rotation = 45
+		diamondBg.Visible = false
+		diamondBg.Parent = hm
+		local diamondBgSt = Theme.stroke(diamondBg, C.Black, 3, 0.25)
+
+		local diamond = Instance.new("Frame")
+		diamond.Name = "Diamond"
+		diamond.BackgroundTransparency = 1
+		diamond.AnchorPoint = Vector2.new(0.5, 0.5)
+		diamond.Position = UDim2.fromScale(0.5, 0.5)
+		diamond.Size = UDim2.fromOffset(if isTouch then 16 else 14, if isTouch then 16 else 14)
+		diamond.Rotation = 45
+		diamond.Visible = false
+		diamond.Parent = hm
+		local diamondSt = Theme.stroke(diamond, Style.Amber, 2, 0)
+
+		local slash = Instance.new("Frame")
+		slash.Name = "DeflectSlash"
+		slash.AnchorPoint = Vector2.new(0.5, 0.5)
+		slash.Position = UDim2.fromScale(0.5, 0.5)
+		slash.Size = UDim2.fromOffset(3, if isTouch then 24 else 20)
+		slash.Rotation = -45
+		slash.BackgroundColor3 = C.White
+		slash.BorderSizePixel = 0
+		slash.Visible = false
+		slash.Parent = hm
+		local slashSt = Theme.stroke(slash, C.Black, 1, 0.1)
+
+		local ping = Instance.new("Frame")
+		ping.Name = "DeflectPing"
+		ping.BackgroundTransparency = 1
+		ping.AnchorPoint = Vector2.new(0.5, 0.5)
+		ping.Position = UDim2.fromScale(0.5, 0.5)
+		ping.Size = UDim2.fromOffset(16, 16)
+		ping.Visible = false
+		ping.Parent = hm
+		Theme.corner(ping, 100)
+		local pingSt = Theme.stroke(ping, C.White, 2, 0.15)
+
+		local sparks = {}
+		local sparkDefs = {
+			{ dx = 18, dy = -16, rot = 40 },
+			{ dx = -15, dy = -13, rot = -48 },
+			{ dx = 14, dy = 13, rot = -42 },
+		}
+		for _, sd in sparkDefs do
+			local sp = Instance.new("Frame")
+			sp.AnchorPoint = Vector2.new(0.5, 0.5)
+			sp.Position = UDim2.fromScale(0.5, 0.5)
+			sp.Size = UDim2.fromOffset(if isTouch then 3 else 2, if isTouch then 9 else 7)
+			sp.Rotation = sd.rot
+			sp.BackgroundColor3 = Color3.fromHex("ffe89e")
+			sp.BorderSizePixel = 0
+			sp.Visible = false
+			sp.Parent = hm
+			local spSt = Theme.stroke(sp, C.Black, 1, 0.25)
+			table.insert(sparks, { frame = sp, stroke = spSt, dx = sd.dx, dy = sd.dy })
+		end
+
 		local tag = Theme.label({
 			Text = "",
 			Font = "Black",
-			TextSize = 13,
-			Size = UDim2.fromOffset(120, 16),
+			TextSize = if isTouch then 15 else 13,
+			Size = UDim2.fromOffset(120, 18),
 			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.new(0.5, 0, 0, -18),
+			Position = UDim2.new(0.5, 0, 0, -20),
 			Parent = hm,
 		})
-		table.insert(hmPool, { frame = hm, scale = sc, bars = bars, tag = tag, tweens = {} })
+		table.insert(hmPool, {
+			frame = hm,
+			scale = sc,
+			bars = bars,
+			diamond = diamond,
+			diamondStroke = diamondSt,
+			diamondBg = diamondBg,
+			diamondBgStroke = diamondBgSt,
+			slash = slash,
+			slashStroke = slashSt,
+			ping = ping,
+			pingStroke = pingSt,
+			sparks = sparks,
+			tag = tag,
+			tweens = {},
+		})
 	end
 
-	-- armour tier tag (HUD.hitmarker): one label reused for every hit, sits under the crosshair; a bit bigger on touch
+	-- armour tier badge (HUD.hitmarker): high-contrast pill under the crosshair so tier names read clearly on phones
+	local tierH = if isTouch then 22 else 20
+	local tierPill = Instance.new("Frame")
+	tierPill.Name = "ArmourTagPill"
+	tierPill.AnchorPoint = Vector2.new(0.5, 0)
+	tierPill.Position = UDim2.fromOffset(0, 22)
+	tierPill.Size = UDim2.fromOffset(0, tierH)
+	tierPill.AutomaticSize = Enum.AutomaticSize.X
+	tierPill.BackgroundColor3 = Style.Bg
+	tierPill.BackgroundTransparency = 1
+	tierPill.BorderSizePixel = 0
+	tierPill.Parent = cross
+	Theme.corner(tierPill, 4)
+	local tierPad = Instance.new("UIPadding")
+	tierPad.PaddingLeft = UDim.new(0, 7)
+	tierPad.PaddingRight = UDim.new(0, 7)
+	tierPad.Parent = tierPill
+	local tierStroke = Theme.stroke(tierPill, C.White, 1.5, 1)
+
 	local tierTag = Theme.label({
 		Name = "ArmourTag",
 		Text = "",
 		Font = "Black",
-		TextSize = Theme.isTouch() and 16 or 14,
-		Size = UDim2.fromOffset(120, 16),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromOffset(0, 24),
+		TextSize = if isTouch then 15 else 13,
+		Size = UDim2.fromOffset(0, tierH),
+		AutomaticSize = Enum.AutomaticSize.X,
 		TextTransparency = 1,
 		TextStrokeTransparency = 1,
-		Parent = cross,
+		Parent = tierPill,
 	})
+	ui.tierPill = tierPill
+	ui.tierStroke = tierStroke
 	ui.tierTag = tierTag
-	ui.tierTween = nil :: Tween?
+	ui.tierTweens = {} :: { Tween }
 	ui.tierGen = 0
 
 	-- reload bar under crosshair
@@ -524,8 +625,18 @@ local function buildOwnCard(parent: Instance)
 		Text = "",
 		TextSize = 14,
 		Color = Style.Red,
-		Size = UDim2.new(1, -96, 0, 14),
+		Size = UDim2.new(1, -158, 0, 14),
 		Position = UDim2.fromOffset(0, 17),
+		Parent = top,
+	})
+	ui.ammoAp = Style.label({
+		Text = "",
+		TextSize = 12,
+		Color = Style.Amber,
+		XAlign = Enum.TextXAlignment.Right,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -158, 0, 18),
+		Size = UDim2.fromOffset(78, 14),
 		Parent = top,
 	})
 	ui.ammoMag = Style.label({
@@ -731,6 +842,7 @@ local function buildMainNew()
 	-- the ammo code writes the same label roles as on the old card
 	ui.weaponBlock = wb.root
 	ui.ammoName = wb.name
+	ui.ammoAp = wb.ap
 	ui.ammoState = wb.state
 	ui.ammoMag = wb.mag
 	ui.ammoSpare = wb.spare
@@ -935,35 +1047,52 @@ function HUD.banner(title: string, subtitle: string?, color: Color3?)
 end
 
 -- Hitmarkers ----------------------------------------------------------------------------------------------------------
--- Armour tier tag under the crosshair. Studio A/B (Variants group ARMOUR TAG, Feel_ArmourTag): nil = deflect + partial,
--- "all" = every hit, "off" = never. Grey on a deflect, amber on a partial hit, white on a full pen.
-local TIER_TAG_HOLD = 0.25
+-- Armour tier badge under the crosshair. Studio A/B (Variants group ARMOUR TAG, Feel_ArmourTag): nil = deflect + partial,
+-- "all" = every hit, "off" = never. Bright steel on a deflect, amber on a partial hit, white on a full pen.
+local TIER_TAG_HOLD = 0.45
 local TIER_TAG_FADE = 0.35
-local TIER_GREY = Color3.fromHex("a9b2c3")
+local DEFLECT_STEEL = Color3.fromHex("d8e2f0")
+local DEFLECT_STROKE = Color3.fromHex("9bb0cc")
+local DEFLECT_SPARK = Color3.fromHex("ffe89e")
 local function showTierTag(result: string, armor: number?)
 	local lbl: TextLabel? = ui.tierTag
-	if not lbl or not armor then
+	local pill: Frame? = ui.tierPill
+	local st: UIStroke? = ui.tierStroke
+	if not lbl or not pill or not st or not armor then
 		return
 	end
 	local mode = workspace:GetAttribute("Feel_ArmourTag")
 	if mode == "off" or (mode ~= "all" and result == "pen") then
 		return
 	end
-	local prev: Tween? = ui.tierTween
+	local prev: { Tween }? = ui.tierTweens
 	if prev then
-		prev:Cancel()
+		for _, t in prev do
+			t:Cancel()
+		end
+		table.clear(prev)
 	end
+	local textCol = if result == "deflect" then DEFLECT_STEEL elseif result == "partial" then Style.Amber else C.White
+	local edgeCol = if result == "deflect" then DEFLECT_STROKE elseif result == "partial" then Style.Amber else C.White
 	lbl.Text = string.upper(Damage.tierName(armor))
-	lbl.TextColor3 = if result == "deflect" then TIER_GREY elseif result == "partial" then Style.Amber else C.White
+	lbl.TextColor3 = textCol
 	lbl.TextTransparency = 0
-	lbl.TextStrokeTransparency = 0.4
+	lbl.TextStrokeTransparency = 0.35
+	pill.BackgroundTransparency = 0.22
+	st.Color = edgeCol
+	st.Transparency = 0.2
 	ui.tierGen += 1
 	local gen = ui.tierGen
 	task.delay(TIER_TAG_HOLD, function()
 		if ui.tierGen ~= gen then
 			return
 		end
-		ui.tierTween = tw(lbl, TIER_TAG_FADE, { TextTransparency = 1, TextStrokeTransparency = 1 })
+		local list = ui.tierTweens
+		if list then
+			table.insert(list, tw(lbl, TIER_TAG_FADE, { TextTransparency = 1, TextStrokeTransparency = 1 }))
+			table.insert(list, tw(pill, TIER_TAG_FADE, { BackgroundTransparency = 1 }))
+			table.insert(list, tw(st, TIER_TAG_FADE, { Transparency = 1 }))
+		end
 	end)
 end
 
@@ -978,40 +1107,131 @@ function HUD.hitmarker(result: string, weak: boolean?, killed: boolean?, armor: 
 		t:Cancel()
 	end
 	table.clear(hm.tweens)
+
+	local isTouch = Theme.isTouch()
+	local isDeflect = result == "deflect"
+	local isPartial = result == "partial"
+
 	local col = C.White
-	if result == "partial" then
-		col = Color3.fromHex("a9b2c3")
-	elseif result == "deflect" then
-		col = C.Accent
+	if isDeflect then
+		col = DEFLECT_STEEL
+	elseif isPartial then
+		col = Style.Amber
 	end
-	if weak then
+	if weak and not isDeflect then
 		col = C.Gold
 	end
 	if killed then
 		col = weak and C.Gold or C.Danger
 	end
-	for _, b in hm.bars do
-		b.BackgroundColor3 = col
-		b.BackgroundTransparency = 0
-		local st = b:FindFirstChildOfClass("UIStroke")
-		if st then
-			st.Transparency = 0.1
+
+	-- reset all sub-elements before applying this result's silhouette
+	hm.diamond.Visible = false
+	hm.diamondBg.Visible = false
+	hm.slash.Visible = false
+	hm.ping.Visible = false
+	for _, sp in hm.sparks do
+		sp.frame.Visible = false
+	end
+
+	if isDeflect then
+		for _, b in hm.bars do
+			b.frame.Visible = false
+		end
+		-- steel shield diamond + bold deflect slash + ricochet sparks + ping ring
+		local dSize = if isTouch then 22 else 18
+		hm.diamond.Size = UDim2.fromOffset(dSize, dSize)
+		hm.diamond.Visible = true
+		hm.diamondStroke.Color = DEFLECT_STEEL
+		hm.diamondStroke.Thickness = 2.5
+		hm.diamondStroke.Transparency = 0
+
+		hm.diamondBg.Size = UDim2.fromOffset(dSize + 3, dSize + 3)
+		hm.diamondBg.Visible = true
+		hm.diamondBgStroke.Transparency = 0.25
+
+		hm.slash.BackgroundColor3 = DEFLECT_STEEL
+		hm.slash.BackgroundTransparency = 0
+		hm.slash.Visible = true
+		hm.slashStroke.Transparency = 0.1
+
+		-- expanding ricochet ping ring
+		local pStart = if isTouch then 18 else 14
+		local pEnd = if isTouch then 44 else 36
+		hm.ping.Size = UDim2.fromOffset(pStart, pStart)
+		hm.ping.Visible = true
+		hm.pingStroke.Color = DEFLECT_STEEL
+		hm.pingStroke.Transparency = 0.15
+		table.insert(hm.tweens, tw(hm.ping, 0.2, { Size = UDim2.fromOffset(pEnd, pEnd) }, Enum.EasingStyle.Quad))
+		table.insert(hm.tweens, tw(hm.pingStroke, 0.2, { Transparency = 1 }, Enum.EasingStyle.Quad))
+
+		-- small cartoon spark slivers darting off the crosshair
+		for _, sp in hm.sparks do
+			sp.frame.Position = UDim2.fromScale(0.5, 0.5)
+			sp.frame.BackgroundColor3 = DEFLECT_SPARK
+			sp.frame.BackgroundTransparency = 0
+			sp.frame.Visible = true
+			sp.stroke.Transparency = 0.25
+			local mul = if isTouch then 1.2 else 1
+			table.insert(
+				hm.tweens,
+				tw(
+					sp.frame,
+					0.19,
+					{ Position = UDim2.new(0.5, math.round(sp.dx * mul), 0.5, math.round(sp.dy * mul)), BackgroundTransparency = 1 },
+					Enum.EasingStyle.Quad
+				)
+			)
+			table.insert(hm.tweens, tw(sp.stroke, 0.19, { Transparency = 1 }, Enum.EasingStyle.Quad))
+		end
+
+		hm.frame.Visible = true
+		hitKick = math.max(hitKick, 1.5)
+		hm.scale.Scale = 1.22
+		table.insert(hm.tweens, tw(hm.scale, 0.12, { Scale = 1 }, Enum.EasingStyle.Back))
+		hm.frame.Rotation = -16
+		table.insert(hm.tweens, tw(hm.frame, 0.14, { Rotation = 0 }, Enum.EasingStyle.Back))
+	else
+		-- pen (full crisp X) vs partial (reduced compact amber X + hollow diamond)
+		local bw = if isPartial then (if isTouch then 3 else 2) else (if isTouch then 4 else 3)
+		local bh = if isPartial then (if isTouch then 7 else 6) else (if isTouch then 11 else 9)
+		local off = if isPartial then 6 else 8
+		for _, b in hm.bars do
+			b.frame.Visible = true
+			b.frame.Size = UDim2.fromOffset(bw, bh)
+			b.frame.Position = UDim2.new(0.5, b.sx * off, 0.5, b.sy * off)
+			b.frame.BackgroundColor3 = col
+			b.frame.BackgroundTransparency = if isPartial then 0.1 else 0
+			b.stroke.Transparency = 0.1
+		end
+		if isPartial then
+			local pSize = if isTouch then 16 else 14
+			hm.diamond.Size = UDim2.fromOffset(pSize, pSize)
+			hm.diamond.Visible = true
+			hm.diamondStroke.Color = col
+			hm.diamondStroke.Thickness = 1.5
+			hm.diamondStroke.Transparency = 0.15
+		end
+		hm.frame.Visible = true
+		-- subtle pulses: reduced pop on partial so full pen feels noticeably punchier
+		hitKick = math.max(hitKick, if killed then 8 elseif weak then 5 elseif isPartial then 1.6 else 2.5)
+		local startScale = if killed then 1.7 elseif weak then 1.35 elseif isPartial then 0.96 else 1.17
+		local endScale = if killed then 1.15 elseif isPartial then 0.85 else 1
+		hm.scale.Scale = startScale
+		table.insert(hm.tweens, tw(hm.scale, killed and 0.2 or 0.1, { Scale = endScale }, Enum.EasingStyle.Back))
+		if killed then
+			hm.frame.Rotation = 15
+			table.insert(hm.tweens, tw(hm.frame, 0.15, { Rotation = 0 }, Enum.EasingStyle.Back))
+			HUD.killRing(col)
+		else
+			hm.frame.Rotation = 0
 		end
 	end
-	hm.frame.Visible = true
-	-- subtle (about half of the old pulses): small overshoot, a small tick kick, kills get a short twist + a thin ring
-	hitKick = math.max(hitKick, if killed then 8 elseif weak then 5 else 2.5)
-	hm.scale.Scale = killed and 1.7 or (weak and 1.35 or 1.17)
-	table.insert(hm.tweens, tw(hm.scale, killed and 0.2 or 0.1, { Scale = killed and 1.15 or 1 }, Enum.EasingStyle.Back))
-	if killed then
-		hm.frame.Rotation = 15
-		table.insert(hm.tweens, tw(hm.frame, 0.15, { Rotation = 0 }, Enum.EasingStyle.Back))
-		HUD.killRing(col)
-	else
-		hm.frame.Rotation = 0
-	end
+
 	local text = ""
-	if killed and weak then
+	if isDeflect then
+		text = "DEFLECT"
+	elseif killed and weak then
 		text = "WEAK KILL"
 	elseif killed then
 		text = "KILL"
@@ -1021,21 +1241,27 @@ function HUD.hitmarker(result: string, weak: boolean?, killed: boolean?, armor: 
 	hm.tag.Text = text
 	hm.tag.TextColor3 = col
 	hm.tag.TextTransparency = 0
-	hm.tag.TextStrokeTransparency = 0.4
-	local hold = killed and 0.3 or 0.12
-	local fade = 0.16
+	hm.tag.TextStrokeTransparency = 0.35
+	local hold = if killed then 0.3 elseif isDeflect then 0.22 elseif isPartial then 0.16 else 0.12
+	local fade = if isDeflect then 0.18 else 0.16
 	hm.gen = (hm.gen or 0) + 1
 	local gen = hm.gen
 	task.delay(hold, function()
 		if hm.gen ~= gen then
 			return
 		end
-		for _, b in hm.bars do
-			local t = tw(b, fade, { BackgroundTransparency = 1 })
-			table.insert(hm.tweens, t)
-			local st = b:FindFirstChildOfClass("UIStroke")
-			if st then
-				tw(st, fade, { Transparency = 1 })
+		if isDeflect then
+			table.insert(hm.tweens, tw(hm.diamondStroke, fade, { Transparency = 1 }))
+			table.insert(hm.tweens, tw(hm.diamondBgStroke, fade, { Transparency = 1 }))
+			table.insert(hm.tweens, tw(hm.slash, fade, { BackgroundTransparency = 1 }))
+			table.insert(hm.tweens, tw(hm.slashStroke, fade, { Transparency = 1 }))
+		else
+			for _, b in hm.bars do
+				table.insert(hm.tweens, tw(b.frame, fade, { BackgroundTransparency = 1 }))
+				table.insert(hm.tweens, tw(b.stroke, fade, { Transparency = 1 }))
+			end
+			if isPartial then
+				table.insert(hm.tweens, tw(hm.diamondStroke, fade, { Transparency = 1 }))
 			end
 		end
 		table.insert(hm.tweens, tw(hm.tag, fade, { TextTransparency = 1, TextStrokeTransparency = 1 }))
@@ -1560,6 +1786,16 @@ local function updateAmmo()
 	local entry = me.weapons and me.weapons[me.weapon or 1]
 	local def = entry and Weapons.get(entry.id)
 	ui.ammoName.Text = def and string.upper(def.name) or ""
+	if ui.ammoAp then
+		local hasDmg = def and ((def.damage and def.damage > 0) or (def.splash and def.splash.damage and def.splash.damage > 0))
+		if def and (hasDmg or (def.ap or 0) > 0) then
+			ui.ammoAp.Text = Damage.apLabel(def.ap or 0)
+			ui.ammoAp.Visible = true
+		else
+			ui.ammoAp.Text = ""
+			ui.ammoAp.Visible = false
+		end
+	end
 	if entry then
 		local mag, spare = entry.mag or 0, entry.spare or 0
 		local predicted = localMags and localMags[me.weapon or 1]

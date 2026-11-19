@@ -153,7 +153,7 @@ local E: { [string]: Enemy } = {
 		hp = 2600, speed = 0, size = 5.5,
 		zones = {
 			body = { armor = 5, mult = 1 },
-			eye = { armor = 4, mult = 1.5 },
+			eye = { armor = 3, mult = 1.5 }, -- Medium weak spot (matches other tank enemies); rear vent stays Light
 			vent = { armor = 1, mult = 2.5 }, -- armour 1: a Light-AP (AP 2) weapon fully pens it, so flanking pays off
 		},
 		attacks = { { kind = "cannon", damage = 65, range = 120, cooldown = 3.4, speed = 80, radius = 6, windup = 0.8 } },
