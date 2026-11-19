@@ -64,6 +64,8 @@ local strips: { Strip } = {} -- trails painted as ground material (roads, drag l
 local pan: Disc? = nil -- salt pan (extraction)
 local crashBowl: Disc? = nil -- scorched crater floor at the chosen crash
 local spilledSpot: Disc? = nil
+local refineryYard: Disc? = nil -- refinery oily ground patch
+local graveyardSpot: Disc? = nil -- walker graveyard rust-stained ground patch
 local crashPick = "SW"
 
 local ROAD_MAT = Enum.Material.Concrete
@@ -177,6 +179,8 @@ local function applyLayout(which: string?)
 	pan = { x = sp.at.X, z = sp.at.Y, r = 46 }
 	crashBowl = { x = crash.crash.X, z = crash.crash.Y, r = MapPlan.crashPad[1] * 0.95 }
 	spilledSpot = { x = crash.spilled.X, z = crash.spilled.Y, r = 11 }
+	refineryYard = { x = refinery.X, z = refinery.Y, r = MapPlan.places.refinery.r }
+	graveyardSpot = { x = gy.X, z = gy.Y, r = MapPlan.places.graveyard.r }
 end
 
 -- ---------------------------------------------------------------- biomes
@@ -198,6 +202,7 @@ local BIOMES: { [string]: Biome } = {
 			[M.Sand] = RGB(150, 98, 66), [M.Sandstone] = RGB(128, 78, 54), [M.Rock] = RGB(92, 62, 48),
 			[M.Basalt] = RGB(60, 44, 38), [M.Ground] = RGB(110, 72, 52), [M.Slate] = RGB(78, 56, 46),
 			[M.Grass] = RGB(110, 96, 60), [M.Mud] = RGB(84, 58, 44), [M.Salt] = RGB(238, 232, 214),
+			[M.Asphalt] = RGB(58, 50, 46), [M.Cobblestone] = RGB(122, 92, 68), [M.Limestone] = RGB(194, 166, 134),
 		},
 		rocks = { RGB(118, 80, 58), RGB(98, 66, 50), RGB(134, 92, 64) },
 		rockMat = M.Sandstone,
@@ -561,7 +566,21 @@ local function baseHeight(x: number, z: number): number
 	end
 	for _, f in flats do
 		local dx, dz = x - f.x, z - f.z
-		if math.abs(dx) < f.outer and math.abs(dz) < f.outer then
+		if biomeName == "desert" then
+			local reach = f.outer + 8
+			if math.abs(dx) < reach and math.abs(dz) < reach then
+				local d = math.sqrt(dx * dx + dz * dz)
+				-- keep d <= f.inner completely flat; warp the outer blend skirt and crater lip so pads never read as circles
+				local outerW = math.max(f.inner + 6, f.outer + noise(x / 28 + f.x * 0.013, z / 28 + f.z * 0.017) * 7)
+				if d < outerW then
+					local w = 1 - smooth((d - f.inner) / (outerW - f.inner))
+					h += (f.h - h) * w
+				end
+				if f.rim and d < outerW + 10 then -- a low irregular scorched lip around the crash crater
+					h += f.rim * math.exp(-(((d - (outerW - 9)) / 5) ^ 2))
+				end
+			end
+		elseif math.abs(dx) < f.outer and math.abs(dz) < f.outer then
 			local d = math.sqrt(dx * dx + dz * dz)
 			if d < f.outer then
 				local w = 1 - smooth((d - f.inner) / (f.outer - f.inner))
@@ -694,9 +713,174 @@ local function strata(h: number, a: Enum.Material, b: Enum.Material): Enum.Mater
 	return if math.floor(h / 5) % 2 == 0 then a else b
 end
 
+-- Desert per-place ground overlays: each named place gets its own subtle material palette with multi-octave warped,
+-- feathered edges (no crisp discs or hard circular seams).
+local function desertOverlayMat(x: number, z: number, slope: number): Enum.Material?
+	local n = noise(x / 14 + 3.1, z / 14 + 8.7)
+	-- Salt pan: pale salt crust fading through bleached limestone alkali into sand
+	if pan then
+		local dx, dz = x - pan.x, z - pan.z
+		local reach = pan.r + 24
+		if math.abs(dx) < reach and math.abs(dz) < reach then
+			local d = math.sqrt(dx * dx + dz * dz)
+			local w = noise(x / 36 + 1.4, z / 36 + 5.2) * 12 + n * 5
+			local t = 1 - smooth((d + w - (pan.r - 8)) / 24)
+			local nf = noise(x / 7.5 + 2.1, z / 7.5 + 6.4)
+			if t > 0.58 + nf * 0.38 then
+				return M.Salt
+			elseif slope <= 0.55 and t > 0.16 + nf * 0.42 then
+				return M.Limestone
+			end
+		end
+	end
+	if slope > 0.6 then
+		return nil
+	end
+	-- Roads, drag tracks and scorched debris trail (debris trail gets softer ragged edges)
+	for _, s in strips do
+		local d = distSeg(x, z, s.ax, s.az, s.bx, s.bz)
+		if s.alt then
+			local nf = noise(x / 7.5 + 1.3, z / 7.5 + 4.1)
+			local w = s.half + n * 1.8
+			if d < w then
+				return if nf > 0.12 then s.alt else s.mat
+			elseif d < w + 3.5 and nf > 0.08 + (d - w) * 0.12 then
+				return if nf > 0.28 then M.Ground else s.alt
+			end
+		elseif d < s.half + n * 0.7 then
+			return s.mat
+		end
+	end
+	-- Refinery: darker oily ground (asphalt mottled with oil-stained mud/slate, bleeding past the walls and tanks)
+	if refineryYard then
+		local dx, dz = x - refineryYard.x, z - refineryYard.z
+		local reach = refineryYard.r + 32
+		if math.abs(dx) < reach and math.abs(dz) < reach then
+			local d = math.sqrt(dx * dx + dz * dz)
+			local w = noise(x / 32 + 7.1, z / 32 + 2.3) * 11 + noise(x / 13 + 4.5, z / 13 + 9.2) * 4.5
+			local t = 1 - smooth((d + w - (refineryYard.r - 10)) / 30)
+			local nf = noise(x / 7.5 + 8.3, z / 7.5 + 1.9)
+			local nm = noise(x / 16 + 3.7, z / 16 + 6.1)
+			if t > 0.55 + nf * 0.42 then
+				return if nm > 0.16 then M.Mud elseif nm < -0.22 then M.Slate else M.Asphalt
+			elseif t > 0.18 + nf * 0.46 then
+				return if nm > 0.05 then M.Ground else M.Mud
+			end
+		end
+	end
+	-- Crash site: scorched dark sand and charred blast crater with irregular soot halo
+	if crashBowl then
+		local dx, dz = x - crashBowl.x, z - crashBowl.z
+		local reach = crashBowl.r + 30
+		if math.abs(dx) < reach and math.abs(dz) < reach then
+			local d = math.sqrt(dx * dx + dz * dz)
+			local w = noise(x / 26 + 2.8, z / 26 + 7.4) * 10 + noise(x / 11 + 6.2, z / 11 + 3.5) * 4.5
+			local t = 1 - smooth((d + w - (crashBowl.r - 10)) / 28)
+			local nf = noise(x / 7 + 4.9, z / 7 + 8.1)
+			local nm = noise(x / 14 + 1.7, z / 14 + 5.3)
+			if t > 0.54 + nf * 0.42 then
+				return if nm > 0.2 then M.Slate else M.Basalt
+			elseif t > 0.16 + nf * 0.46 then
+				return if nm > 0.15 then M.Ground elseif nm < -0.15 then M.Slate else M.Mud
+			end
+		end
+	end
+	-- Spilled crate: ragged scorch patch fading softly into sand
+	if spilledSpot then
+		local dx, dz = x - spilledSpot.x, z - spilledSpot.z
+		local reach = spilledSpot.r + 18
+		if math.abs(dx) < reach and math.abs(dz) < reach then
+			local d = math.sqrt(dx * dx + dz * dz)
+			local w = noise(x / 16 + 5.4, z / 16 + 1.2) * 5 + noise(x / 8 + 2.7, z / 8 + 6.8) * 2.5
+			local t = 1 - smooth((d + w - (spilledSpot.r - 4)) / 14)
+			local nf = noise(x / 6.5 + 9.1, z / 6.5 + 3.4)
+			if t > 0.52 + nf * 0.42 then
+				return if nf > 0.2 then M.Slate else M.Basalt
+			elseif t > 0.18 + nf * 0.45 then
+				return if nf > 0 then M.Ground else M.Slate
+			end
+		end
+	end
+	-- Walker graveyard: rust-stained, churned dark soil beneath the fallen hull
+	if graveyardSpot then
+		local dx, dz = x - graveyardSpot.x, z - graveyardSpot.z
+		local reach = graveyardSpot.r + 24
+		if math.abs(dx) < reach and math.abs(dz) < reach then
+			local d = math.sqrt(dx * dx + dz * dz)
+			local w = noise(x / 30 + 9.3, z / 30 + 4.1) * 10 + noise(x / 13 + 1.8, z / 13 + 7.6) * 4.5
+			local t = 1 - smooth((d + w - (graveyardSpot.r - 18)) / 28)
+			local nf = noise(x / 7.5 + 6.2, z / 7.5 + 2.8)
+			local nm = noise(x / 15 + 8.4, z / 15 + 5.9)
+			if t > 0.56 + nf * 0.42 then
+				return if nm < -0.22 then M.Slate elseif nm > 0.22 then M.Ground else M.Mud
+			elseif t > 0.18 + nf * 0.45 then
+				return if nm > 0.1 then M.Ground else M.Mud
+			end
+		end
+	end
+	for _, l in riverSegs do
+		if distSeg(x, z, l.ax, l.az, l.bx, l.bz) < 7.5 + n * 2.2 then
+			return if n > 0.1 then M.Ground else M.Sand -- sand and gravel
+		end
+	end
+	-- Quarry: dark bedrock floor, pale mineral-banded terraces, and a soft dusty spoil apron past the rim
+	local q = quarry
+	if q then
+		local dx, dz = x - q.x, z - q.z
+		local reach = q.r + 22
+		if math.abs(dx) < reach and math.abs(dz) < reach then
+			local d = math.sqrt(dx * dx + dz * dz)
+			local dq = d + noise(x / 31 + q.x, z / 31 + q.z) * 2.2
+			local nf = noise(x / 7.5 + 5.1, z / 7.5 + 9.3)
+			local nm = noise(x / 16 + 2.2, z / 16 + 4.8)
+			local floorR = q.r - 4 * q.rw - 3 * q.tw + 3
+			if dq + nf * 3.5 < floorR then
+				return if nm > 0.15 then M.Slate else M.Rock
+			elseif dq + nf * 3 < q.r - 1 then
+				return if nm > 0.22 then M.Limestone elseif nm < -0.15 then M.Cobblestone else M.Sandstone
+			else
+				local t = 1 - smooth((dq + nm * 5 - (q.r - 2)) / 18)
+				if t > 0.24 + nf * 0.48 then
+					return if nm > 0.1 then M.Cobblestone else M.Ground
+				end
+			end
+		end
+	end
+	-- Signal mesa (relay mast): gravelly cobble plateau fading softly onto the ramp
+	local m = mesa
+	if m then
+		local dx, dz = x - m.x, z - m.z
+		if dx * dx + dz * dz < m.reach2 then
+			local d = math.sqrt(dx * dx + dz * dz)
+			local dm = d + noise(x / 37 + m.x, z / 37 + m.z) * 2.4
+			local nf = noise(x / 7 + 7.7, z / 7 + 1.5)
+			local nm = noise(x / 14 + 4.2, z / 14 + 8.6)
+			local tTop = 1 - smooth((dm + nm * 3 - (m.rt - 5)) / 10)
+			if tTop > 0.28 + nf * 0.45 then
+				return if nm > 0.28 then M.Sandstone elseif nm < -0.28 then M.Ground else M.Cobblestone
+			end
+			local u = dx * m.dx + dz * m.dz
+			if u > m.rt - 8 and u < m.rampEnd + 6 then
+				local av = math.abs(-dx * m.dz + dz * m.dx)
+				if av < 14 then
+					local tRamp = 1 - smooth((av + nm * 3 - 5) / 9)
+					local tEnd = 1 - smooth((u - (m.rampEnd - 8)) / 14)
+					if tRamp * tEnd > 0.28 + nf * 0.45 then
+						return if nm > 0.15 then M.Ground else M.Cobblestone
+					end
+				end
+			end
+		end
+	end
+	return nil
+end
+
 -- Ground painted by the layout: salt pan, roads, drag lines, scorched debris, the crash bowl, riverbed floor, quarry floor
 -- and mesa top. nil = no overlay here (the slope / height rules below pick the material).
 local function overlayMat(x: number, z: number, slope: number): Enum.Material?
+	if biomeName == "desert" then
+		return desertOverlayMat(x, z, slope)
+	end
 	local n = noise(x / 14 + 3.1, z / 14 + 8.7)
 	if pan then
 		local dx, dz = x - pan.x, z - pan.z
@@ -1670,8 +1854,40 @@ local function podHusk(parent: Instance, x: number, z: number)
 	maybeYield()
 end
 
+local DESERT_PAINTABLE = {
+	M.Sand, M.Sandstone, M.Ground, M.Rock, M.Mud, M.Grass, M.Slate, M.Limestone, M.Cobblestone,
+}
+
+-- Soft desert terrain stain without FillCylinder ledges: replaces surface voxels in small irregular cells, fading out at the rim.
+local function paintSoftPatch(x: number, z: number, r: number, coreMats: { Enum.Material }, edgeMats: { Enum.Material })
+	local terrain = Workspace.Terrain
+	local n = math.clamp(math.floor(r * 1.35), 6, 24)
+	for i = 1, n do
+		local a = rng:NextNumber(0, TAU)
+		local frac = if i <= 2 then rng:NextNumber(0, 0.25) else math.sqrt(rng:NextNumber())
+		local off = frac * r * rng:NextNumber(0.8, 1.15)
+		local sx, sz = x + math.cos(a) * off, z + math.sin(a) * off
+		local gy = groundY(sx, sz)
+		local half = if frac < 0.55 then rng:NextNumber(2.2, 4.2) else rng:NextNumber(1.8, 3.0)
+		local reg = Region3.new(Vector3.new(sx - half, gy - 5, sz - half), Vector3.new(sx + half, gy + 2, sz + half)):ExpandToGrid(4)
+		local pool = if frac < 0.6 then coreMats else edgeMats
+		local target = pool[rng:NextInteger(1, #pool)]
+		for _, src in DESERT_PAINTABLE do
+			if src ~= target then
+				terrain:ReplaceMaterial(reg, 4, src, target)
+			end
+		end
+	end
+end
+
 -- Ragged scorch painted into the terrain: overlapping blobs of darker biome material with jittered radii (never a flat disc).
 local function scorchPatch(x: number, z: number, r: number, bugs: boolean)
+	if biomeName == "desert" then
+		local core = if bugs then { M.Basalt, M.Mud, M.Slate } else { M.Basalt, M.Slate, M.Mud }
+		paintSoftPatch(x, z, r, core, { M.Slate, M.Mud, M.Ground })
+		maybeYield()
+		return
+	end
 	local terrain = Workspace.Terrain
 	local mats = if bugs then { Enum.Material.Basalt, Enum.Material.Mud, Enum.Material.Basalt, Enum.Material.Slate } else { Enum.Material.Basalt, Enum.Material.Basalt, Enum.Material.Slate, Enum.Material.Mud }
 	for i = 1, 9 do
@@ -1691,11 +1907,15 @@ local function shellCrater(parent: Instance, x: number, z: number, r: number)
 		return
 	end
 	local terrain = Workspace.Terrain
-	for i = 1, 4 do
-		local a = rng:NextNumber(0, TAU)
-		local off = if i == 1 then 0 else r * rng:NextNumber(0.5, 1.0)
-		local sx, sz = x + math.cos(a) * off, z + math.sin(a) * off
-		terrain:FillCylinder(CFrame.new(sx, groundY(sx, sz) - 1.1, sz), 2.4, r * rng:NextNumber(0.8, 1.15), Enum.Material.Basalt)
+	if biomeName == "desert" then
+		paintSoftPatch(x, z, r * 1.45, { M.Basalt, M.Slate }, { M.Slate, M.Mud, M.Ground })
+	else
+		for i = 1, 4 do
+			local a = rng:NextNumber(0, TAU)
+			local off = if i == 1 then 0 else r * rng:NextNumber(0.5, 1.0)
+			local sx, sz = x + math.cos(a) * off, z + math.sin(a) * off
+			terrain:FillCylinder(CFrame.new(sx, groundY(sx, sz) - 1.1, sz), 2.4, r * rng:NextNumber(0.8, 1.15), Enum.Material.Basalt)
+		end
 	end
 	terrain:FillBall(Vector3.new(x, groundY(x, z) + r * 0.35, z), r * 0.8, Enum.Material.Air)
 	for _ = 1, rng:NextInteger(2, 3) do

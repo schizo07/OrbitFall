@@ -428,7 +428,11 @@ local WRECK_LOG_NORMAL = Vector3.new(0.982, 0.191, 0)
 
 -- Scorched ground: paints the terrain dark (Basalt) in a ragged blob of small patches around c (y ignored), radius r.
 -- Soft voxel edges instead of the old hard dark disc part.
-local SCORCHABLE = { Enum.Material.Sand, Enum.Material.Sandstone, Enum.Material.Ground, Enum.Material.Rock, Enum.Material.Mud, Enum.Material.Grass, Enum.Material.Slate }
+local SCORCHABLE = {
+	Enum.Material.Sand, Enum.Material.Sandstone, Enum.Material.Ground, Enum.Material.Rock,
+	Enum.Material.Mud, Enum.Material.Grass, Enum.Material.Slate,
+	Enum.Material.Limestone, Enum.Material.Cobblestone, Enum.Material.Asphalt,
+}
 local function scorch(c: Vector3, r: number)
 	local T = Workspace.Terrain
 	local n = math.clamp(math.floor(r * 1.2), 3, 18)
@@ -439,8 +443,13 @@ local function scorch(c: Vector3, r: number)
 		local y = gy(x, z)
 		local s = rnd:NextNumber(2, 3.5)
 		local reg = Region3.new(Vector3.new(x - s, y - 6, z - s), Vector3.new(x + s, y + 2, z + s)):ExpandToGrid(4)
+		local target = if biomeName == "desert" and d > r * 0.5
+			then (if i % 2 == 0 then Enum.Material.Slate else Enum.Material.Mud)
+			else Enum.Material.Basalt
 		for _, m in SCORCHABLE do
-			T:ReplaceMaterial(reg, 4, m, Enum.Material.Basalt)
+			if m ~= target then
+				T:ReplaceMaterial(reg, 4, m, target)
+			end
 		end
 	end
 end
@@ -681,7 +690,11 @@ local function buildSpill(root: Instance, S: Vector3, crashP: Vector3, anchors: 
 		local px, pz = rnd:NextNumber(-7, 7), rnd:NextNumber(-7, 2)
 		ball(g, Vector3.new(d, d, d), Wp(px, d * 0.4, pz), RGB(200, 205, 210), false)
 	end
-	vcyl(g, 16, 0.15, Wp(0, 0.08, -3), SOOT, false)
+	if biomeName == "desert" then
+		scorch(Wp(0, 0, -3).Position, 8.5)
+	else
+		vcyl(g, 16, 0.15, Wp(0, 0.08, -3), SOOT, false)
+	end
 	local spots = { Vector3.new(-3.2, 0, -3.6), Vector3.new(0, 0, -4.8), Vector3.new(3.2, 0, -3.6) }
 	local first: Part? = nil
 	for _, o in spots do
