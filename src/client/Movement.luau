@@ -26,6 +26,7 @@ local Store = require(script.Parent.Store)
 local BodyDebug = require(script.Parent.BodyDebug) -- Studio readout (DebugKeys N); mark() is a no-op while it is off
 local DownedRules = require(Shared.Downed)
 local DownedPose = require(script.Parent.DownedPose) -- downed lying poses + push-up get-up (body via poseStep)
+local CellCarry = require(script.Parent.CellCarry) -- carry pose + heavier movement hooks
 
 local M = Config.Move
 local Movement = {}
@@ -601,7 +602,7 @@ end
 -- crawl until you stop and walk again", 2026-11-16). Re-apply Animate's own formula every frame with the current
 -- HipHeight (same numbers it would pick, just not stale).
 local animDamp: NumberValue? = nil
-local function syncRunAnim(hum: Humanoid, root: BasePart, base: number)
+local function syncRunAnim(hum: Humanoid, root: BasePart, base: number, carrying: boolean)
 	local animator = hum:FindFirstChildOfClass("Animator")
 	if not animator or base <= 0 then
 		return
@@ -623,6 +624,9 @@ local function syncRunAnim(hum: Humanoid, root: BasePart, base: number)
 	end
 	local runSpeed = speed / 16 * 1.25 / scale -- onRunning: setAnimationSpeed(speed / 16) -> setRunSpeed -> x1.25 / scale
 	local timeWarp = if runSpeed <= 0.5 then runSpeed / 0.5 elseif runSpeed < 1 then 1 else runSpeed
+	if carrying then
+		timeWarp *= Carry.ANIM_MULT
+	end
 	for _, tr in animator:GetPlayingAnimationTracks() do
 		local n = tr.Name
 		if (n == "WalkAnim" or n == "RunAnim") and math.abs(tr.Speed - timeWarp) > 0.05 * timeWarp then
@@ -849,7 +853,8 @@ local function step(dt: number)
 			hipCur = cur
 		end
 	end
-	syncRunAnim(hum, root, base)
+	syncRunAnim(hum, root, base, carrying)
+	CellCarry.setLocal(sprintApplied, grounded, stance, mode ~= "none" and mode ~= "recover")
 	if jumpLock and not Input.isDown("Jump") then
 		jumpLock = false
 	end
@@ -1346,7 +1351,8 @@ function Movement.cameraStep(dt: number, rawFocusY: number): (number, CFrame, nu
 	-- sprint feel
 	local speed = if root then flat(root.AssemblyLinearVelocity).Magnitude else 0
 	local grounded = hum ~= nil and hum.FloorMaterial ~= Enum.Material.Air and mode == "none"
-	local sT = if sprintApplied and grounded and speed > Config.WalkSpeed + 2 then 1 else 0
+	local carrying = CellCarry.isCarrying() and stance == "stand" and mode == "none"
+	local sT = if sprintApplied and grounded and (speed > Config.WalkSpeed + 2 or (carrying and speed > 8)) then 1 else 0
 	sprintBlend += (sT - sprintBlend) * (1 - math.exp(-dt * 5))
 	local lT = if exhausted and grounded and speed > 3 and stance == "stand" then 1 else 0
 	limpAmp += (lT - limpAmp) * (1 - math.exp(-dt * 5))
@@ -1357,6 +1363,10 @@ function Movement.cameraStep(dt: number, rawFocusY: number): (number, CFrame, nu
 	local bx = math.sin(bobPhase) * a * 0.8
 	local by = -math.abs(math.sin(bobPhase)) * a * 1.1 - limpAmp * 0.06 * math.max(0, math.sin(bobPhase))
 	local roll = math.sin(bobPhase) * 0.01 * (sprintBlend + limpAmp * 0.6)
+	local cbx, cby, croll = CellCarry.cameraBob(grounded)
+	bx += cbx
+	by += cby
+	roll += croll
 	-- knocked down: the focus keeps following the tumbling root (above); widen the view and sit a little lower so the
 	-- body stays in frame while it flies and lies there, then ease back during the stand-up
 	local dT = if mode == "down" and getupFrom == nil then 1 else 0

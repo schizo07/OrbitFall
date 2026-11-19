@@ -16,7 +16,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Net = require(Shared.Net)
-local Carry = require(Shared.Carry) -- haul objective carry pose
+local CellCarry = require(script.Parent.CellCarry)
 local Input = require(script.Parent.Input)
 local Store = require(script.Parent.Store)
 
@@ -122,7 +122,6 @@ type Rig = {
 	ads: number, -- local aim-down-sights blend (0..1)
 	hand: number, -- smoothed handedness: +1 gun on the right shoulder .. -1 on the left (local: localHand, others: the replicated Hand attribute)
 	active: boolean,
-	gunHidden: boolean?, -- haul carry pose hid the gun (showGun)
 }
 local rigs: { [Model]: Rig } = {}
 
@@ -266,22 +265,6 @@ local function findGun(c: Model): (Instance?, BasePart?)
 	return nil, nil
 end
 
--- haul carry: hide the gun locally while both hands hold a core cell (re-applied every carry frame: swaps rebuild the gun)
-local function showGun(r: Rig, on: boolean)
-	if on and not r.gunHidden then
-		return
-	end
-	local gun = r.c:FindFirstChild("Gun")
-	if gun then
-		for _, d in gun:GetDescendants() do
-			if d:IsA("BasePart") then
-				d.LocalTransparencyModifier = if on then 0 else 1
-			end
-		end
-	end
-	r.gunHidden = not on
-end
-
 local function release(r: Rig)
 	if not r.active then
 		return
@@ -300,69 +283,6 @@ local function release(r: Rig)
 		r.grip.C0 = r.gripBase
 	end
 	r.grip, r.gripBase, r.gripHandle = nil, nil, nil
-	showGun(r, true)
-end
-
--- ── haul objective carry pose (character attribute CarryCell, shared/Carry.luau) ─────────────────────────────
--- Both hands on the core cell the server welds at Carry.HOLD in front of the belly; the gun is hidden (local
--- transparency) meanwhile. SIDEARM rule with the pistol in hand: the normal pose, so the sidearm can aim.
--- Heavy-load look: the cell is hugged at the chest (elbows out, hands under its sides), the upper body leans back
--- against the weight at a walk and hunches forward into a sprint, and it waddles side to side with the steps.
-local CARRY_HAND = Vector3.new(Carry.SIZE.X / 2 + 0.08, -0.2, 0.05) -- wrist target in cell space (x mirrored for the left)
-local CARRY_LEAN_BACK = 0.14 -- rad, walking / standing
-local CARRY_LEAN_RUN = -0.22 -- rad, sprinting (forward)
-local CARRY_ROLL = 0.09 -- rad of side-to-side waddle at full walk
-local CARRY_TWIST = 0.06 -- rad of shoulder twist with the steps
-local CARRY_STEP_RATE = 0.45 -- waddle phase (rad) per stud moved
-local carryState: { [Model]: { ph: number, lean: number } } = {}
-local function wantsCarry(r: Rig, handle: BasePart): boolean
-	if r.c:GetAttribute(Carry.ATTR) ~= true then
-		return false
-	end
-	if Carry.rule() == "SIDEARM" then
-		local muzzle = handle:FindFirstChild("Muzzle")
-		local reach = if muzzle and muzzle:IsA("Attachment") then -muzzle.Position.Z else 2
-		if reach < 1.25 then
-			return false
-		end
-	end
-	return true
-end
-
-local function carryStep(r: Rig, dt: number)
-	r.pitch += (0 - r.pitch) * (1 - exp(-dt * 10))
-	r.low, r.ads = 0, 0
-	local st = carryState[r.c]
-	if not st then
-		st = { ph = 0, lean = 0 }
-		carryState[r.c] = st
-	end
-	local v = r.hrp.AssemblyLinearVelocity
-	local speed = Vector3.new(v.X, 0, v.Z).Magnitude
-	local walk = clamp(speed / 10, 0, 1)
-	local run = clamp((speed - 13) / 4, 0, 1)
-	st.ph = (st.ph + dt * speed * CARRY_STEP_RATE) % (2 * math.pi)
-	local leanT = CARRY_LEAN_BACK + (CARRY_LEAN_RUN - CARRY_LEAN_BACK) * run
-	st.lean += (leanT - st.lean) * (1 - exp(-dt * 6))
-	local sw = math.sin(st.ph) * walk
-	setC0(
-		r.waist,
-		r.waistBase * (if ArmorFx and ArmorFx.waistOffset then ArmorFx.waistOffset else CF0) * CFrame.Angles(st.lean, sw * CARRY_TWIST, sw * CARRY_ROLL)
-	)
-	if r.neck and r.neckBase then
-		-- the head stays level-ish over the load (counters most of the lean and waddle)
-		setC0(r.neck, r.neckBase * CFrame.Angles(-st.lean * 0.6, 0, -sw * CARRY_ROLL * 0.6))
-	end
-	local hrpCF = r.hrp.CFrame
-	local lower = hrpCF * r.root.C0 * r.root.Transform * r.root.C1:Inverse()
-	local upper = lower * r.waist.C0 * r.waist.Transform * r.waist.C1:Inverse()
-	local cell = upper * Carry.HOLD
-	local right, back, down = upper.RightVector, -upper.LookVector, -upper.UpVector
-	local h = tune("CarryHand", CARRY_HAND)
-	-- elbows flared out to the sides and a little back: a two-armed hug, not a gun hold
-	solveArm(r.R, upper, (cell * CFrame.new(h.X, h.Y, h.Z)).Position, down * 0.5 + right * 1.3 + back * 0.4, cell.Rotation)
-	solveArm(r.L, upper, (cell * CFrame.new(-h.X, h.Y, h.Z)).Position, down * 0.5 - right * 1.3 + back * 0.4, cell.Rotation)
-	showGun(r, false)
 end
 
 local function blocked(r: Rig, isLocal: boolean): boolean
@@ -519,6 +439,23 @@ local function handguardTarget(arm: Arm, upper: CFrame, gunCF: CFrame, wrist: Ve
 end
 
 local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
+	-- haul objective: CellCarry owns the pose while carrying; restore C0s without clobbering CellCarry's Transforms
+	if CellCarry.ownsPose(r.c) then
+		if r.active then
+			r.active = false
+			setC0(r.waist, r.waistBase)
+			if r.neck and r.neckBase then
+				setC0(r.neck, r.neckBase)
+			end
+			if r.grip and r.grip.Parent and r.gripBase then
+				r.grip.C0 = r.gripBase
+			end
+			r.grip, r.gripBase, r.gripHandle = nil, nil, nil
+		end
+		r.pitch += (0 - r.pitch) * (1 - exp(-dt * 10))
+		r.low, r.ads = 0, 0
+		return
+	end
 	local _, handle = findGun(r.c)
 	local grip = handle and r.c:FindFirstChild("RightHand") and (r.c.RightHand :: BasePart):FindFirstChild("RightGrip")
 	if not handle or not grip or not grip:IsA("Weld") or grip.Part1 ~= handle or blocked(r, isLocal) then
@@ -532,12 +469,6 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 		r.gripHandle = handle
 	end
 	r.active = true
-	-- haul objective: both hands on the carried core cell instead of the gun
-	if wantsCarry(r, handle) then
-		carryStep(r, dt)
-		return
-	end
-	showGun(r, true)
 
 	-- handedness: the local gun follows the camera shoulder (smoothed in frame()); other characters follow their
 	-- replicated Hand attribute, smoothed here at the same rate so everyone sees the same swap motion
@@ -755,11 +686,6 @@ local function frame(dt: number)
 	for c, r in rigs do
 		if not c.Parent then
 			rigs[c] = nil
-		end
-	end
-	for c in carryState do
-		if not c.Parent or c:GetAttribute(Carry.ATTR) ~= true then
-			carryState[c] = nil
 		end
 	end
 	-- stim poses end on their own clock (also when the rig was released mid-way); the injector goes with them

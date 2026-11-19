@@ -51,6 +51,14 @@ local function setAttr(p: Player, stance: string)
 	end
 end
 
+local function setSprintAttr(p: Player, on: boolean)
+	local c = p.Character
+	local v: boolean? = if on then true else nil
+	if c and c:GetAttribute("Sprinting") ~= v then
+		c:SetAttribute("Sprinting", v)
+	end
+end
+
 -- The upper-body twist only exists while prone / diving: any other stance zeroes the replicated value.
 local function clearTwist(p: Player, stance: string)
 	local c = p.Character
@@ -94,6 +102,7 @@ function MovementService.onCharacter(p: Player, c: Model)
 	m.stamina, m.exhausted, m.sprinting, m.stance = 1, false, false, "stand"
 	m.boostEnd = 0
 	c:SetAttribute("Stance", "stand")
+	c:SetAttribute("Sprinting", nil)
 	c:SetAttribute("Twist", 0)
 	PS.publish(p)
 end
@@ -110,6 +119,7 @@ function MovementService.init(s, playerService)
 		-- (core-cell carriers sprint too, slower: shared/Carry.luau; stamina drains the same)
 		m.sprinting = sprinting == true and stance == "stand" and not m.exhausted
 		setAttr(p, stance)
+		setSprintAttr(p, m.sprinting)
 		clearTwist(p, stance)
 		PS.publish(p)
 	end)
@@ -189,6 +199,7 @@ function MovementService.init(s, playerService)
 		m.stance = "dive"
 		m.sprinting = false
 		setAttr(p, "dive")
+		setSprintAttr(p, false)
 		PS.publish(p)
 	end)
 	Players.PlayerRemoving:Connect(function(p)
@@ -219,6 +230,7 @@ function MovementService.step(p: Player, dt: number)
 		if m.stamina <= 0 then
 			m.exhausted = true
 			m.sprinting = false
+			setSprintAttr(p, false)
 		end
 	elseif t - m.lastDrain >= M.RegenDelay and m.stamina < 1 then
 		m.stamina = math.min(1, m.stamina + dt / M.RegenTime)

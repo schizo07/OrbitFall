@@ -11,8 +11,9 @@ Carry.ATTR = "CarryCell"
 Carry.RULE_ATTR = "HaulCarryRule"
 Carry.SPEED_MULT = 0.8 -- walk speed while carrying
 Carry.SPRINT_MULT = 0.6 -- sprint speed while carrying (sprint stays allowed, stamina drains as usual)
--- cell placement in UpperTorso space (+X right, +Y up, -Z forward): hugged at the chest with both arms
-Carry.HOLD = CFrame.new(0, -0.1, -1.25)
+Carry.ANIM_MULT = 0.76 -- slower walk/run animation cadence while hauling
+-- cell placement in UpperTorso space (+X right, +Y up, -Z forward): held up at chest height with elbows out
+Carry.HOLD = CFrame.new(0, 0.14, -1.24) * CFrame.Angles(math.rad(6), 0, 0)
 Carry.SIZE = Vector3.new(1.8, 1.25, 1.1)
 Carry.COLOR = Color3.fromRGB(110, 225, 255)
 
