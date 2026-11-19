@@ -349,7 +349,7 @@ end
 function HudSkin.panel(kind: string?, props: { [string]: any }?): Frame
 	local s = HudSkin.current()
 	local preset = HudSkin.preset()
-	local k = kind or "auto"
+	local k: string = kind or "auto"
 	if k == "auto" then
 		k = if s then s.panelKind else "none"
 	end
