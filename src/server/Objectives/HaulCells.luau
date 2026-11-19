@@ -1,13 +1,17 @@
 -- Main objective "Recover Core Cells": load N core cells (5 / 6 / 7 / 8 / 9 by difficulty) into the cargo lifter.
--- The cells sit in small guarded caches at the outpost sites (codes, generator, console, uplink, plus a free nest site
--- for 8+ cells). The cargo lifter stands on the concrete apron of the silo site: a cargo bed, an upright glowing blue
--- terminal panel and a painted Halcyon emblem, all built from parts.
+-- The cells rest at four places (World/MapPlan): the spilled cell at the crashed drone, Signal Mesa, the Quarry and the
+-- Walker Graveyard, MapPlan.cellCount(place, difficulty) of them each, on the spots the map's anchors give (a ring around
+-- the place when an anchor is missing). Every place has its own twist (HaulTwists.luau). The cargo lifter stands on the
+-- concrete apron of the silo site (the refinery): a cargo bed, an upright glowing blue terminal panel and a painted
+-- Halcyon emblem, all built from parts. The refinery fights back as cells go in (probe, counter-attack); the last cell
+-- starts a launch countdown with a big wave, and the lifter leaves when it runs out.
 --   pick up : hold Interact 0.5 s on a cell (ProximityPrompt). The server welds the cell to the trooper's chest and sets
 --             the Player + character attribute `CarryCell` (shared/Carry.luau: no fire / aim / grenades, speed x0.8).
 --   drop    : Action "cellDrop" (client: Interact or Grenade while carrying), dying, being knocked down (stance "down")
 --             or leaving the game drops it where the trooper stood; a dropped cell keeps a world marker.
 --   deliver : a carrier entering the lifter zone (LIFT_RADIUS around the cargo bed) loads the cell: counter [k/N].
---   done    : N/N -> the step completes, the lifter launches, onComplete() (the Mission goes to Extract).
+--   done    : N/N -> launch countdown (LAUNCH_SECONDS), then the step completes, the lifter launches, onComplete() (the
+--             Mission goes to Extract).
 -- Callouts go through the Notify remote with kind "comms" as "<name>: <line>".
 -- Receives `ctx` from ObjectiveService; returns a controller { entry, stop, drop, stepsDone, debugSolve }.
 
@@ -17,17 +21,22 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Carry = require(Shared.Carry)
 local SetPieces = require(script.Parent.SetPieces)
+local HaulTwists = require(script.Parent.HaulTwists)
+local MapPlan = require(script.Parent.Parent.World.MapPlan)
 
 local HaulCells = {}
 
-local COUNTS = { 5, 6, 7, 8, 9 } -- cells by difficulty 1..5
+local PLACES = { "spilled", "mesa", "quarry", "graveyard" } -- cell places, in the order the cells are numbered
+local PLACE_LABEL = { spilled = "DRONE WRECK", mesa = "SIGNAL MESA", quarry = "QUARRY", graveyard = "WALKER GRAVEYARD" }
 local PICK_HOLD = 0.5
 local LIFT_RADIUS = 7.5 -- horizontal studs from the cargo bed centre that load a carried cell
 local LIFT_DY = 9
 local REPICK_LOCK = 0.6 -- s after a drop before that trooper can grab again (holding Interact to drop doesn't re-grab)
-local GUARD_RADIUS = 55
-local GUARD_BUDGET = 7
+local LAUNCH_SECONDS = 25 -- last cell loaded -> the lifter leaves after this long (the big wave hits meanwhile)
+local DEBUG_LAUNCH_SECONDS = 4 -- same with the DebugFast attribute
+local PAD_H = 0.2 -- height of the dark pad a resting cell stands on
 local STEP_FMT = "Load cells into the cargo lifter [%d/%d]"
+local LAUNCH_FMT = "Hold the cargo lifter: launching in %d s"
 
 local DARK = Color3.fromRGB(40, 44, 52)
 local STEEL = Color3.fromRGB(112, 118, 128)
@@ -58,7 +67,7 @@ local function billboard(adornee: BasePart, name: string, caption: string?, offs
 	bb.Name = name
 	bb.AlwaysOnTop = true
 	bb.LightInfluence = 0
-	bb.Size = UDim2.fromOffset(if caption then 120 else glyph + 8, if caption then glyph + 22 else glyph + 8)
+	bb.Size = UDim2.fromOffset(if caption then 170 else glyph + 8, if caption then glyph + 22 else glyph + 8)
 	bb.StudsOffsetWorldSpace = offset
 	bb.MaxDistance = maxDist
 	bb.Adornee = adornee
@@ -101,9 +110,16 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	root.Name = "Haul"
 	root.Parent = ctx.folder
 
-	local total = COUNTS[math.clamp(math.floor(tonumber(ctx.difficulty) or 1), 1, #COUNTS)]
-	if Workspace:GetAttribute("DebugFast") then
-		total = 2
+	-- cells per place (MapPlan: 5 / 6 / 7 / 8 / 9 in all by difficulty 1..5)
+	local diff = math.clamp(math.floor(tonumber(ctx.difficulty) or 1), 1, 5)
+	local counts: { [string]: number } = {}
+	local total = 0
+	local room = if Workspace:GetAttribute("DebugFast") then 2 else math.huge
+	for _, name in PLACES do
+		local n = math.min(MapPlan.cellCount(name, diff), room)
+		counts[name] = n
+		room -= n
+		total += n
 	end
 	local entry = ctx.newEntry({ id = "HAUL", title = "Recover Core Cells", main = true, steps = { string.format(STEP_FMT, 0, total) } })
 	local ctl: any = { entry = entry }
@@ -134,13 +150,26 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	lifter.Name = "CargoLifter"
 	lifter.Parent = root
 	ctx.part(lifter, Vector3.new(26, slabH, 26), plaza * CFrame.new(0, -slabH / 2, 0), CONCRETE, Enum.Material.Concrete, { CastShadow = false })
-	-- the silo apron's hazard bollards (server/World/MapBuilder.luau) poke through the slab: clear the ones in its footprint
+	-- Anything of the map that stands in the slab's footprint and crosses its top surface pokes through it: the apron's hazard
+	-- bollards (server/World/MapBuilder.luau) and any small prop or chunk on the plaza. Bollards go wherever they are near
+	-- the slab; other parts only when they are small (the apron disc and walls are bigger than 9 studs and stay).
 	if map.folder then
 		for _, d in map.folder:GetDescendants() do
-			if d.Name == "HazardBollard" and d:IsA("BasePart") then
+			if d:IsA("BasePart") then
 				local lp = plaza:PointToObjectSpace(d.Position)
-				if math.abs(lp.X) <= 14 and math.abs(lp.Z) <= 14 then
-					d:Destroy()
+				if math.abs(lp.X) <= 15 and math.abs(lp.Z) <= 15 then
+					if d.Name == "HazardBollard" then
+						d:Destroy()
+					elseif math.abs(lp.X) <= 14.5 and math.abs(lp.Z) <= 14.5 and math.max(d.Size.X, d.Size.Y, d.Size.Z) <= 9 then
+						-- vertical half-extent of the part's (rotated) box
+						local cf = d.CFrame
+						local s = d.Size
+						local half = 0.5 * (math.abs(cf.RightVector.Y) * s.X + math.abs(cf.UpVector.Y) * s.Y + math.abs(cf.LookVector.Y) * s.Z)
+						local y = d.Position.Y
+						if y + half > top + 0.03 and y - half < top then
+							d:Destroy()
+						end
+					end
 				end
 			end
 		end
@@ -244,29 +273,74 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	end
 
 	-- ============================================================ caches
-	local siteNames = { "codes", "generator", "console", "uplink" }
-	if total >= 8 then
-		for _, n in ctx.freeNests or {} do
-			if map.sites[n] then
-				table.insert(siteNames, n)
-				break
+	local function groundAtXZ(x: number, z: number): number
+		local y = if map.groundY then map.groundY(x, z) else top
+		if type(y) ~= "number" or y ~= y then
+			return top
+		end
+		return y
+	end
+
+	-- the centre of a place on the ground: the map's own number, else the plan's
+	local function placeCentre(name: string): Vector3
+		local p = if type(map.places) == "table" then map.places[name] else nil
+		if typeof(p) == "Vector3" then
+			return p
+		end
+		if name == "spilled" then
+			local cr = if type(map.crash) == "table" then map.crash else nil
+			local v2 = if cr and typeof(cr.spilled) == "Vector2" then cr.spilled else nil
+			if v2 then
+				return Vector3.new(v2.X, groundAtXZ(v2.X, v2.Y), v2.Y)
+			end
+			local cf = map.sites.codes
+			if cf then
+				return cf.Position
 			end
 		end
-	end
-	local caches: { any } = {}
-	for _, n in siteNames do
-		local cf = map.sites[n]
-		if cf then
-			table.insert(caches, { name = n, cf = SetPieces.groundCF(map, cf, 3), cells = {}, triggered = false, marker = nil })
+		local v = MapPlan.at(name)
+		if v then
+			return Vector3.new(v.X, groundAtXZ(v.X, v.Y), v.Y)
 		end
+		return plaza.Position
 	end
-	if #caches == 0 then -- should never happen: fall back to the lifter plaza edge
-		table.insert(caches, { name = "lifter", cf = plaza * CFrame.new(-8, 0, -10), cells = {}, triggered = true, marker = nil })
+
+	-- where the `n` cells of a place rest: the map's anchors (on the floor), the rest on a ring around the place centre
+	local function restSpots(name: string, n: number): { CFrame }
+		local out: { CFrame } = {}
+		local list = if type(map.anchors) == "table" and type(map.anchors.cellSpots) == "table" then map.anchors.cellSpots[name] else nil
+		if type(list) == "table" then
+			for _, cf in list do
+				if typeof(cf) == "CFrame" and #out < n then
+					local p = cf.Position
+					local g = groundAtXZ(p.X, p.Z)
+					-- an anchor that sank into the ground comes up to it
+					table.insert(out, if p.Y < g - 2 then CFrame.new(p.X, g, p.Z) * cf.Rotation else cf)
+				end
+			end
+		end
+		if #out < n then
+			local c = placeCentre(name)
+			for i = #out + 1, n do
+				local a = (i - 1) / n * math.pi * 2 + 0.6
+				local x, z = c.X + math.cos(a) * 5.5, c.Z + math.sin(a) * 5.5
+				table.insert(out, CFrame.new(x, groundAtXZ(x, z), z) * CFrame.Angles(0, a + math.pi, 0))
+			end
+		end
+		return out
 	end
-	local perCache: { number } = {}
-	for i = 1, total do
-		local k = (i - 1) % #caches + 1
-		perCache[k] = (perCache[k] or 0) + 1
+
+	local caches: { any } = {}
+	local cacheSpots: { [string]: { CFrame } } = {}
+	local placePositions: { [string]: Vector3 } = {}
+	for _, name in PLACES do
+		placePositions[name] = placeCentre(name)
+		local n = counts[name]
+		if n > 0 then
+			local spots = restSpots(name, n)
+			cacheSpots[name] = spots
+			table.insert(caches, { name = name, pos = placePositions[name], spots = spots, cells = {}, marker = nil })
+		end
 	end
 
 	local function cacheLeft(cache: any): number
@@ -288,40 +362,46 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			end
 			return
 		end
-		local cap = if n == 1 then "CORE CELL" else ("CORE CELLS x" .. n)
+		local label = PLACE_LABEL[cache.name] or "CORE CELL"
+		local cap = if n == 1 then label else (label .. " x" .. n)
 		if cache.marker and cache.marker.Parent then
 			local l = cache.marker:FindFirstChild("Caption") :: TextLabel?
 			if l then
 				l.Text = cap
 			end
 		elseif cache.anchor then
-			cache.marker = billboard(cache.anchor, "CacheMarker", cap, Vector3.new(0, 5, 0), 1200, 12)
+			cache.marker = billboard(cache.anchor, "CacheMarker", cap, Vector3.new(0, 2.6, 0), 1200, 12)
 		end
 	end
 
 	local pickup: (Cell, Player) -> ()
 
-	for ci, cache in caches do
-		local b: CFrame = cache.cf
+	-- place twists: crews, the mesa alarm, the graveyard wake-up and the refinery escalation
+	local twists = HaulTwists.new(ctx, { liftPos = plaza.Position, places = placePositions, spots = cacheSpots })
+
+	for _, cache in caches do
 		local f = Instance.new("Model")
 		f.Name = "CellCache"
 		f.Parent = root
-		-- low pallet with side rails, a hazard plate and a short lamp post
-		local pallet = ctx.part(f, Vector3.new(6.6, 0.5, 2.6), b * CFrame.new(0, 0.25, 0), Color3.fromRGB(70, 64, 54), Enum.Material.WoodPlanks)
-		ctx.part(f, Vector3.new(6.6, 0.7, 0.25), b * CFrame.new(0, 0.85, -1.2), DARK, Enum.Material.Metal, { CanCollide = false })
-		ctx.part(f, Vector3.new(6.6, 0.7, 0.25), b * CFrame.new(0, 0.85, 1.2), DARK, Enum.Material.Metal, { CanCollide = false })
-		ctx.part(f, Vector3.new(1.4, 0.06, 1.4), b * CFrame.new(-4.2, 0.03, 0), HAZARD, Enum.Material.SmoothPlastic, { CanCollide = false, CastShadow = false })
-		ctx.part(f, Vector3.new(0.35, 3.2, 0.35), b * CFrame.new(3.9, 1.6, 1.4), DARK, Enum.Material.Metal)
-		ctx.glow(f, Vector3.new(0.5, 0.35, 0.5), b * CFrame.new(3.9, 3.3, 1.4), Carry.COLOR)
-		cache.anchor = pallet
-		local n = perCache[ci] or 0
-		for k = 1, n do
-			local x = (k - (n + 1) / 2) * 2.1
-			local cf = b * CFrame.new(x, 0.5 + Carry.SIZE.Y / 2 + 0.02, 0)
-			local cell = buildCell(cf, #cells + 1)
+		local spots: { CFrame } = cache.spots
+		for k, spot in spots do
+			-- a round dark pad with a glowing ring on the floor; the cell stands upright on it (yaw only, the anchor's tilt is dropped)
+			local floor = spot.Position
+			local _, yaw = spot:ToOrientation()
+			local at = CFrame.new(floor) * CFrame.Angles(0, yaw, 0)
+			local padOpts = { CanCollide = false, CanQuery = false, CastShadow = false }
+			ctx.cyl(f, 3.4, PAD_H, at * CFrame.new(0, PAD_H / 2, 0), DARK, Enum.Material.SmoothPlastic, padOpts)
+			ctx.cyl(f, 2.7, PAD_H + 0.03, at * CFrame.new(0, PAD_H / 2, 0), Carry.COLOR, Enum.Material.Neon, { CanCollide = false, CanQuery = false, CastShadow = false, Transparency = 0.45 })
+			local cell = buildCell(at * CFrame.new(0, PAD_H + Carry.SIZE.Y / 2 + 0.02, 0), #cells + 1)
 			cell.cache = cache
 			table.insert(cache.cells, cell)
 			table.insert(cells, cell)
+			-- a short lamp post by the first cell carries the place's marker
+			if k == 1 then
+				local post = at * CFrame.new(2.6, 0, 0)
+				ctx.cyl(f, 0.35, 3.2, post * CFrame.new(0, 1.6, 0), DARK, Enum.Material.Metal, { CanCollide = false })
+				cache.anchor = ctx.ball(f, 0.7, post * CFrame.new(0, 3.4, 0), Carry.COLOR, Enum.Material.Neon, { CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false })
+			end
 		end
 		refreshCacheMarker(cache)
 	end
@@ -476,6 +556,9 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 		callout(p, "Cell secured.")
 		ctx.sound("Pickup", torso.Position)
+		if fromCache and cell.cache then
+			twists.onLift(cell.cache.name, p)
+		end
 		if not cell.everTaken then
 			cell.everTaken = true
 			ctx.intensity("SAMPLE") -- lifting a cell draws attention (same as a sample pickup)
@@ -524,6 +607,45 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end)
 	end
 
+	-- the last cell is in: the lifter spools up for LAUNCH_SECONDS while the big wave hits; the step completes when it ends
+	local function beginLaunch()
+		local secs = if Workspace:GetAttribute("DebugFast") then DEBUG_LAUNCH_SECONDS else LAUNCH_SECONDS
+		local st = entry.steps[1]
+		st.text = string.format(LAUNCH_FMT, secs)
+		st.progress = 0
+		ctx.changed(true)
+		ctx.notify(string.format("All cells loaded! The lifter launches in %d s: hold the plaza!", secs), Config.Colors.Danger)
+		ctx.sound("Generator", liftPos)
+		ctx.sound("Alarm", liftPos)
+		twists.finalWave()
+		task.spawn(function()
+			local t0 = os.clock()
+			local shown = secs
+			while alive and ctx.alive() do
+				local left = secs - (os.clock() - t0)
+				if left <= 0 then
+					break
+				end
+				local whole = math.ceil(left)
+				if whole ~= shown then
+					shown = whole
+					st.text = string.format(LAUNCH_FMT, whole)
+					st.progress = 1 - left / secs
+					ctx.changed()
+				end
+				task.wait(0.25)
+			end
+			if not alive or not ctx.alive() then
+				return
+			end
+			st.text = string.format(STEP_FMT, total, total)
+			st.progress = nil
+			ctx.completeStep(entry, 1, "The cargo lifter is launching!")
+			launchLifter()
+			onComplete()
+		end)
+	end
+
 	local function load(cell: Cell, by: Player?)
 		if cell.state == "loaded" or finished then
 			return
@@ -558,12 +680,12 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		ctx.changed(true)
 		if delivered >= total then
 			finished = true
-			st.progress = nil
-			ctx.completeStep(entry, 1, "All core cells loaded! The cargo lifter is launching.")
-			launchLifter()
-			onComplete()
-		elseif delivered % 2 == 0 then
-			ctx.intensity("MAIN_STEP")
+			beginLaunch()
+		else
+			twists.onDelivered(delivered, total)
+			if delivered % 2 == 0 then
+				ctx.intensity("MAIN_STEP")
+			end
 		end
 	end
 
@@ -604,9 +726,8 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		})
 	end
 
-	-- ============================================================ watch loop: carriers (deliver / forced drops) + guards
+	-- ============================================================ watch loop: carriers (deliver / forced drops)
 	task.spawn(function()
-		local guardT = 0
 		while alive and ctx.alive() do
 			task.wait(0.1)
 			if not alive or not ctx.alive() then
@@ -631,17 +752,6 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 					load(cell, p)
 				end
 			end
-			guardT += 0.1
-			if guardT >= 0.5 then
-				guardT = 0
-				for _, cache in caches do
-					if not cache.triggered and cacheLeft(cache) > 0 and #ctx.playersNear(cache.cf.Position, GUARD_RADIUS) > 0 then
-						cache.triggered = true
-						ctx.notify("Hostiles guarding the cell cache!", Config.Colors.Danger)
-						ctx.wave(cache.cf.Position, GUARD_BUDGET)
-					end
-				end
-			end
 		end
 	end)
 
@@ -656,9 +766,11 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	ctx.setMarker(entry, liftPos)
 	ctx.changed(true)
 	ctx.notify(string.format("Recover %d core cells and load them into the cargo lifter.", total), Config.Colors.Friendly)
+	twists.start()
 
 	function ctl.stop()
 		alive = false
+		twists.stop()
 		leaveConn:Disconnect()
 		for p, cell in carriers do
 			setCarryAttr(p, false)

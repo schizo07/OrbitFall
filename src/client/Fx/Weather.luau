@@ -40,8 +40,9 @@ local GRADE_STRONG = 1.9
 -- Storm look per biome (only desert / ash storm)
 local STORM = {
 	desert = {
-		dust = RGB(214, 168, 116), atmColor = RGB(196, 150, 104), density = 0.72, hazeAdd = 3,
-		tint = RGB(255, 224, 186), sat = -0.18, contrast = -0.06, bright = -0.02,
+		-- lighter than it was (density 0.72, haze +3, sat -0.18): the storm turned the whole map a flat muddy olive
+		dust = RGB(214, 160, 110), atmColor = RGB(208, 142, 94), density = 0.52, hazeAdd = 1.4,
+		tint = RGB(255, 226, 192), sat = -0.08, contrast = -0.03, bright = -0.01,
 	},
 	ash = {
 		dust = RGB(96, 84, 80), atmColor = RGB(92, 78, 74), density = 0.75, hazeAdd = 3,

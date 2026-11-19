@@ -66,7 +66,7 @@ function SideRadar.start(ctx: any, index: number): any
 	if index > 1 then
 		return nil -- one radar per mission
 	end
-	local siteName = ctx.takeSite and ctx.takeSite()
+	local siteName = ctx.takeSite and ctx.takeSite("radar")
 	local siteCF: CFrame? = siteName and ctx.map.sites[siteName]
 	if not siteCF then
 		return nil

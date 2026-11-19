@@ -504,6 +504,23 @@ local function apply()
 	end
 end
 
+-- the label stays hidden (it sat over the compass) and shows for a few seconds after K / L / J
+local shownAt = 0
+local function flashLabel()
+	local l = label
+	if not l then
+		return
+	end
+	l.Visible = true
+	local t = os.clock()
+	shownAt = t
+	task.delay(3, function()
+		if shownAt == t then
+			l.Visible = false
+		end
+	end)
+end
+
 function Variants.init()
 	if not RunService:IsStudio() then
 		return
@@ -523,6 +540,7 @@ function Variants.init()
 	l.TextColor3 = Color3.fromRGB(255, 200, 120)
 	l.Font = Enum.Font.GothamBold
 	l.TextSize = 13
+	l.Visible = false
 	l.Parent = gui
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	label = l
@@ -545,7 +563,10 @@ function Variants.init()
 			groupIdx = groupIdx % #GROUPS + 1
 			presetIdx = 1
 			apply()
+		else
+			return
 		end
+		flashLabel()
 	end)
 end
 

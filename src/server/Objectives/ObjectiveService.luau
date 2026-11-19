@@ -27,6 +27,7 @@ local SideRadar = require(script.Parent.SideRadar)
 local SideJammer = require(script.Parent.SideJammer)
 local SideAirDefence = require(script.Parent.SideAirDefence)
 local SideFoundry = require(script.Parent.SideFoundry)
+local MapPlan = require(script.Parent.Parent.World.MapPlan)
 
 local ObjectiveService = {}
 ObjectiveService.onMainComplete = nil :: (() -> ())?
@@ -531,11 +532,30 @@ function ObjectiveService.start(map: any, cfg: any)
 	local ctx = buildCtx(map, faction)
 	ctx.difficulty = tonumber(cfg.difficulty) or 1
 
-	-- nest sites are shuffled up front so the haul objective knows which ones the NEST sides leave free
-	local nestSites = { "nest1", "nest2", "nest3", "nest4" }
+	-- nest sites are shuffled up front so the haul objective knows which ones the NEST sides leave free. A side kind with a
+	-- fixed spot on the map (World/MapPlan.sides: the radar on the service road, the jammer over the quarry, the foundry
+	-- in the north) keeps its site out of the shuffle; those sites sit at the end of the list.
+	local reserved: { [string]: boolean } = {}
+	for _, kind in cfg.sides or {} do
+		local spot = MapPlan.sideSpot(string.lower(kind))
+		if spot then
+			reserved[spot.site] = true
+		end
+	end
+	local nestSites = {}
+	for _, n in { "nest1", "nest2", "nest3", "nest4" } do
+		if not reserved[n] then
+			table.insert(nestSites, n)
+		end
+	end
 	for i = #nestSites, 2, -1 do
 		local j = ctx.rng:NextInteger(1, i)
 		nestSites[i], nestSites[j] = nestSites[j], nestSites[i]
+	end
+	for _, n in { "nest1", "nest2", "nest3", "nest4" } do
+		if reserved[n] then
+			table.insert(nestSites, n)
+		end
 	end
 	local nestCount = 0
 	for _, kind in cfg.sides or {} do
@@ -546,19 +566,32 @@ function ObjectiveService.start(map: any, cfg: any)
 	for i = nestCount + 1, #nestSites do
 		table.insert(ctx.freeNests, nestSites[i])
 	end
-	-- spare site for set-piece sides (RADAR / FOUNDRY / WRECK): taken from the END of the shuffled list (the NEST sides use the
-	-- front, HaulCells' extra cache the first free one). Returns (siteName, CFrame) or nil when none is left.
-	local spareTaken = 0
-	function ctx.takeSite(): (string?, CFrame?)
-		while #nestSites - spareTaken > nestCount do
-			local name = nestSites[#nestSites - spareTaken]
-			spareTaken += 1
-			local fi = table.find(ctx.freeNests, name)
-			if fi then
-				table.remove(ctx.freeNests, fi)
-			end
-			if map.sites[name] then
-				return name, map.sites[name]
+	-- spare site for set-piece sides (RADAR / FOUNDRY / WRECK...). `kind` (e.g. "radar") first asks for that kind's fixed
+	-- spot; otherwise spares come from the END of the list (the NEST sides use the front), and another kind's fixed spot
+	-- only as a last resort. Returns (siteName, CFrame) or nil when none is left.
+	local taken: { [string]: boolean } = {}
+	for i = 1, math.min(nestCount, #nestSites) do
+		taken[nestSites[i]] = true
+	end
+	local function claim(name: string): (string?, CFrame?)
+		taken[name] = true
+		local fi = table.find(ctx.freeNests, name)
+		if fi then
+			table.remove(ctx.freeNests, fi)
+		end
+		return name, map.sites[name]
+	end
+	function ctx.takeSite(kind: string?): (string?, CFrame?)
+		local spot = if kind then MapPlan.sideSpot(string.lower(kind)) else nil
+		if spot and not taken[spot.site] and map.sites[spot.site] then
+			return claim(spot.site)
+		end
+		for pass = 1, 2 do
+			for i = #nestSites, 1, -1 do
+				local n = nestSites[i]
+				if not taken[n] and map.sites[n] and (pass == 2 or not reserved[n]) then
+					return claim(n)
+				end
 			end
 		end
 		return nil, nil
@@ -620,12 +653,12 @@ function ObjectiveService.start(map: any, cfg: any)
 		elseif kind == "RADAR" then
 			c = SideRadar.start(ctx, counts[kind])
 		elseif kind == "JAMMER" then
-			local site, scf = ctx.takeSite()
+			local site, scf = ctx.takeSite("jammer")
 			if site and scf then
 				c = SideJammer.start(ctx, scf, counts[kind])
 			end
 		elseif kind == "FOUNDRY" then
-			local site, scf = ctx.takeSite()
+			local site, scf = ctx.takeSite("foundry")
 			if site and scf then
 				c = SideFoundry.start(ctx, scf, counts[kind])
 			end

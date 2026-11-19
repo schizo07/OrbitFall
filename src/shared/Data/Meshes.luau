@@ -1147,6 +1147,187 @@ local Meshes: { [string]: MeshInfo } = {
 			Hook_4 = Vector3.new(0.0, 2.76, 7.131),
 		},
 	},
+	cog_drone_wreck = {
+		assetId = 119007700989137,
+		size = Vector3.new(33.219, 18.68, 30.759),
+		kind = "setpiece",
+		origin = Vector3.new(-0.009, 2.736, -0.403),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+			Glow = { color = Color3.fromRGB(255, 74, 26), material = Enum.Material.Neon, role = "glow" },
+		},
+		pivots = {
+			Body = Vector3.new(1.078, 1.736, 0.244),
+			Glow = Vector3.new(1.078, 1.736, 0.244),
+		},
+	},
+	desert_boulder_a = {
+		assetId = 133022452637929,
+		size = Vector3.new(10.64, 6.68, 9.12),
+		parts = {
+			desert_boulder_a = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Sandstone, role = "body" },
+		},
+	},
+	desert_boulder_b = {
+		assetId = 95275261737673,
+		size = Vector3.new(7.76, 6.33, 7.4),
+		parts = {
+			desert_boulder_b = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Sandstone, role = "body" },
+		},
+	},
+	desert_butte = {
+		assetId = 109693070492207,
+		size = Vector3.new(12.24, 10.31, 10.65),
+		parts = {
+			desert_butte = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Sandstone, role = "body" },
+		},
+	},
+	desert_cliff = {
+		assetId = 89256683993586,
+		size = Vector3.new(45.96, 22.43, 15.26),
+		parts = {
+			desert_cliff = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Sandstone, role = "body" },
+		},
+	},
+	desert_pebbles = {
+		assetId = 85172789084497,
+		size = Vector3.new(7.97, 3.18, 8.11),
+		parts = {
+			desert_pebbles = { color = Color3.fromRGB(200, 200, 200), material = Enum.Material.Sandstone, role = "body" },
+		},
+	},
+	cog_smokestack = {
+		assetId = 110011112938004,
+		size = Vector3.new(21.939, 60.6, 14.322),
+		kind = "setpiece",
+		origin = Vector3.new(3.809, -0.0, -0.0),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+			Glow = { color = Color3.fromRGB(255, 74, 26), material = Enum.Material.Neon, role = "glow" },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+			Glow = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_tank_a = {
+		assetId = 112111284152049,
+		size = Vector3.new(12.619, 15.404, 10.6),
+		kind = "setpiece",
+		origin = Vector3.new(-1.09, -0.0, -0.0),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_tank_b = {
+		assetId = 76049563964619,
+		size = Vector3.new(12.586, 16.584, 12.973),
+		kind = "setpiece",
+		origin = Vector3.new(-0.0, 0.084, 0.193),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_relay_mast = {
+		assetId = 79149059999614,
+		size = Vector3.new(13.59, 73.0, 12.701),
+		kind = "setpiece",
+		origin = Vector3.new(0.745, -0.0, 1.189),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+			Glow = { color = Color3.fromRGB(255, 74, 26), material = Enum.Material.Neon, role = "glow" },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+			Glow = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_digger = {
+		assetId = 101310745197609,
+		size = Vector3.new(9.6, 12.454, 24.99),
+		kind = "setpiece",
+		origin = Vector3.new(-0.0, 0.06, 6.517),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+			Glow = { color = Color3.fromRGB(255, 74, 26), material = Enum.Material.Neon, role = "glow" },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+			Glow = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_crane = {
+		assetId = 101634825935859,
+		size = Vector3.new(8.5, 27.599, 39.49),
+		kind = "setpiece",
+		origin = Vector3.new(-0.75, -0.0005, 7.645),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+			Glow = { color = Color3.fromRGB(255, 74, 26), material = Enum.Material.Neon, role = "glow" },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+			Glow = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_hauler_wreck = {
+		assetId = 123862271563618,
+		size = Vector3.new(16.745, 12.72, 24.37),
+		kind = "setpiece",
+		origin = Vector3.new(-2.372, -0.0, -0.015),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+			Glow = { color = Color3.fromRGB(255, 74, 26), material = Enum.Material.Neon, role = "glow" },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+			Glow = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_walker_rib = {
+		assetId = 116657423519894,
+		size = Vector3.new(28.4, 29.292, 5.44),
+		kind = "setpiece",
+		origin = Vector3.new(-0.0, 0.6, -0.0),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_walker_rib_half = {
+		assetId = 74235271957490,
+		size = Vector3.new(20.115, 29.292, 5.44),
+		kind = "setpiece",
+		origin = Vector3.new(4.143, 0.6, -0.0),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
+	cog_walker_skull = {
+		assetId = 90238824003087,
+		size = Vector3.new(16.209, 22.317, 20.776),
+		kind = "setpiece",
+		origin = Vector3.new(0.246, 7.6645, -1.288),
+		parts = {
+			Body = { color = Color3.fromRGB(255, 255, 255), material = Enum.Material.Metal, role = "body", textured = true },
+			Glow = { color = Color3.fromRGB(255, 74, 26), material = Enum.Material.Neon, role = "glow" },
+		},
+		pivots = {
+			Body = Vector3.new(0.0, 0.0, 0.0),
+			Glow = Vector3.new(0.0, 0.0, 0.0),
+		},
+	},
 }
 
 return Meshes

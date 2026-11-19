@@ -9065,5 +9065,655 @@
     ],
     "assetId": "116700620560829",
     "kind": "setpiece"
+  },
+  "cog_drone_wreck": {
+    "fbx": "art/fbx/cog_drone_wreck.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      33.219,
+      18.68,
+      30.759
+    ],
+    "bbox_center_roblox": [
+      0.009,
+      6.604,
+      0.403
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          1.078,
+          1.736,
+          0.244
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 9892,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          1.078,
+          1.736,
+          0.244
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 192,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "119007700989137",
+    "kind": "setpiece"
+  },
+  "desert_boulder_a": {
+    "fbx": "art/fbx/desert/desert_boulder_a.fbx",
+    "size_studs_roblox_xyz": [
+      10.64,
+      6.68,
+      9.12
+    ],
+    "weak_spots": [],
+    "triangles_total": 888,
+    "parts": [
+      {
+        "name": "desert_boulder_a",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Sandstone",
+        "role": "body",
+        "triangles": 888
+      }
+    ],
+    "assetId": "133022452637929"
+  },
+  "desert_boulder_b": {
+    "fbx": "art/fbx/desert/desert_boulder_b.fbx",
+    "size_studs_roblox_xyz": [
+      7.76,
+      6.33,
+      7.4
+    ],
+    "weak_spots": [],
+    "triangles_total": 888,
+    "parts": [
+      {
+        "name": "desert_boulder_b",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Sandstone",
+        "role": "body",
+        "triangles": 888
+      }
+    ],
+    "assetId": "95275261737673"
+  },
+  "desert_butte": {
+    "fbx": "art/fbx/desert/desert_butte.fbx",
+    "size_studs_roblox_xyz": [
+      12.24,
+      10.31,
+      10.65
+    ],
+    "weak_spots": [],
+    "triangles_total": 1040,
+    "parts": [
+      {
+        "name": "desert_butte",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Sandstone",
+        "role": "body",
+        "triangles": 1040
+      }
+    ],
+    "assetId": "109693070492207"
+  },
+  "desert_cliff": {
+    "fbx": "art/fbx/desert/desert_cliff.fbx",
+    "size_studs_roblox_xyz": [
+      45.96,
+      22.43,
+      15.26
+    ],
+    "weak_spots": [],
+    "triangles_total": 2332,
+    "parts": [
+      {
+        "name": "desert_cliff",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Sandstone",
+        "role": "body",
+        "triangles": 2332
+      }
+    ],
+    "assetId": "89256683993586"
+  },
+  "desert_pebbles": {
+    "fbx": "art/fbx/desert/desert_pebbles.fbx",
+    "size_studs_roblox_xyz": [
+      7.97,
+      3.18,
+      8.11
+    ],
+    "weak_spots": [],
+    "triangles_total": 576,
+    "parts": [
+      {
+        "name": "desert_pebbles",
+        "rgb": [
+          200,
+          200,
+          200
+        ],
+        "material": "Sandstone",
+        "role": "body",
+        "triangles": 576
+      }
+    ],
+    "assetId": "85172789084497"
+  },
+  "cog_smokestack": {
+    "fbx": "art/fbx/cog_smokestack.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      21.939,
+      60.6,
+      14.322
+    ],
+    "bbox_center_roblox": [
+      -3.809,
+      30.3,
+      0.0
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 7340,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 144,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "Top",
+        "part": "Body",
+        "pos": [
+          0.0,
+          60.5,
+          0.0
+        ]
+      },
+      {
+        "name": "Furnace",
+        "part": "Body",
+        "pos": [
+          -10.5,
+          2.6,
+          -4.2
+        ]
+      }
+    ],
+    "assetId": "110011112938004",
+    "kind": "setpiece"
+  },
+  "cog_tank_a": {
+    "fbx": "art/fbx/cog_tank_a.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      12.619,
+      15.404,
+      10.6
+    ],
+    "bbox_center_roblox": [
+      1.09,
+      7.702,
+      0.0
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1890,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "112111284152049",
+    "kind": "setpiece"
+  },
+  "cog_tank_b": {
+    "fbx": "art/fbx/cog_tank_b.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      12.586,
+      16.584,
+      12.973
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      8.208,
+      -0.193
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1612,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "76049563964619",
+    "kind": "setpiece"
+  },
+  "cog_relay_mast": {
+    "fbx": "art/fbx/cog_relay_mast.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      13.59,
+      73.0,
+      12.701
+    ],
+    "bbox_center_roblox": [
+      -0.745,
+      36.5,
+      -1.189
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 5028,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "79149059999614",
+    "kind": "setpiece"
+  },
+  "cog_digger": {
+    "fbx": "art/fbx/cog_digger.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      9.6,
+      12.454,
+      24.99
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      6.167,
+      -6.517
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 6744,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 80,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "101310745197609",
+    "kind": "setpiece"
+  },
+  "cog_crane": {
+    "fbx": "art/fbx/cog_crane.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      8.5,
+      27.599,
+      39.49
+    ],
+    "bbox_center_roblox": [
+      0.75,
+      13.8,
+      -7.645
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 2260,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "101634825935859",
+    "kind": "setpiece"
+  },
+  "cog_hauler_wreck": {
+    "fbx": "art/fbx/cog_hauler_wreck.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      16.745,
+      12.72,
+      24.37
+    ],
+    "bbox_center_roblox": [
+      2.372,
+      6.36,
+      0.015
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 3930,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 92,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "123862271563618",
+    "kind": "setpiece"
+  },
+  "cog_walker_rib": {
+    "fbx": "art/fbx/cog_walker_rib.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      28.4,
+      29.292,
+      5.44
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      14.046,
+      0.0
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 3352,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "116657423519894",
+    "kind": "setpiece"
+  },
+  "cog_walker_rib_half": {
+    "fbx": "art/fbx/cog_walker_rib_half.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      20.115,
+      29.292,
+      5.44
+    ],
+    "bbox_center_roblox": [
+      -4.143,
+      14.046,
+      0.0
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 2280,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "74235271957490",
+    "kind": "setpiece"
+  },
+  "cog_walker_skull": {
+    "fbx": "art/fbx/cog_walker_skull.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      16.209,
+      22.317,
+      20.776
+    ],
+    "bbox_center_roblox": [
+      -0.246,
+      3.494,
+      1.288
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 3232,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 92,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": "90238824003087",
+    "kind": "setpiece"
   }
 }
