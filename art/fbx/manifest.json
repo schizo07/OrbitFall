@@ -9715,5 +9715,347 @@
     "attachments": [],
     "assetId": "90238824003087",
     "kind": "setpiece"
+  },
+  "desert_crate_small": {
+    "fbx": "art/fbx/desert_crate_small.fbx",
+    "texture": "art/fbx/palette_human.png",
+    "size_studs_roblox_xyz": [
+      2.74,
+      1.685,
+      2.0
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      0.842,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.03
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 604,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
+  },
+  "desert_crate_large": {
+    "fbx": "art/fbx/desert_crate_large.fbx",
+    "texture": "art/fbx/palette_human.png",
+    "size_studs_roblox_xyz": [
+      4.6,
+      2.77,
+      3.03
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.385,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.045
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 956,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.045
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          179,
+          71
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
+  },
+  "desert_barrel": {
+    "fbx": "art/fbx/desert_barrel.fbx",
+    "texture": "art/fbx/palette_human.png",
+    "size_studs_roblox_xyz": [
+      1.774,
+      2.91,
+      1.86
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.455,
+      -0.043
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 544,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
+  },
+  "desert_barrel_tipped": {
+    "fbx": "art/fbx/desert_barrel_tipped.fbx",
+    "texture": "art/fbx/palette_human.png",
+    "size_studs_roblox_xyz": [
+      4.025,
+      1.92,
+      2.499
+    ],
+    "bbox_center_roblox": [
+      -0.003,
+      0.96,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.435,
+          0.04,
+          0.153
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 596,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
+  },
+  "desert_pipe": {
+    "fbx": "art/fbx/desert_pipe.fbx",
+    "texture": "art/fbx/palette_human.png",
+    "size_studs_roblox_xyz": [
+      6.3,
+      2.54,
+      2.158
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.27,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.038
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1292,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
+  },
+  "desert_pylon": {
+    "fbx": "art/fbx/desert_pylon.fbx",
+    "texture": "art/fbx/palette_human.png",
+    "size_studs_roblox_xyz": [
+      4.967,
+      11.4,
+      2.964
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      5.7,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.015,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1560,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          -0.015,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 28,
+        "rgb": [
+          255,
+          179,
+          71
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
+  },
+  "desert_barrier": {
+    "fbx": "art/fbx/desert_barrier.fbx",
+    "texture": "art/fbx/palette_human.png",
+    "size_studs_roblox_xyz": [
+      8.431,
+      3.961,
+      2.012
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.98,
+      0.0
+    ],
+    "palette": "human",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          -0.194
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1076,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
+  },
+  "desert_shrub": {
+    "fbx": "art/fbx/desert_shrub.fbx",
+    "texture": "art/fbx/palette_terrain.png",
+    "size_studs_roblox_xyz": [
+      4.092,
+      2.033,
+      4.138
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      1.016,
+      0.0
+    ],
+    "palette": "terrain",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          -0.06,
+          0.0,
+          0.192
+        ],
+        "material": "Slate",
+        "textured": true,
+        "triangles": 324,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
+  },
+  "desert_stalk": {
+    "fbx": "art/fbx/desert_stalk.fbx",
+    "texture": "art/fbx/palette_terrain.png",
+    "size_studs_roblox_xyz": [
+      4.546,
+      7.597,
+      3.152
+    ],
+    "bbox_center_roblox": [
+      0.005,
+      3.799,
+      0.025
+    ],
+    "palette": "terrain",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.047,
+          0.013,
+          -0.079
+        ],
+        "material": "Slate",
+        "textured": true,
+        "triangles": 762,
+        "rgb": null
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [],
+    "assetId": ""
   }
 }
