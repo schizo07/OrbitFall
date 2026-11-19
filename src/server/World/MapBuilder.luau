@@ -1152,20 +1152,85 @@ local function stoneStack(parent: Instance, x: number, z: number, h: number, dia
 	end
 end
 
--- Part fallback needle: a rounded stone stack
-local function fallbackSpire(parent: Instance, x: number, z: number, s: number, col: Color3?)
-	stoneStack(parent, x, z, 40 * s, 12 * s, col or rockTint(), true)
-	maybeYield()
-end
-
 local OLD_ROCK_KEYS = { "env_rock_a", "env_rock_b", "env_rock_c" }
 -- desert (Dustbowl Ridge): the rounded sandstone kit from art/blender/env_desert.py; tinted per biome like the old rocks
 -- but they keep the rough rock material (KeepMat) so they sit with the dark, gritty ground
 local DESERT_ROCK_KEYS = { "desert_boulder_a", "desert_boulder_b", "desert_boulder_a" }
+local DESERT_SKYLINE_KEYS = { "desert_butte", "desert_boulder_a", "desert_boulder_b", "desert_cliff" }
+local DESERT_FALLBACK_KEYS = { "desert_boulder_a", "desert_boulder_b", "desert_cliff" }
 local ROCK_KEYS = OLD_ROCK_KEYS -- set per biome in MapBuilder.build
+
+local SPIRE_SHADE = 0.6
+-- desert spires are flat-topped sandstone buttes (env_desert.py) instead of pointed crags: about this much bigger than
+-- the crag scale to stand as tall
+local BUTTE_SCALE = 3.4
+
+local function spireShade(c: Color3): Color3
+	return Color3.new(c.R * SPIRE_SHADE, c.G * SPIRE_SHADE, c.B * SPIRE_SHADE)
+end
 
 local function keepMat(p: BasePart)
 	p:SetAttribute("KeepMat", true) -- skip the end-of-build flat SmoothPlastic pass
+end
+
+-- Part fallback needle: a rounded stone stack (desert: a small cluster of desert rock meshes, else rounded boulders)
+local function fallbackSpire(parent: Instance, x: number, z: number, s: number, col: Color3?)
+	if biomeName == "desert" then
+		local baseCol = col or rockTint()
+		local hMain = 36 * s
+		local n = rng:NextInteger(2, 3)
+		local fan = rng:NextNumber(0, TAU)
+		local placed = 0
+		local anySkipped = false
+		local cliffUsed = false
+		for i = 1, n do
+			local k = DESERT_FALLBACK_KEYS[rng:NextInteger(1, #DESERT_FALLBACK_KEYS)]
+			if k == "desert_cliff" then
+				if cliffUsed then
+					k = DESERT_FALLBACK_KEYS[rng:NextInteger(1, 2)]
+				else
+					cliffUsed = true
+				end
+			end
+			local a = fan + (if n > 1 then (i - 1) / (n - 1) * TAU else 0) + rng:NextNumber(-0.45, 0.45)
+			local off = if i == 1 then 0 else rng:NextNumber(0.2, 0.4) * hMain
+			local targetH = hMain * (if i == 1 then rng:NextNumber(0.7, 0.95) else rng:NextNumber(0.4, 0.65))
+			local sz = Assets.size(k)
+			if sz then
+				local m, skipped = placeMesh(parent, k, x + math.cos(a) * off, z + math.sin(a) * off, {
+					scale = targetH / sz.Y,
+					tint = spireShade(jitter(baseCol, 0.06)),
+					material = B.rockMat,
+					paint = keepMat,
+					collide = true,
+					align = 0.35,
+					sink = rng:NextNumber(0.12, 0.2),
+					maxSlope = 55,
+				})
+				if m then
+					placed += 1
+				elseif skipped then
+					anySkipped = true
+				end
+			end
+		end
+		if placed == 0 and not anySkipped then
+			local shade = spireShade(baseCol)
+			for i = 1, n do
+				local a = fan + (if n > 1 then (i - 1) / (n - 1) * TAU else 0) + rng:NextNumber(-0.4, 0.4)
+				local off = if i == 1 then 0 else rng:NextNumber(0.25, 0.45) * hMain
+				local dia = hMain * (if i == 1 then rng:NextNumber(0.65, 0.85) else rng:NextNumber(0.38, 0.58))
+				local bx, bz = x + math.cos(a) * off, z + math.sin(a) * off
+				local low = lowestGround(bx, bz, dia * 0.4)
+				local b = blob(parent, Vector3.one * dia, CFrame.new(bx, low + dia * 0.22, bz), jitter(shade, 0.06), B.rockMat, true)
+				keepMat(b)
+			end
+		end
+		maybeYield()
+		return
+	end
+	stoneStack(parent, x, z, 40 * s, 12 * s, col or rockTint(), true)
+	maybeYield()
 end
 
 local function rock(parent: Instance, x: number, z: number, s: number, collide: boolean?)
@@ -1204,11 +1269,6 @@ local function stoneClump(parent: Instance, x: number, z: number, s: number, tin
 	maybeYield()
 end
 
-local SPIRE_SHADE = 0.6
--- desert spires are flat-topped sandstone buttes (env_desert.py) instead of pointed crags: about this much bigger than
--- the crag scale to stand as tall
-local BUTTE_SCALE = 3.4
-
 -- NOTE: env_spire_a (Blender "hoodoo": stem + flat overhanging caprock) reads as a mushroom silhouette and is no longer
 -- placed anywhere; spires are env_spire_b crags or heaps of big round boulders.
 local function spire(parent: Instance, x: number, z: number, s: number, tint: Color3?, key: string?)
@@ -1223,16 +1283,16 @@ local function spire(parent: Instance, x: number, z: number, s: number, tint: Co
 		return
 	end
 	local k = key or "env_spire_b"
+	local meshScale = s
 	if not key and biomeName == "desert" then
 		k = "desert_butte"
-		s *= BUTTE_SCALE
+		meshScale = s * BUTTE_SCALE
 	end
 	-- the crag's big flat faces wash out to pale peach as SmoothPlastic (sky specular on huge planes, whatever the colour):
 	-- keep the biome's rough rock material (exempt from the flat pass) and tint darker so it sits with the terrain cliffs
-	local t = tint or rockTint()
-	t = Color3.new(t.R * SPIRE_SHADE, t.G * SPIRE_SHADE, t.B * SPIRE_SHADE)
+	local t = spireShade(tint or rockTint())
 	-- spires are tall pointed landmarks that can stand on rim slopes: allow steeper ground (lowest-hit placement keeps them planted)
-	local m, skipped = placeMesh(parent, k, x, z, { scale = s, tint = t, material = B.rockMat, paint = keepMat, collide = true, align = 0.35, sink = rng:NextNumber(0.1, 0.16), maxSlope = 55 })
+	local m, skipped = placeMesh(parent, k, x, z, { scale = meshScale, tint = t, material = B.rockMat, paint = keepMat, collide = true, align = 0.35, sink = rng:NextNumber(0.1, 0.16), maxSlope = 55 })
 	if not m and not skipped then
 		fallbackSpire(parent, x, z, s, tint)
 	end
@@ -2999,6 +3059,79 @@ local function buildLandmarks(parent: Instance, faction: string)
 	end
 end
 
+-- Place a single skyline rock mesh at (x, baseY, z), sunk slightly so its base sits behind the rim cliffs.
+local function placeSkylineMesh(parent: Instance, key: string, x: number, z: number, scale: number, baseY: number, tint: Color3): boolean
+	local m = Assets.get(key, { anchored = true })
+	if not m then
+		return false
+	end
+	m:ScaleTo(scale)
+	local h = (Assets.size(key) or Vector3.new(30, 45, 30)).Y * scale
+	m:PivotTo(CFrame.new(x, baseY - h * rng:NextNumber(0.1, 0.3), z) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0))
+	local col = spireShade(tint)
+	for _, p in m:GetChildren() do
+		if p:IsA("BasePart") then
+			p.Color = col
+			p.Material = B.rockMat
+			keepMat(p)
+			p.CanCollide = false
+			p.CanQuery = false
+			p.CastShadow = false
+			partCount += 1
+		end
+	end
+	m.Parent = parent
+	return true
+end
+
+-- Part fallback for a desert skyline cluster when meshes are unavailable: 2-3 overlapping rounded domes.
+local function desertSkylineBlobs(parent: Instance, x: number, z: number, hMain: number, tint: Color3, baseY: number)
+	local n = rng:NextInteger(2, 3)
+	local fan = rng:NextNumber(0, TAU)
+	for i = 1, n do
+		local a = fan + (if n > 1 then (i - 1) / (n - 1) * TAU else 0) + rng:NextNumber(-0.4, 0.4)
+		local off = if i == 1 then 0 else rng:NextNumber(0.25, 0.45) * hMain
+		local h = hMain * (if i == 1 then rng:NextNumber(0.7, 1.0) else rng:NextNumber(0.4, 0.7))
+		local w = h * rng:NextNumber(1.0, 1.5)
+		local d = h * rng:NextNumber(0.85, 1.3)
+		local cf = CFrame.new(x + math.cos(a) * off, baseY + h * 0.2, z + math.sin(a) * off) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0)
+		local b = blob(parent, Vector3.new(w, h * 1.4, d), cf, spireShade(jitter(tint, 0.06)), B.rockMat, false)
+		keepMat(b)
+		b.CanQuery = false
+		b.CastShadow = false
+	end
+end
+
+-- Desert skyline outcrop: 2-4 varied sandstone rock meshes clustered around (x, z), with a rounded blob fallback.
+local function desertSkylineCluster(parent: Instance, x: number, z: number, hMain: number, tint: Color3, baseY: number)
+	local n = rng:NextInteger(2, 4)
+	local fan = rng:NextNumber(0, TAU)
+	local placed = 0
+	local cliffUsed = false
+	for i = 1, n do
+		local k = DESERT_SKYLINE_KEYS[rng:NextInteger(1, #DESERT_SKYLINE_KEYS)]
+		if k == "desert_cliff" then
+			if cliffUsed then
+				k = DESERT_SKYLINE_KEYS[rng:NextInteger(1, 3)]
+			else
+				cliffUsed = true
+			end
+		end
+		local a = fan + (if n > 1 then (i - 1) / (n - 1) * TAU else 0) + rng:NextNumber(-0.45, 0.45)
+		local off = if i == 1 then 0 else rng:NextNumber(0.28, 0.55) * hMain
+		local targetH = hMain * (if i == 1 then rng:NextNumber(0.65, 0.95) else rng:NextNumber(0.35, 0.7))
+		local sz = Assets.size(k)
+		local pieceScale = targetH / (if sz then sz.Y else 10)
+		if placeSkylineMesh(parent, k, x + math.cos(a) * off, z + math.sin(a) * off, pieceScale, baseY, jitter(tint, 0.06)) then
+			placed += 1
+		end
+	end
+	if placed == 0 then
+		desertSkylineBlobs(parent, x, z, hMain, tint, baseY)
+	end
+	maybeYield()
+end
+
 -- giant spires beyond the boundary, standing behind the cliffs: pure silhouette
 local function farMountains(parent: Instance)
 	-- two rings: tall spires (mesh) and broad low massifs between them, at different distances and heights, so the
@@ -3015,29 +3148,20 @@ local function farMountains(parent: Instance)
 			s *= BUTTE_SCALE * 0.6 -- flat-topped buttes have far more mass than the pointed crags: smaller on the skyline
 		end
 		local tint = rockTint()
-		local m = if i % 2 == 0 then nil else Assets.get(key, { anchored = true }) -- every other slot: a round stone clump instead
-		if i % 2 == 0 then
-			stoneClump(parent, x, z, s * 0.55, tint, 38 + rng:NextNumber(0, 14), false)
+		if i % 2 == 0 then -- every other slot: a sandstone cluster (desert) or round stone clump (other biomes)
+			if biomeName == "desert" then
+				desertSkylineCluster(parent, x, z, 10 * s, tint, 38 + rng:NextNumber(0, 14))
+			else
+				stoneClump(parent, x, z, s * 0.55, tint, 38 + rng:NextNumber(0, 14), false)
+			end
 			continue
 		end
-		if m then
-			m:ScaleTo(s)
-			local h = (Assets.size(key) or Vector3.new(30, 45, 30)).Y * s
-			m:PivotTo(CFrame.new(x, 52 - h * rng:NextNumber(0.1, 0.3), z) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0))
-			for _, p in m:GetChildren() do
-				if p:IsA("BasePart") then
-					p.Color = Color3.new(tint.R * SPIRE_SHADE, tint.G * SPIRE_SHADE, tint.B * SPIRE_SHADE)
-					p.Material = B.rockMat
-					keepMat(p)
-					p.CanCollide = false
-					p.CanQuery = false
-					p.CastShadow = false
-					partCount += 1
-				end
+		if not placeSkylineMesh(parent, key, x, z, s, 52, tint) then
+			if biomeName == "desert" then
+				desertSkylineCluster(parent, x, z, 10 * s, tint, 42)
+			else
+				stoneStack(parent, x, z, 60 * s, 14 * s, tint, false, 42)
 			end
-			m.Parent = parent
-		else
-			stoneStack(parent, x, z, 60 * s, 14 * s, tint, false, 42)
 		end
 		maybeYield()
 	end
