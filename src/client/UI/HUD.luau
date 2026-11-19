@@ -341,7 +341,7 @@ local function buildCrosshair()
 	tierPill.Position = UDim2.fromOffset(0, 22)
 	tierPill.Size = UDim2.fromOffset(0, tierH)
 	tierPill.AutomaticSize = Enum.AutomaticSize.X
-	tierPill.BackgroundColor3 = Style.Bg
+	tierPill.BackgroundColor3 = Style.Black
 	tierPill.BackgroundTransparency = 1
 	tierPill.BorderSizePixel = 0
 	tierPill.Parent = cross
