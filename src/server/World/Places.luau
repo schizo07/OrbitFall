@@ -665,7 +665,11 @@ local function buildDrone(root: Instance, crashP: Vector3, spillP: Vector3, refP
 				pipe(g, Vector3.new(x, y + 0.5, z) - d, Vector3.new(x, y + 0.5, z) + d, 0.6, STEEL_D, false)
 			else
 				local w = rnd:NextNumber(1.4, 2.2)
-				ball(g, Vector3.new(w, w, w), CFrame.new(x, y + w * 0.4, z), STEEL_L, false)
+				if biomeName == "desert" then
+					part(g, Vector3.new(w * 1.4, 0.35, w), CFrame.new(x, lowAt(x, z, w * 0.5) + 0.15, z) * CFrame.Angles(math.rad(rnd:NextNumber(-14, 14)), rnd:NextNumber(0, TAU), math.rad(rnd:NextNumber(-14, 14))), STEEL_L, false)
+				else
+					ball(g, Vector3.new(w, w, w), CFrame.new(x, y + w * 0.4, z), STEEL_L, false)
+				end
 			end
 		end
 	end
@@ -1162,7 +1166,11 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 	for _, d in { { 28, -8 }, { 16, 14 }, { -8, 16 }, { -24, -12 }, { 4, -16 }, { 36, 9 } } do
 		local p = onG(d[1], d[2])
 		local w = rnd:NextNumber(10, 15)
-		ball(g, Vector3.new(w, w * 0.28, w * 0.7), CFrame.new(p + Vector3.new(0, w * 0.04, 0)) * CFrame.Angles(0, rnd:NextNumber(0, PI), 0), jit(look.sand, 0.06), false)
+		if biomeName == "desert" then
+			Workspace.Terrain:FillBall(Vector3.new(p.X, lowAt(p.X, p.Z, 2) - w * 0.22, p.Z), w * 0.45, Enum.Material.Sand)
+		else
+			ball(g, Vector3.new(w, w * 0.28, w * 0.7), CFrame.new(p + Vector3.new(0, w * 0.04, 0)) * CFrame.Angles(0, rnd:NextNumber(0, PI), 0), jit(look.sand, 0.06), false)
+		end
 	end
 end
 

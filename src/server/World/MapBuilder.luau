@@ -1312,8 +1312,12 @@ local function fallbackRock(parent: Instance, x: number, z: number, s: number)
 	local col = rockTint()
 	local low = lowestGround(x, z, w * 0.4)
 	local a = rng:NextNumber(0, TAU)
-	blob(parent, Vector3.one * w, CFrame.new(x, low + w * 0.18, z), col, B.rockMat, true) -- sunk: the centre sits under the crest
-	blob(parent, Vector3.one * w * 0.62, CFrame.new(x + math.cos(a) * w * 0.5, low + w * 0.05, z + math.sin(a) * w * 0.5), jitter(col, 0.06), B.rockMat, true)
+	local b1 = blob(parent, Vector3.one * w, CFrame.new(x, low + w * (if biomeName == "desert" then 0.12 else 0.18), z), col, B.rockMat, true) -- sunk: the centre sits under the crest
+	local b2 = blob(parent, Vector3.one * w * 0.62, CFrame.new(x + math.cos(a) * w * 0.5, low + w * (if biomeName == "desert" then 0.0 else 0.05), z + math.sin(a) * w * 0.5), jitter(col, 0.06), B.rockMat, true)
+	if biomeName == "desert" then
+		b1:SetAttribute("KeepMat", true)
+		b2:SetAttribute("KeepMat", true)
+	end
 	maybeYield()
 end
 
@@ -1504,6 +1508,8 @@ local function crystals(parent: Instance, x: number, z: number, s: number, color
 					lit = false
 					pointLight(p, c, 10, 0.8)
 				end
+			elseif dull then
+				keepMat(p)
 			end
 		end,
 	})
@@ -1540,6 +1546,24 @@ local function crateStack(parent: Instance, x: number, z: number, yaw: number)
 end
 
 local function pebble(parent: Instance, x: number, z: number)
+	if biomeName == "desert" then
+		placeMesh(parent, DESERT_ROCK_KEYS[rng:NextInteger(1, #DESERT_ROCK_KEYS)], x, z, {
+			scale = rng:NextNumber(0.16, 0.32),
+			tint = rockTint(),
+			material = B.rockMat,
+			collide = false,
+			sink = rng:NextNumber(0.32, 0.44),
+			align = 0.9,
+			maxSlope = 35,
+			paint = function(p)
+				keepMat(p)
+				p.CanQuery = false
+				p.CanTouch = false
+				p.CastShadow = false
+			end,
+		})
+		return
+	end
 	local m, skipped = placeMesh(parent, ROCK_KEYS[rng:NextInteger(1, 3)], x, z, { scale = rng:NextNumber(0.1, 0.3), tint = rockTint(), material = B.rockMat, collide = false, sink = 0.25, align = 0.9 })
 	if not m and not skipped then
 		local d = rng:NextNumber(0.8, 2)
@@ -1748,10 +1772,37 @@ local function rockSkirt(parent: Instance, centre: Vector3, rIn: number, rOut: n
 		local x, z = centre.X + math.cos(a) * rm, centre.Z + math.sin(a) * rm
 		local gy = math.min(groundY(x, z), centre.Y)
 		local hh = h * rng:NextNumber(0.7, 1.15)
+		if biomeName == "desert" then
+			local k = DESERT_ROCK_KEYS[rng:NextInteger(1, #DESERT_ROCK_KEYS)]
+			local sz = Assets.size(k)
+			local m, skipped = placeMesh(parent, k, x, z, {
+				scale = (hh * 1.2) / (if sz then sz.Y else 6.5),
+				tint = jitter(col, 0.08),
+				material = mat or B.rockMat,
+				collide = false,
+				align = 0.25,
+				sink = rng:NextNumber(0.18, 0.28),
+				y = gy,
+				maxSlope = 80,
+				paint = function(p)
+					keepMat(p)
+					p.CanQuery = false
+					p.CanTouch = false
+					p.CastShadow = true
+				end,
+			})
+			if m or skipped then
+				continue
+			end
+		end
 		local wid = TAU * rm / n * rng:NextNumber(1.15, 1.45)
 		local p = Vector3.new(x, gy + hh * 0.2, z) -- crest at gy + hh, the rest sunk
 		local cf = CFrame.lookAt(p, Vector3.new(centre.X, p.Y, centre.Z))
-		blob(parent, Vector3.new(wid, hh * 1.6, len * rng:NextNumber(1.0, 1.2)), cf, jitter(col, 0.1), mat or B.rockMat, false).CastShadow = true
+		local b = blob(parent, Vector3.new(wid, hh * 1.6, len * rng:NextNumber(1.0, 1.2)), cf, jitter(col, 0.1), mat or B.rockMat, false)
+		b.CastShadow = true
+		if biomeName == "desert" then
+			keepMat(b)
+		end
 	end
 	maybeYield()
 end
@@ -2342,12 +2393,33 @@ local function rubbleField(parent: Instance)
 	local folder = Instance.new("Folder")
 	folder.Name = "Rubble"
 	folder.Parent = parent
-	local keys = if biomeName == "desert" then { "desert_pebbles", "desert_boulder_b" } else { "env_rock_c", "env_rock_a" }
+	local isDesert = biomeName == "desert"
+	local keys = { "env_rock_c", "env_rock_a" }
 	local function darkTint(): Color3
 		local c = rockTint()
 		return Color3.new(c.R * 0.7, c.G * 0.7, c.B * 0.7)
 	end
 	local function chunk(x: number, z: number)
+		if isDesert then
+			local s = rng:NextNumber(0.18, 0.38)
+			local key = DESERT_ROCK_KEYS[rng:NextInteger(1, #DESERT_ROCK_KEYS)]
+			placeMesh(folder, key, x, z, {
+				scale = s,
+				tint = rockTint(),
+				material = B.rockMat,
+				collide = false,
+				sink = rng:NextNumber(0.3, 0.42),
+				align = 0.85,
+				maxSlope = 35,
+				paint = function(p)
+					keepMat(p)
+					p.CanQuery = false
+					p.CanTouch = false
+					p.CastShadow = s > 0.32
+				end,
+			})
+			return
+		end
 		local g = groundY(x, z)
 		local tilt = CFrame.Angles(math.rad(rng:NextNumber(-22, 22)), rng:NextNumber(0, TAU), math.rad(rng:NextNumber(-22, 22)))
 		if rng:NextNumber() < 0.55 then
@@ -2396,7 +2468,8 @@ local function rubbleField(parent: Instance)
 			x, z = randomSpot(30, 24)
 		end
 		if math.abs(x) < 262 and math.abs(z) < 262 and farFromSites(x, z, 28) and not inLane(x, z, 9) and rng:NextNumber() < areaWeight(x, z, "rubble") then
-			for _ = 1, rng:NextInteger(2, 4) do
+			local n = if isDesert then rng:NextInteger(1, 3) else rng:NextInteger(2, 4)
+			for _ = 1, n do
 				local a, d = rng:NextNumber(0, TAU), rng:NextNumber(0.4, 3.6)
 				chunk(x + math.cos(a) * d, z + math.sin(a) * d)
 				maybeYield()
@@ -2573,6 +2646,24 @@ local function siteRubble(parent: Instance, c: Vector2, rIn: number, rOut: numbe
 			for k = 1, rng:NextInteger(2, 3) do
 				local ca, cd = rng:NextNumber(0, TAU), if k == 1 then 0 else rng:NextNumber(0.8, 2.6)
 				local cx, cz = x + math.cos(ca) * cd, z + math.sin(ca) * cd
+				if biomeName == "desert" then
+					placeMesh(parent, DESERT_ROCK_KEYS[rng:NextInteger(1, #DESERT_ROCK_KEYS)], cx, cz, {
+						scale = rng:NextNumber(0.16, 0.36),
+						tint = rockTint(),
+						material = B.rockMat,
+						collide = false,
+						sink = rng:NextNumber(0.32, 0.44),
+						align = 0.85,
+						maxSlope = 35,
+						paint = function(p)
+							keepMat(p)
+							p.CanQuery = false
+							p.CanTouch = false
+							p.CastShadow = false
+						end,
+					})
+					continue
+				end
 				local col = rockTint()
 				col = Color3.new(col.R * 0.68, col.G * 0.68, col.B * 0.68)
 				local m, skipped = placeMesh(parent, ROCK_KEYS[rng:NextInteger(1, 3)], cx, cz, { scale = rng:NextNumber(0.14, 0.42), tint = col, material = B.rockMat, collide = false, sink = 0.35, align = 0.85 })
@@ -2731,9 +2822,11 @@ local function dressCog(parent: Instance)
 			g.CastShadow = false
 		else
 			part(parent, Vector3.new(1, 1, rng:NextNumber(4, 8)), CFrame.new(p) * CFrame.Angles(0, math.rad(rng:NextNumber(0, 180)), math.rad(rng:NextNumber(-20, 20))), steel, Enum.Material.Metal, { CanCollide = false })
-			-- torn chunk: a rounded lump half sunk (not a cube)
-			local w = blob(parent, Vector3.new(2.4, 1.8, 2.6), CFrame.new(p + Vector3.new(rng:NextNumber(-3, 3), 0.3, rng:NextNumber(-3, 3))) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0), rust, Enum.Material.CorrodedMetal, false)
-			w.CanQuery = false
+			if biomeName ~= "desert" then
+				-- torn chunk: a rounded lump half sunk (not a cube)
+				local w = blob(parent, Vector3.new(2.4, 1.8, 2.6), CFrame.new(p + Vector3.new(rng:NextNumber(-3, 3), 0.3, rng:NextNumber(-3, 3))) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0), rust, Enum.Material.CorrodedMetal, false)
+				w.CanQuery = false
+			end
 		end
 		maybeYield()
 	end
@@ -3197,15 +3290,22 @@ local function mesaArch(parent: Instance, x: number, z: number, yaw: number)
 		blk.CanCollide = true
 		-- rounded cap on the outer face: a lumpy ellipsoid per block, so the top of the span is a bumpy crest instead of a
 		-- smooth ring of boxes
-		blob(parent, Vector3.new(bw * rng:NextNumber(0.75, 0.95), thick * rng:NextNumber(0.7, 1.0), bd * rng:NextNumber(0.7, 0.95)),
+		local cap = blob(parent, Vector3.new(bw * rng:NextNumber(0.75, 0.95), thick * rng:NextNumber(0.7, 1.0), bd * rng:NextNumber(0.7, 0.95)),
 			cf * jit * CFrame.new(rng:NextNumber(-1.5, 1.5), thick * 0.3, rng:NextNumber(-2, 2)) * CFrame.Angles(0, rng:NextNumber(-0.2, 0.2), 0), jitter(col, 0.06), B.rockMat, false)
+		if biomeName == "desert" then
+			keepMat(blk)
+			keepMat(cap)
+		end
 	end
 	-- footings reach down to the actual ground, plus loose spires around them
 	for i, sx in { -1, 1 } do
 		local fg = feet[i]
 		local top = fg.Y + 6
 		local bottom = math.min(fg.Y, baseY) - 22
-		part(parent, Vector3.new(34, top - bottom, 40), CFrame.new(fg.X, (top + bottom) / 2, fg.Z) * rot, jitter(tint, 0.05), B.rockMat)
+		local foot = part(parent, Vector3.new(34, top - bottom, 40), CFrame.new(fg.X, (top + bottom) / 2, fg.Z) * rot, jitter(tint, 0.05), B.rockMat)
+		if biomeName == "desert" then
+			keepMat(foot)
+		end
 		for k = 1, 2 do
 			local sp = fg + (rot * Vector3.new(sx * rng:NextNumber(14, 26), 0, (k * 2 - 3) * rng:NextNumber(12, 20)))
 			spire(parent, sp.X, sp.Z, rng:NextNumber(0.9, 1.4), tint)
@@ -3440,7 +3540,11 @@ local function farMountains(parent: Instance)
 			local pd = depth * rng:NextNumber(0.5, 0.95)
 			local at = centre + span * Vector3.new(f * w, 0, rng:NextNumber(-0.3, 0.3) * depth)
 			local cf = CFrame.new(at.X, 0, at.Z) * span * CFrame.Angles(0, rng:NextNumber(-0.5, 0.5), 0) -- the dome's crest is at y = top
-			blob(parent, Vector3.new(pw, top * 2, pd), cf, jitter(tint, 0.1), B.rockMat, false).CastShadow = false
+			local b = blob(parent, Vector3.new(pw, top * 2, pd), cf, jitter(tint, 0.1), B.rockMat, false)
+			b.CastShadow = false
+			if biomeName == "desert" then
+				keepMat(b)
+			end
 		end
 		maybeYield()
 	end
