@@ -29,6 +29,10 @@ function InfoLayer.style(): string?
 	return s and s.id
 end
 
+function InfoLayer.preset(): string
+	return HudLayout.preset()
+end
+
 function InfoLayer.entry(name: string, touch: boolean): { [string]: any }
 	return HudLayout.get(name, touch)
 end
@@ -123,7 +127,7 @@ function InfoLayer.root(): Frame
 	if root and root.Parent and gui and gui.Parent then
 		return root
 	end
-	local g = Theme.gui("OrbitInfo", { DisplayOrder = 10, Insets = "CoreUISafeInsets" })
+	local g = Theme.gui("OrbitInfo", { DisplayOrder = 11, Insets = "CoreUISafeInsets" })
 	gui = g
 	local r = Theme.root(g, "hud")
 	r.Name = "Info"

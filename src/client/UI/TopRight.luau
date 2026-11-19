@@ -36,6 +36,7 @@ local DEFS = {
 
 local function buildNew(touch: boolean)
 	nu = {}
+	local preset = InfoLayer.preset()
 	local T = InfoLayer.entry("timer", touch)
 	local R = InfoLayer.entry("reinforce", touch)
 	-- one right-aligned row at the timer's spot: [v 3] gap [12:41]; the reinforce part hides when it has nothing to say
@@ -45,8 +46,15 @@ local function buildNew(touch: boolean)
 	holder.Size = UDim2.fromOffset(0, h)
 	holder.AutomaticSize = Enum.AutomaticSize.X
 	holder.Visible = false
-	Theme.list(holder, Enum.FillDirection.Horizontal, R.Gap or 17, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+	Theme.list(holder, Enum.FillDirection.Horizontal, R.Gap or 14, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
 	nu.holder = holder
+	if preset == "bold" then
+		Theme.pad(holder, 12, 0, 12, 0)
+		local folder = Instance.new("Folder")
+		folder.Name = "BackingHost"
+		folder.Parent = holder
+		HudSkin.panel("banner", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = folder })
+	end
 	local lives = Instance.new("Frame")
 	lives.Name = "Reinforce"
 	lives.BackgroundTransparency = 1
@@ -55,12 +63,19 @@ local function buildNew(touch: boolean)
 	lives.LayoutOrder = 1
 	lives.Visible = false
 	lives.Parent = holder
-	Theme.list(lives, Enum.FillDirection.Horizontal, 4, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
-	local rs: number = R.TextSize or 17
+	if T.Chip then
+		Theme.pad(lives, 10, 0, 10, 0)
+		local folder = Instance.new("Folder")
+		folder.Name = "BackingHost"
+		folder.Parent = lives
+		HudSkin.panel("chip", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = folder })
+	end
+	Theme.list(lives, Enum.FillDirection.Horizontal, 5, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+	local rs: number = R.TextSize or 22
 	nu.livesIcon = Style.glyph("down", {
-		Size = math.floor(rs * 0.6),
+		Size = math.floor(rs * 0.58),
 		Color = InfoLayer.col("own"),
-		Box = UDim2.fromOffset(math.floor(rs * 0.7), h),
+		Box = UDim2.fromOffset(math.floor(rs * 0.72), h),
 		LayoutOrder = 1,
 		Parent = lives,
 	})
@@ -76,17 +91,42 @@ local function buildNew(touch: boolean)
 		Parent = lives,
 	})
 	nu.livesRow = lives
+
+	local timerWrap: Frame = holder
+	if T.Chip then
+		local tc = Instance.new("Frame")
+		tc.Name = "TimerChip"
+		tc.BackgroundTransparency = 1
+		tc.Size = UDim2.fromOffset(0, h)
+		tc.AutomaticSize = Enum.AutomaticSize.X
+		tc.LayoutOrder = 2
+		tc.Parent = holder
+		Theme.pad(tc, 12, 0, 12, 0)
+		local folder = Instance.new("Folder")
+		folder.Name = "BackingHost"
+		folder.Parent = tc
+		HudSkin.panel("chip", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = folder })
+		Theme.list(tc, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+		Style.glyph("diamondHollow", {
+			Size = math.max(8, math.floor((T.TextSize or 22) * 0.4)),
+			Color = InfoLayer.col("dim"),
+			Box = UDim2.fromOffset(14, h),
+			LayoutOrder = 1,
+			Parent = tc,
+		})
+		timerWrap = tc
+	end
 	nu.timer = InfoLayer.label({
 		Text = "00:00",
 		Role = "number",
-		TextSize = T.TextSize or 20,
+		TextSize = T.TextSize or 24,
 		ColorRole = "text",
 		Shadow = true,
 		XAlign = Enum.TextXAlignment.Right,
 		Size = UDim2.fromOffset(0, h),
 		AutomaticSize = Enum.AutomaticSize.X,
 		LayoutOrder = 2,
-		Parent = holder,
+		Parent = timerWrap,
 	})
 end
 

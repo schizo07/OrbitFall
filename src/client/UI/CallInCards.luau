@@ -144,7 +144,7 @@ local function makeCardNew(userId: number, def: any): any
 	f.Parent = holder
 	InfoLayer.backing(f)
 	Style.rect({ Color = cs.color, Size = UDim2.new(0, 2, 1, 0), Parent = f })
-	local ts = math.max(12, math.floor(H * 0.42))
+	local ts = math.max(16, math.floor(H * 0.44))
 	InfoLayer.label({
 		Text = cs.tag,
 		Role = "number",
@@ -161,17 +161,17 @@ local function makeCardNew(userId: number, def: any): any
 		TextSize = ts,
 		ColorRole = "text",
 		Position = UDim2.fromOffset(x, 1),
-		Size = UDim2.new(1, -x - 78, 0.6, 0),
+		Size = UDim2.new(1, -x - 106, 0.6, 0),
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = f,
 	})
 	local stage = InfoLayer.label({
 		Text = "",
-		TextSize = math.max(11, ts - 2),
+		TextSize = math.max(14, ts - 2),
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -6, 0, 1),
-		Size = UDim2.new(0, 76, 0.6, 0),
+		Size = UDim2.new(0, 100, 0.6, 0),
 		Parent = f,
 	})
 	local arrows = Instance.new("Frame")

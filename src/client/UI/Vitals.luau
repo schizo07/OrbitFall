@@ -29,6 +29,7 @@ local pipsShown = ""
 function Vitals.build(parent: Instance, touch: boolean): Frame
 	table.clear(ui)
 	hpFrac, ghostFrac, ghostHold, flash, pipsShown = 1, 1, 0, 0, ""
+	local preset = HudLayout.preset()
 	local lay = HudLayout.get("health", touch)
 	local holder = Instance.new("Frame")
 	holder.Name = "Vitals"
@@ -36,6 +37,7 @@ function Vitals.build(parent: Instance, touch: boolean): Frame
 	HudLayout.apply(holder, "health", touch)
 	holder.Parent = parent
 	ui.holder = holder
+	ui.showChip = lay.ShowChip == true
 
 	ui.bar = HudSkin.bar({
 		Name = "Health",
@@ -46,18 +48,28 @@ function Vitals.build(parent: Instance, touch: boolean): Frame
 		Ticks = if touch then 20 else 36,
 		Parent = holder,
 	})
+	if preset == "bold" or preset == "frame" then
+		ui.bar.track(Color3.new(0, 0, 0), if preset == "frame" then 0.15 else 0.25)
+	end
 	ui.bar.set(1)
 	ui.bar.ghost(1)
 
-	-- stim pips: a row of plus glyphs right of the bar (filled = available)
+	-- stim pips (or compact [icon + number] chip in Clean preset) right of the bar
 	local pips = Instance.new("Frame")
 	pips.Name = "Stims"
 	pips.BackgroundTransparency = 1
 	pips.AnchorPoint = Vector2.new(0, 0.5)
 	pips.Position = UDim2.new(0, lay.PipsX, 0.5, 0)
-	pips.Size = UDim2.fromOffset(0, lay.PipSize)
+	pips.Size = UDim2.fromOffset(0, math.max(lay.PipSize, if ui.showChip then 28 else 0))
 	pips.AutomaticSize = Enum.AutomaticSize.X
 	pips.Parent = holder
+	if ui.showChip then
+		Theme.pad(pips, 8, 0, 8, 0)
+		local folder = Instance.new("Folder")
+		folder.Name = "BackingHost"
+		folder.Parent = pips
+		HudSkin.panel("chip", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = folder })
+	end
 	local list = Instance.new("UIListLayout")
 	list.FillDirection = Enum.FillDirection.Horizontal
 	list.Padding = UDim.new(0, lay.PipGap)
@@ -82,6 +94,28 @@ local function drawPips(n: number, max: number)
 	end
 	local skin = HudSkin.current()
 	local heal = HudSkin.color("heal")
+	if ui.showChip then
+		local have = n > 0
+		local col = if have then heal else HudSkin.color("dim")
+		Style.glyph("plus", {
+			Size = math.max(10, math.floor(ui.pipSize * 0.65)),
+			Color = col,
+			Box = UDim2.fromOffset(ui.pipSize, ui.pipSize + 4),
+			LayoutOrder = 1,
+			Parent = ui.pips,
+		})
+		HudSkin.label({
+			Text = tostring(n),
+			Role = "number",
+			TextSize = ui.pipSize,
+			Color = col,
+			Size = UDim2.fromOffset(0, ui.pipSize + 4),
+			AutomaticSize = Enum.AutomaticSize.X,
+			LayoutOrder = 2,
+			Parent = ui.pips,
+		})
+		return
+	end
 	for i = 1, max do
 		local have = i <= n
 		local g = Style.glyph("plus", {

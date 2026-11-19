@@ -153,7 +153,7 @@ local function buildNew()
 		ex.Name = "Expanded"
 		ex.BackgroundTransparency = 1
 		ex.AnchorPoint = Vector2.new(0, 1)
-		ex.Position = UDim2.fromOffset(0, -8)
+		ex.Position = UDim2.fromOffset(0, if E.Docked then -20 else -8)
 		ex.Size = UDim2.fromOffset(E.ExpandedWidth, 0)
 		ex.AutomaticSize = Enum.AutomaticSize.Y
 		ex.Visible = false
@@ -178,22 +178,35 @@ local function makeIcon(def: any, order: number, reinforce: boolean, slotIndex: 
 	box.ClipsDescendants = false
 	box.Parent = nu.strip
 	local st = InfoLayer.style()
+	local preset = InfoLayer.preset()
 	local stroke = Instance.new("UIStroke")
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Color = color
-	stroke.Thickness = 1
-	stroke.Transparency = 0.35
+	stroke.Thickness = if preset == "frame" then 2 elseif preset == "bold" then 1.5 else 1
+	stroke.Transparency = if preset == "frame" then 0.15 elseif preset == "bold" then 0.2 else 0.35
 	stroke.Parent = box
-	if st == "glass" then
-		box.BackgroundColor3 = color
-		box.BackgroundTransparency = 0.7
+	if preset == "frame" then
+		box.BackgroundColor3 = Color3.fromHex("0B111A")
+		box.BackgroundTransparency = 0.2
+	elseif preset == "bold" then
+		box.BackgroundColor3 = Color3.new(0, 0, 0)
+		box.BackgroundTransparency = 0.45
+	end
+	if st == "glass" or preset == "clean" then
+		if preset == "clean" and st ~= "glass" then
+			box.BackgroundColor3 = Color3.fromHex("0B111A")
+			box.BackgroundTransparency = 0.25
+		else
+			box.BackgroundColor3 = color
+			box.BackgroundTransparency = 0.7
+			stroke.Color = Color3.new(1, 1, 1)
+			stroke.Transparency = 0.75
+		end
 		local c = Instance.new("UICorner")
 		c.CornerRadius = UDim.new(0.5, 0)
 		c.Parent = box
-		stroke.Color = Color3.new(1, 1, 1)
-		stroke.Transparency = 0.82
-	elseif st == "visor" then
-		stroke.Transparency = 0.5
+	elseif st == "visor" and preset ~= "frame" then
+		stroke.Transparency = 0.4
 	end
 	-- cooldown wipe: a dark fill from the bottom that drains as the cooldown runs out
 	local wipe = Instance.new("Frame")
@@ -206,13 +219,13 @@ local function makeIcon(def: any, order: number, reinforce: boolean, slotIndex: 
 	wipe.Size = UDim2.fromScale(1, 0)
 	wipe.ZIndex = 2
 	wipe.Parent = box
-	if st == "glass" then
+	if st == "glass" or preset == "clean" then
 		local c = Instance.new("UICorner")
 		c.CornerRadius = UDim.new(0.5, 0)
 		c.Parent = wipe
 	end
 	local glyph = Style.glyph(if def then Style.callinShape(def) else "dot", {
-		Size = math.floor(size * 0.42),
+		Size = math.floor(size * 0.44),
 		Color = if st == "glass" then Color3.new(1, 1, 1) else color,
 		Box = UDim2.fromScale(1, 1),
 		ZIndex = 3,
@@ -222,7 +235,7 @@ local function makeIcon(def: any, order: number, reinforce: boolean, slotIndex: 
 	local secs = InfoLayer.label({
 		Text = "",
 		Role = "number",
-		TextSize = math.max(11, math.floor(size * 0.36)),
+		TextSize = math.max(15, math.floor(size * 0.42)),
 		ColorRole = "text",
 		XAlign = Enum.TextXAlignment.Center,
 		Size = UDim2.fromScale(1, 1),
@@ -232,12 +245,12 @@ local function makeIcon(def: any, order: number, reinforce: boolean, slotIndex: 
 	local badge = InfoLayer.label({
 		Text = "",
 		Role = "number",
-		TextSize = math.max(11, math.floor(size * 0.3)),
+		TextSize = math.max(14, math.floor(size * 0.35)),
 		Color = color,
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 3, 0, -4),
-		Size = UDim2.fromOffset(size, math.floor(size * 0.34)),
+		Position = UDim2.new(1, 4, 0, -5),
+		Size = UDim2.fromOffset(size, math.floor(size * 0.4)),
 		ZIndex = 5,
 		Parent = box,
 	})

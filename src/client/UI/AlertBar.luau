@@ -41,13 +41,17 @@ function AlertBar.init()
 	built = true
 	touch = Theme.isTouch()
 	local skin = HudSkin.current()
-	local gui = Theme.gui("OrbitAlert", { DisplayOrder = 11, Insets = "CoreUISafeInsets" })
+	local preset = HudLayout.preset()
+	local gui = Theme.gui("OrbitAlert", { DisplayOrder = 12, Insets = "CoreUISafeInsets" })
 	ui.gui = gui
 	local root = Theme.root(gui, "hud")
 	-- new layout: one scale (no 0.8 content frame on phones), place and size from UI/HudLayout
 	local content = if skin then root else Style.content(root, touch)
 	local lay = if skin then HudLayout.get("alert", touch) else nil
 	local barH = if lay then lay.BarHeight else 24
+	local textSize = if lay then lay.TextSize else Style.ALERT
+	local subSize = if lay then (lay.SubSize or lay.TextSize - 3) else Style.TEXT
+	local calloutH = if lay then (lay.CalloutHeight or 28) else 20
 
 	local stack = Instance.new("Frame")
 	stack.Name = "AlertStack"
@@ -83,8 +87,37 @@ function AlertBar.init()
 		Parent = stack,
 	})
 	if skin then
-		-- hairline: the red band fades out at both ends; glass: a rounded pill; visor: a thin danger outline on a faint fill
-		if skin.id == "hairline" then
+		if preset == "bold" then
+			ui.barAlpha = 0.08
+			if skin.id == "hairline" then
+				local g = Instance.new("UIGradient")
+				g.Transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 0.45),
+					NumberSequenceKeypoint.new(0.12, 0),
+					NumberSequenceKeypoint.new(0.88, 0),
+					NumberSequenceKeypoint.new(1, 0.45),
+				})
+				g.Parent = bar
+			elseif skin.id == "glass" then
+				local cr = Instance.new("UICorner")
+				cr.CornerRadius = UDim.new(0.5, 0)
+				cr.Parent = bar
+			end
+			local st = Instance.new("UIStroke")
+			st.Color = Color3.new(1, 1, 1)
+			st.Transparency = 0.5
+			st.Thickness = 2
+			st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			st.Parent = bar
+		elseif preset == "frame" then
+			ui.barAlpha = 0.05
+			local st = Instance.new("UIStroke")
+			st.Color = Color3.new(1, 1, 1)
+			st.Transparency = 0.35
+			st.Thickness = 2
+			st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			st.Parent = bar
+		elseif skin.id == "hairline" then
 			local g = Instance.new("UIGradient")
 			g.Transparency = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 1),
@@ -97,14 +130,20 @@ function AlertBar.init()
 			local cr = Instance.new("UICorner")
 			cr.CornerRadius = UDim.new(0.5, 0)
 			cr.Parent = bar
-			ui.barAlpha = 0.25
+			ui.barAlpha = 0.18
 		else
-			ui.barAlpha = 0.8
+			ui.barAlpha = 0.6
 			local st = Instance.new("UIStroke")
 			st.Color = skin.colors.danger
-			st.Thickness = 1
+			st.Thickness = 1.5
 			st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 			st.Parent = bar
+		end
+		if preset == "clean" and skin.id ~= "glass" then
+			local cr = Instance.new("UICorner")
+			cr.CornerRadius = UDim.new(0.5, 0)
+			cr.Parent = bar
+			ui.barAlpha = 0.12
 		end
 		bar.BackgroundTransparency = ui.barAlpha
 	else
@@ -112,28 +151,29 @@ function AlertBar.init()
 	end
 	ui.bar = bar
 	ui.arrow = Style.glyph("up", {
-		Size = 12,
-		Box = UDim2.fromOffset(24, 24),
+		Size = if lay then math.max(12, math.floor(textSize * 0.6)) else 12,
+		Box = UDim2.fromOffset(32, barH),
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0, 18, 0.5, 0),
+		Position = UDim2.new(0, 22, 0.5, 0),
 		Visible = false,
 		Parent = bar,
 	})
 	ui.text = Style.label({
 		Text = "",
-		TextSize = if lay then lay.TextSize else Style.ALERT,
+		TextSize = textSize,
 		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, -90, 1, 0),
-		Position = UDim2.fromOffset(45, 0),
+		Size = UDim2.new(1, -132, 1, 0),
+		Position = UDim2.fromOffset(48, 0),
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = bar,
 	})
 	ui.time = Style.label({
 		Text = "",
-		TextSize = 16,
+		TextSize = subSize,
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -8, 0.5, 0),
-		Size = UDim2.fromOffset(48, barH),
+		Position = UDim2.new(1, -10, 0.5, 0),
+		Size = UDim2.fromOffset(72, barH),
 		Parent = bar,
 	})
 	if skin then
@@ -141,7 +181,7 @@ function AlertBar.init()
 	end
 	local prog = Style.bar({
 		Name = "TimeLeft",
-		Size = UDim2.new(1, 0, 0, 2),
+		Size = UDim2.new(1, 0, 0, if lay then 3 else 2),
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.fromScale(0, 1),
 		Color = Style.White,
@@ -154,24 +194,24 @@ function AlertBar.init()
 	local callout = Instance.new("Frame")
 	callout.Name = "Callout"
 	callout.BackgroundTransparency = 1
-	callout.Size = UDim2.new(0, 0, 0, 20)
+	callout.Size = UDim2.new(0, 0, 0, calloutH)
 	callout.AutomaticSize = Enum.AutomaticSize.X
 	callout.LayoutOrder = 2
 	callout.Visible = false
 	callout.Parent = stack
 	Theme.list(callout, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
 	ui.calloutArrow = Style.glyph("up", {
-		Size = 11,
+		Size = math.max(11, math.floor(subSize * 0.58)),
 		Color = Style.Amber,
-		Box = UDim2.fromOffset(16, 20),
+		Box = UDim2.fromOffset(20, calloutH),
 		LayoutOrder = 1,
 		Parent = callout,
 	})
 	ui.calloutText = Style.label({
 		Text = "",
-		TextSize = 16,
+		TextSize = subSize,
 		Color = Style.Amber,
-		Size = UDim2.fromOffset(0, 20),
+		Size = UDim2.fromOffset(0, calloutH),
 		AutomaticSize = Enum.AutomaticSize.X,
 		LayoutOrder = 2,
 		Parent = callout,
@@ -187,22 +227,22 @@ function AlertBar.init()
 	notice.LayoutOrder = 3
 	notice.Visible = false
 	notice.Parent = stack
-	Theme.list(notice, Enum.FillDirection.Vertical, 0, Enum.HorizontalAlignment.Center)
+	Theme.list(notice, Enum.FillDirection.Vertical, 2, Enum.HorizontalAlignment.Center)
 	ui.notice = notice
 	ui.noticeTitle = Style.label({
 		Text = "",
-		TextSize = Style.ALERT,
+		TextSize = textSize,
 		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, 0, 0, 24),
+		Size = UDim2.new(1, 0, 0, textSize + 8),
 		LayoutOrder = 1,
 		Parent = notice,
 	})
 	ui.noticeSub = Style.label({
 		Text = "",
-		TextSize = Style.TEXT,
+		TextSize = subSize,
 		Color = Style.Grey,
 		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, 0, 0, 18),
+		Size = UDim2.new(1, 0, 0, subSize + 6),
 		LayoutOrder = 2,
 		Parent = notice,
 	})

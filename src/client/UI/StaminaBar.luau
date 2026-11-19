@@ -9,6 +9,7 @@ local Store = require(script.Parent.Parent.Store)
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
 local HudSkin = require(script.Parent.HudSkin)
+local HudLayout = require(script.Parent.HudLayout)
 
 local StaminaBar = {}
 
@@ -49,6 +50,12 @@ function StaminaBar.init(getter: () -> (number, boolean, boolean))
 	-- UI STYLE: no brackets on the new skins (Style.brackets draws none), a rounded pill on glass; follows a switch
 	local function applySkin()
 		local skin = HudSkin.current()
+		local preset = HudLayout.preset()
+		if skin and preset == "frame" then
+			group.Position = if touch then UDim2.new(0.28, 0, 1, -68 * k) else UDim2.new(0.5, 0, 1, -88)
+		else
+			group.Position = UDim2.new(0.5, 0, 1, -BOTTOM * k)
+		end
 		local old = back:FindFirstChild("Brackets")
 		if old then
 			old:Destroy()

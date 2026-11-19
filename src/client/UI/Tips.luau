@@ -126,7 +126,7 @@ local function build()
 	end
 	built = true
 	local touch = Theme.isTouch()
-	local gui = Theme.gui("OrbitTips", { DisplayOrder = 11, Insets = "CoreUISafeInsets" })
+	local gui = Theme.gui("OrbitTips", { DisplayOrder = 12, Insets = "CoreUISafeInsets" })
 	ui.gui = gui
 	local root = Theme.root(gui, "hud")
 	-- new layouts (UI STYLE A-C): one scale, no content x0.8; the card sits at HudLayout "tips" (phone: under the crosshair)
@@ -181,10 +181,11 @@ local function build()
 		Parent = tag,
 	})
 
+	local tipTextSize = if isNew then (InfoLayer.entry("tips", touch).TextSize or 20) else (Style.TEXT + 1)
 	local text = Style.label({
 		Name = "Text",
 		Color = Style.White,
-		TextSize = Style.TEXT + 1,
+		TextSize = tipTextSize,
 		Wrap = true,
 		Size = UDim2.new(1, -42, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,

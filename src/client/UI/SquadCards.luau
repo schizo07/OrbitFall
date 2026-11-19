@@ -274,12 +274,59 @@ end
 
 -- Squad strip (new layouts) ------------------------------------------------------------------------------------------
 local function makeRow(m: any): any
+	local preset = InfoLayer.preset()
 	local E = InfoLayer.entry("squad", touch)
 	local closedH: number = E.RowCollapsed or 13
 	local openH: number = E.RowOpen or 32
 	local tagSize: number = E.TagSize or 15
 	local statusSize: number = E.StatusSize or 12
 	local hpH: number = E.HpHeight or 3
+	if E.ChipMode then
+		local f = Instance.new("Frame")
+		f.Name = "Mate" .. tostring(m.userId)
+		f.BackgroundTransparency = 1
+		f.BorderSizePixel = 0
+		f.Size = UDim2.fromOffset(0, closedH)
+		f.AutomaticSize = Enum.AutomaticSize.X
+		f.Parent = nu.holder
+		Theme.pad(f, 10, 0, 10, 0)
+		local folder = Instance.new("Folder")
+		folder.Name = "BackingHost"
+		folder.Parent = f
+		local back = HudSkin.panel("chip", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = folder })
+		Theme.list(f, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+		local icon = Style.glyph("diamond", {
+			Size = math.max(9, math.floor(tagSize * 0.5)),
+			Color = InfoLayer.col("text"),
+			Box = UDim2.fromOffset(14, closedH),
+			LayoutOrder = 1,
+			Parent = f,
+		})
+		local tag = InfoLayer.label({
+			Text = "",
+			Role = "number",
+			TextSize = tagSize,
+			Shadow = true,
+			Size = UDim2.fromOffset(0, closedH),
+			AutomaticSize = Enum.AutomaticSize.X,
+			LayoutOrder = 2,
+			Parent = f,
+		})
+		local status = InfoLayer.label({
+			Text = "100%",
+			Role = "number",
+			TextSize = statusSize,
+			ColorRole = "text",
+			Size = UDim2.fromOffset(0, closedH),
+			AutomaticSize = Enum.AutomaticSize.X,
+			LayoutOrder = 3,
+			Parent = f,
+		})
+		return {
+			frame = f, back = back, icon = icon, tag = tag, status = status, m = m,
+			chipMode = true, fineSince = os.clock(), closedH = closedH,
+		}
+	end
 	local f = Instance.new("Frame")
 	f.Name = "Mate" .. tostring(m.userId)
 	f.BackgroundTransparency = 1
@@ -287,15 +334,16 @@ local function makeRow(m: any): any
 	f.Size = UDim2.new(1, 0, 0, closedH)
 	f.ClipsDescendants = false
 	f.Parent = nu.holder
+	local alwaysBack = preset == "bold" or preset == "frame"
 	local back = InfoLayer.backing(f)
-	back.Visible = false
-	local tagW = math.floor(tagSize * 1.7)
+	back.Visible = alwaysBack
+	local tagW = math.floor(tagSize * 1.9)
 	local tag = InfoLayer.label({
 		Text = "",
 		Role = "number",
 		TextSize = tagSize,
 		Shadow = true,
-		Position = UDim2.fromOffset(4, 0),
+		Position = UDim2.fromOffset(6, 0),
 		Size = UDim2.fromOffset(tagW, closedH),
 		Parent = f,
 	})
@@ -303,17 +351,17 @@ local function makeRow(m: any): any
 	local bar = HudSkin.bar({
 		Name = "Hp",
 		Parent = f,
-		Size = UDim2.new(1, -(tagW + 12), 0, hpH),
+		Size = UDim2.new(1, -(tagW + 14), 0, hpH),
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.fromOffset(tagW + 8, closedH / 2),
+		Position = UDim2.fromOffset(tagW + 10, closedH / 2),
 		Color = InfoLayer.col("text"),
 	})
 	local name = InfoLayer.label({
 		Text = "",
 		TextSize = statusSize,
 		ColorRole = "text",
-		Position = UDim2.fromOffset(tagW + 8, 0),
-		Size = UDim2.new(1, -(tagW + 12), 0, math.floor(openH * 0.55)),
+		Position = UDim2.fromOffset(tagW + 10, 0),
+		Size = UDim2.new(1, -(tagW + 14), 0, math.floor(openH * 0.55)),
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Visible = false,
 		Parent = f,
@@ -324,21 +372,21 @@ local function makeRow(m: any): any
 		ColorRole = "danger",
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -4, 0, 0),
+		Position = UDim2.new(1, -6, 0, 0),
 		Size = UDim2.new(0.6, 0, 0, if E.Compact then closedH else math.floor(openH * 0.55)),
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Visible = false,
 		Parent = f,
 	})
 	return {
-		frame = f, back = back, tag = tag, bar = bar, name = name, status = status, m = m,
+		frame = f, back = back, alwaysBack = alwaysBack, tag = tag, bar = bar, name = name, status = status, m = m,
 		open = false, fineSince = os.clock(), closedH = closedH, openH = openH, tagW = tagW, hpH = hpH,
 		compact = E.Compact == true,
 	}
 end
 
 local function setOpen(r: any, open: boolean)
-	if r.open == open then
+	if r.chipMode or r.open == open then
 		return
 	end
 	r.open = open
@@ -350,18 +398,18 @@ local function setOpen(r: any, open: boolean)
 		return
 	end
 	r.frame.Size = UDim2.new(1, 0, 0, if open then r.openH else r.closedH)
-	r.back.Visible = open
+	r.back.Visible = open or r.alwaysBack
 	r.name.Visible = open
 	r.status.Visible = open
 	r.tag.Size = UDim2.fromOffset(r.tagW, if open then math.floor(r.openH * 0.55) else r.closedH)
 	if open then
-		r.bar.root.Size = UDim2.new(1, -(r.tagW + 12), 0, r.hpH)
+		r.bar.root.Size = UDim2.new(1, -(r.tagW + 14), 0, r.hpH)
 		r.bar.root.AnchorPoint = Vector2.new(0, 1)
-		r.bar.root.Position = UDim2.new(0, r.tagW + 8, 1, -4)
+		r.bar.root.Position = UDim2.new(0, r.tagW + 10, 1, -4)
 		HudSkin.enter(r.back, "left")
 	else
 		r.bar.root.AnchorPoint = Vector2.new(0, 0.5)
-		r.bar.root.Position = UDim2.fromOffset(r.tagW + 8, r.closedH / 2)
+		r.bar.root.Position = UDim2.fromOffset(r.tagW + 10, r.closedH / 2)
 	end
 end
 
@@ -376,7 +424,9 @@ local function refreshRow(r: any, m: any, t: number)
 	local downed = alive and m.downed == true
 	r.tag.Text = cs.tag
 	r.tag.TextColor3 = if alive then cs.color else InfoLayer.col("dim")
-	r.name.Text = InfoLayer.caseText(if alive and deploy ~= "dropping" then weaponName(m) else (m.name or "?"))
+	if r.name then
+		r.name.Text = InfoLayer.caseText(if alive and deploy ~= "dropping" then weaponName(m) else (m.name or "?"))
+	end
 	local text, col, pulse = "", InfoLayer.col("danger"), 0
 	if deploy == "loadout" then
 		text, col = "IN LOADOUT", InfoLayer.col("dim")
@@ -384,7 +434,7 @@ local function refreshRow(r: any, m: any, t: number)
 		local s, c = deadStatus(m, t)
 		text = s
 		col = if c == Style.Amber then InfoLayer.col("own") elseif c == Style.Grey then InfoLayer.col("dim") else InfoLayer.col("danger")
-		if r.compact then
+		if r.compact or r.chipMode then
 			text = string.gsub(text, " AVAILABLE", "")
 			text = string.gsub(text, "REINFORCEMENTS", "REINFORCE")
 		end
@@ -397,6 +447,21 @@ local function refreshRow(r: any, m: any, t: number)
 		text, col = "CELL", CELL
 	elseif frac < 0.5 then
 		text = string.format("%d%%", math.floor(frac * 100 + 0.5))
+	end
+	if r.chipMode then
+		if r.icon then
+			Style.tint(r.icon, if alive then cs.color else InfoLayer.col("dim"))
+		end
+		if text == "" then
+			r.status.Text = string.format("%d%%", math.floor(frac * 100 + 0.5))
+			r.status.TextColor3 = InfoLayer.col("text")
+			r.status.TextTransparency = 0
+		else
+			r.status.Text = InfoLayer.caseText(text)
+			r.status.TextColor3 = col
+			r.status.TextTransparency = if pulse > 0 then 0.1 + 0.4 * math.abs(math.sin(t * pulse)) else 0
+		end
+		return
 	end
 	r.status.Text = InfoLayer.caseText(text)
 	r.status.TextColor3 = col
@@ -422,13 +487,19 @@ end
 local function buildNew()
 	nu = {}
 	table.clear(strip)
+	local E = InfoLayer.entry("squad", touch)
 	local holder = InfoLayer.fresh("SquadStrip")
 	InfoLayer.place(holder, "squad", touch)
-	local w = holder.Size.X.Offset
-	holder.Size = UDim2.fromOffset(w, 0)
-	holder.AutomaticSize = Enum.AutomaticSize.Y
+	if E.ChipMode then
+		holder.Size = UDim2.fromOffset(0, 0)
+		holder.AutomaticSize = Enum.AutomaticSize.XY
+	else
+		local w = holder.Size.X.Offset
+		holder.Size = UDim2.fromOffset(w, 0)
+		holder.AutomaticSize = Enum.AutomaticSize.Y
+	end
 	holder.Visible = false
-	Theme.list(holder, Enum.FillDirection.Vertical, if touch then 2 else 4)
+	Theme.list(holder, Enum.FillDirection.Vertical, if E.ChipMode then (if touch then 4 else 6) elseif touch then 2 else 4)
 	nu.holder = holder
 end
 

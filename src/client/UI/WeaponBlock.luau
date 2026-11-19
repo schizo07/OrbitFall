@@ -11,6 +11,7 @@
 --   WeaponBlock.addCount(name)       an extra count cell after MAG (AmmoPackCount: "PACK"); nil before the block exists
 --   WeaponBlock.setVisible(on)
 local Style = require(script.Parent.HudStyle)
+local Theme = require(script.Parent.Theme)
 local HudSkin = require(script.Parent.HudSkin)
 local HudLayout = require(script.Parent.HudLayout)
 
@@ -46,8 +47,11 @@ end
 function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() -> ())?): { [string]: any }
 	table.clear(ui)
 	nadesShown = -1
+	local preset = HudLayout.preset()
 	local lay = HudLayout.get("weapon", touch)
 	local compact = lay.Compact == true
+	local docked = lay.Docked == true
+	local chipCounts = lay.ChipCounts == true
 	local holder = Instance.new("Frame")
 	holder.Name = "WeaponBlock"
 	holder.BackgroundTransparency = 1
@@ -86,7 +90,7 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 		list.Padding = UDim.new(0, 6)
 		list.SortOrder = Enum.SortOrder.LayoutOrder
 		list.Parent = holder
-		out.mag = text({ Role = "number", Text = "0", TextSize = lay.MagSize, H = lay.MagSize + 2, LayoutOrder = 1, Shadow = true, Parent = holder })
+		out.mag = text({ Role = "number", Text = "0", TextSize = lay.MagSize, H = lay.MagSize + 4, LayoutOrder = 1, Shadow = true, Parent = holder })
 		out.spare = text({ Role = "number", Text = "/ 0", TextSize = lay.SpareSize, ColorRole = "dim", H = lay.SpareSize + 4, LayoutOrder = 2, Parent = holder })
 		out.nade = text({ Role = "label", Text = "GREN 0", TextSize = lay.CountSize, ColorRole = "own", H = lay.CountSize + 4, LayoutOrder = 3, Parent = holder })
 		out.mags = text({ Role = "label", Text = "MAG 0", TextSize = lay.CountSize, H = lay.CountSize + 4, LayoutOrder = 4, Parent = holder })
@@ -100,16 +104,32 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 		out.name = HudSkin.label({ Text = "" })
 		ui.countRow = holder
 		ui.countOrder = 5
-	else
+	elseif docked then
+		-- Frame preset PC: horizontal docked layout inside BottomBar
 		local list = Instance.new("UIListLayout")
-		list.FillDirection = Enum.FillDirection.Vertical
+		list.FillDirection = Enum.FillDirection.Horizontal
 		list.HorizontalAlignment = Enum.HorizontalAlignment.Right
-		list.VerticalAlignment = Enum.VerticalAlignment.Bottom
-		list.Padding = UDim.new(0, 2)
+		list.VerticalAlignment = Enum.VerticalAlignment.Center
+		list.Padding = UDim.new(0, 14)
 		list.SortOrder = Enum.SortOrder.LayoutOrder
 		list.Parent = holder
 
-		local counts = row(holder, "Counts", lay.CountSize + 6, 1, align, 12)
+		local infoCol = Instance.new("Frame")
+		infoCol.Name = "InfoCol"
+		infoCol.BackgroundTransparency = 1
+		infoCol.Size = UDim2.fromOffset(0, lay.MagSize + 4)
+		infoCol.AutomaticSize = Enum.AutomaticSize.X
+		infoCol.LayoutOrder = 1
+		infoCol.Parent = holder
+		local il = Instance.new("UIListLayout")
+		il.FillDirection = Enum.FillDirection.Vertical
+		il.HorizontalAlignment = Enum.HorizontalAlignment.Right
+		il.VerticalAlignment = Enum.VerticalAlignment.Center
+		il.Padding = UDim.new(0, 2)
+		il.SortOrder = Enum.SortOrder.LayoutOrder
+		il.Parent = infoCol
+
+		local counts = row(infoCol, "Counts", lay.CountSize + 4, 1, Enum.HorizontalAlignment.Right, 10)
 		local nadePips = Instance.new("Frame")
 		nadePips.Name = "NadePips"
 		nadePips.BackgroundTransparency = 1
@@ -131,7 +151,7 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 		ui.countRow = counts
 		ui.countOrder = 4
 
-		local nameRow = row(holder, "Weapon", lay.NameSize + 6, 2, align, 10)
+		local nameRow = row(infoCol, "Weapon", lay.NameSize + 4, 2, Enum.HorizontalAlignment.Right, 8)
 		out.state = text({ Role = "label", Text = "", TextSize = lay.ModeSize, ColorRole = "danger", H = lay.NameSize + 4, LayoutOrder = 1, Parent = nameRow })
 		out.name = text({ Role = "label", Text = "", TextSize = lay.NameSize, ColorRole = "dim", H = lay.NameSize + 4, LayoutOrder = 2, Parent = nameRow })
 		out.name.TextTruncate = Enum.TextTruncate.AtEnd
@@ -140,14 +160,14 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 		out.ap = text({ Role = "label", Text = "", TextSize = lay.ModeSize, ColorRole = "own", H = lay.NameSize + 4, LayoutOrder = 4, Parent = nameRow })
 		out.ap.Name = "ArmourPen"
 
-		-- mag row: the mag number keeps a fixed box (HUD jitters / pops it per shot), the spare count sits right of it
+		local spareW = math.round(lay.SpareSize * 3.1)
+		local magW = math.round(lay.MagSize * 2.1 + spareW + 8)
 		local magRow = Instance.new("Frame")
 		magRow.Name = "Mag"
 		magRow.BackgroundTransparency = 1
-		magRow.Size = UDim2.new(1, 0, 0, lay.MagSize)
-		magRow.LayoutOrder = 3
+		magRow.Size = UDim2.fromOffset(magW, lay.MagSize + 4)
+		magRow.LayoutOrder = 2
 		magRow.Parent = holder
-		local spareW = lay.SpareSize * 3.4
 		out.spare = HudSkin.label({
 			Role = "number",
 			Text = "/ 0",
@@ -168,7 +188,107 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 			YAlign = Enum.TextYAlignment.Bottom,
 			AnchorPoint = Vector2.new(1, 1),
 			Position = UDim2.new(1, -(spareW + 6), 1, 0),
-			Size = UDim2.fromOffset(lay.MagSize * 2.6, lay.MagSize),
+			Size = UDim2.fromOffset(lay.MagSize * 2.1, lay.MagSize),
+			Shadow = true,
+			Parent = magRow,
+		})
+	else
+		if preset == "bold" then
+			holder.AutomaticSize = Enum.AutomaticSize.XY
+			Theme.pad(holder, 16, 10, 16, 10)
+			local folder = Instance.new("Folder")
+			folder.Name = "BackingHost"
+			folder.Parent = holder
+			HudSkin.panel("banner", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = folder })
+		end
+		local list = Instance.new("UIListLayout")
+		list.FillDirection = Enum.FillDirection.Vertical
+		list.HorizontalAlignment = Enum.HorizontalAlignment.Right
+		list.VerticalAlignment = Enum.VerticalAlignment.Bottom
+		list.Padding = UDim.new(0, 4)
+		list.SortOrder = Enum.SortOrder.LayoutOrder
+		list.Parent = holder
+
+		local counts = row(holder, "Counts", lay.CountSize + 8, 1, align, 10)
+		if chipCounts then
+			counts.Size = UDim2.fromOffset(0, lay.CountSize + 10)
+			counts.AutomaticSize = Enum.AutomaticSize.X
+			Theme.pad(counts, 12, 0, 12, 0)
+			local folder = Instance.new("Folder")
+			folder.Name = "BackingHost"
+			folder.Parent = counts
+			HudSkin.panel("chip", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = folder })
+		end
+		local nadePips = Instance.new("Frame")
+		nadePips.Name = "NadePips"
+		nadePips.BackgroundTransparency = 1
+		nadePips.Size = UDim2.fromOffset(0, lay.CountSize + 4)
+		nadePips.AutomaticSize = Enum.AutomaticSize.X
+		nadePips.LayoutOrder = 1
+		nadePips.Parent = counts
+		local pl = Instance.new("UIListLayout")
+		pl.FillDirection = Enum.FillDirection.Horizontal
+		pl.VerticalAlignment = Enum.VerticalAlignment.Center
+		pl.Padding = UDim.new(0, 3)
+		pl.SortOrder = Enum.SortOrder.LayoutOrder
+		pl.Parent = nadePips
+		ui.nadePips = nadePips
+		ui.glyphSize = lay.GlyphSize
+		out.nade = text({ Role = "label", Text = "GREN 0", TextSize = lay.CountSize, ColorRole = "own", H = lay.CountSize + 4, LayoutOrder = 2, Parent = counts })
+		out.mags = text({ Role = "label", Text = "MAG 0", TextSize = lay.CountSize, H = lay.CountSize + 4, LayoutOrder = 3, Parent = counts })
+		out.mags.Name = "Mags"
+		ui.countRow = counts
+		ui.countOrder = 4
+
+		if lay.NameSize > 0 then
+			local nameRow = row(holder, "Weapon", lay.NameSize + 6, 2, align, 10)
+			out.state = text({ Role = "label", Text = "", TextSize = lay.ModeSize, ColorRole = "danger", H = lay.NameSize + 4, LayoutOrder = 1, Parent = nameRow })
+			out.name = text({ Role = "label", Text = "", TextSize = lay.NameSize, ColorRole = "dim", H = lay.NameSize + 4, LayoutOrder = 2, Parent = nameRow })
+			out.name.TextTruncate = Enum.TextTruncate.AtEnd
+			fm.LayoutOrder = 3
+			fm.Parent = nameRow
+			out.ap = text({ Role = "label", Text = "", TextSize = lay.ModeSize, ColorRole = "own", H = lay.NameSize + 4, LayoutOrder = 4, Parent = nameRow })
+			out.ap.Name = "ArmourPen"
+		else
+			-- Clean preset: compact status + fire mode only, weapon full name stays hidden
+			local statusRow = row(holder, "Status", lay.ModeSize + 6, 2, align, 10)
+			out.state = text({ Role = "label", Text = "", TextSize = lay.ModeSize, ColorRole = "danger", H = lay.ModeSize + 4, LayoutOrder = 1, Parent = statusRow })
+			fm.LayoutOrder = 2
+			fm.Parent = statusRow
+			out.ap = text({ Role = "label", Text = "", TextSize = lay.ModeSize, ColorRole = "own", H = lay.ModeSize + 4, LayoutOrder = 3, Parent = statusRow })
+			out.ap.Name = "ArmourPen"
+			out.name = HudSkin.label({ Text = "" })
+		end
+
+		-- mag row: the mag number keeps a fixed box (HUD jitters / pops it per shot), the spare count sits right of it
+		local spareW = math.round(lay.SpareSize * 3.4)
+		local magRow = Instance.new("Frame")
+		magRow.Name = "Mag"
+		magRow.BackgroundTransparency = 1
+		magRow.Size = UDim2.new(1, 0, 0, lay.MagSize)
+		magRow.LayoutOrder = 3
+		magRow.Parent = holder
+		out.spare = HudSkin.label({
+			Role = "number",
+			Text = "/ 0",
+			TextSize = lay.SpareSize,
+			ColorRole = "dim",
+			XAlign = Enum.TextXAlignment.Left,
+			YAlign = Enum.TextYAlignment.Bottom,
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, 0, 1, -math.round(lay.MagSize * 0.12)),
+			Size = UDim2.fromOffset(spareW, lay.SpareSize + 4),
+			Parent = magRow,
+		})
+		out.mag = HudSkin.label({
+			Role = "number",
+			Text = "0",
+			TextSize = lay.MagSize,
+			XAlign = Enum.TextXAlignment.Right,
+			YAlign = Enum.TextYAlignment.Bottom,
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -(spareW + 6), 1, 0),
+			Size = UDim2.fromOffset(lay.MagSize * 2.5, lay.MagSize),
 			Shadow = true,
 			Parent = magRow,
 		})

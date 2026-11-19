@@ -40,6 +40,7 @@ end
 
 function GoalLine.destroy()
 	InfoLayer.drop("GoalLine")
+	InfoLayer.drop("GoalSide")
 	ui = {}
 	extractText = nil -- AreaInfo sets it again on its next update in a new layout
 	goal = nil -- ObjectiveList.build hands it back from the current list
@@ -58,13 +59,15 @@ function GoalLine.build(isTouch: boolean)
 	shownText = ""
 	lastDist, lastSideDist = -1, -1
 	sideShown = nil
+	local preset = InfoLayer.preset()
 	local E = InfoLayer.entry("goal", touch)
 	local S = InfoLayer.entry("side", touch)
 	local textSize: number = E.TextSize or 24
 	local distSize: number = E.DistSize or 20
 	local caretSize: number = E.CaretSize or 13
-	local smallSize: number = S.TextSize or 15
+	local smallSize: number = S.TextSize or 18
 	local maxW: number = E.MaxWidth or 670
+	local progH: number = E.ProgressHeight or 2
 
 	local holder = InfoLayer.fresh("GoalLine")
 	InfoLayer.place(holder, "goal", touch)
@@ -75,7 +78,7 @@ function GoalLine.build(isTouch: boolean)
 	ui.holder = holder
 
 	-- main row: caret + text + counter + distance, centred, auto width
-	local rowH = textSize + 6
+	local rowH = E.BannerHeight or (textSize + 8)
 	local row = Instance.new("Frame")
 	row.Name = "Main"
 	row.BackgroundTransparency = 1
@@ -83,10 +86,38 @@ function GoalLine.build(isTouch: boolean)
 	row.AutomaticSize = Enum.AutomaticSize.X
 	row.LayoutOrder = 1
 	row.Parent = holder
-	Theme.list(row, Enum.FillDirection.Horizontal, if touch then 6 else 10, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+	Theme.list(row, Enum.FillDirection.Horizontal, if touch then 8 else 12, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
 	ui.row = row
-	if InfoLayer.style() == "glass" then
-		-- style B: one soft pill behind the line; the other styles draw no box on always-visible text
+	if preset == "bold" or preset == "clean" then
+		Theme.pad(row, if touch then 14 else 22, 0, if touch then 14 else 22, 0)
+		local folder = Instance.new("Folder")
+		folder.Name = "BackingHost"
+		folder.Parent = row
+		local b = HudSkin.panel("banner", {
+			Name = "Backing",
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = 0,
+			Parent = folder,
+		})
+		if preset == "clean" then
+			local c = b:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0.5, 0)
+			c.Parent = b
+		else
+			-- bold accent bar along the bottom of the objective banner
+			local bar = Instance.new("Frame")
+			bar.Name = "Accent"
+			bar.BorderSizePixel = 0
+			bar.BackgroundColor3 = InfoLayer.col("objective")
+			bar.BackgroundTransparency = 0.15
+			bar.AnchorPoint = Vector2.new(0, 1)
+			bar.Position = UDim2.fromScale(0, 1)
+			bar.Size = UDim2.new(1, 0, 0, 3)
+			bar.ZIndex = 1
+			bar.Parent = b
+		end
+	elseif InfoLayer.style() == "glass" and not E.Docked then
+		-- fallback soft pill behind the line
 		Theme.pad(row, 14, 0, 14, 0)
 		local b = InfoLayer.backing(row)
 		local c = b:FindFirstChildOfClass("UICorner")
@@ -143,13 +174,13 @@ function GoalLine.build(isTouch: boolean)
 		Parent = row,
 	})
 
-	-- 2 px progress line, as wide as the main row
+	-- progress line, as wide as the main row
 	local prog = Instance.new("Frame")
 	prog.Name = "Progress"
 	prog.BackgroundColor3 = InfoLayer.col("line")
-	prog.BackgroundTransparency = 0.8
+	prog.BackgroundTransparency = 0.75
 	prog.BorderSizePixel = 0
-	prog.Size = UDim2.fromOffset(200, 2)
+	prog.Size = UDim2.fromOffset(200, progH)
 	prog.LayoutOrder = 2
 	prog.Visible = false
 	prog.ClipsDescendants = true
@@ -174,11 +205,23 @@ function GoalLine.build(isTouch: boolean)
 		end
 		local s = holder.AbsoluteSize.X / math.max(holder.Size.X.Offset, 1)
 		if s > 0 then
-			prog.Size = UDim2.fromOffset(math.max(40, row.AbsoluteSize.X / s), 2)
+			prog.Size = UDim2.fromOffset(math.max(40, row.AbsoluteSize.X / s), progH)
 		end
 	end
 	row:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitProg)
 	task.defer(fitProg)
+
+	-- side / intro container: placed at HudLayout "side" in Clean / Frame so it never overlaps Compass or TopBar
+	local sideHost: Frame = holder
+	if preset == "clean" or preset == "frame" then
+		local sh = InfoLayer.fresh("GoalSide")
+		InfoLayer.place(sh, "side", touch)
+		sh.Size = UDim2.fromOffset(S.MaxWidth or maxW, 0)
+		sh.AutomaticSize = Enum.AutomaticSize.Y
+		Theme.list(sh, Enum.FillDirection.Vertical, S.NextGap or 4, Enum.HorizontalAlignment.Center)
+		sideHost = sh
+		ui.sideHost = sh
+	end
 
 	-- side line
 	local side = Instance.new("Frame")
@@ -188,12 +231,12 @@ function GoalLine.build(isTouch: boolean)
 	side.AutomaticSize = Enum.AutomaticSize.X
 	side.LayoutOrder = 3
 	side.Visible = false
-	side.Parent = holder
+	side.Parent = sideHost
 	Theme.list(side, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
 	Style.glyph("diamondHollow", {
-		Size = math.max(7, math.floor(smallSize * 0.6)),
+		Size = math.max(8, math.floor(smallSize * 0.55)),
 		Color = InfoLayer.col("heal"),
-		Box = UDim2.fromOffset(12, smallSize + 6),
+		Box = UDim2.fromOffset(14, smallSize + 6),
 		LayoutOrder = 1,
 		Parent = side,
 	})
@@ -201,6 +244,7 @@ function GoalLine.build(isTouch: boolean)
 		Text = "",
 		TextSize = smallSize,
 		ColorRole = "heal",
+		Shadow = true,
 		Size = UDim2.fromOffset(0, smallSize + 6),
 		AutomaticSize = Enum.AutomaticSize.X,
 		LayoutOrder = 2,
@@ -215,12 +259,13 @@ function GoalLine.build(isTouch: boolean)
 			Text = "",
 			TextSize = smallSize,
 			ColorRole = "dim",
+			Shadow = true,
 			XAlign = Enum.TextXAlignment.Center,
-			Size = UDim2.new(1, 0, 0, smallSize + 3),
+			Size = UDim2.new(1, 0, 0, smallSize + 4),
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			LayoutOrder = 3 + i,
 			Visible = false,
-			Parent = holder,
+			Parent = sideHost,
 		})
 	end
 
@@ -229,11 +274,12 @@ function GoalLine.build(isTouch: boolean)
 		Text = "",
 		TextSize = smallSize,
 		ColorRole = "dim",
+		Shadow = true,
 		XAlign = Enum.TextXAlignment.Center,
 		Size = UDim2.new(1, 0, 0, smallSize + 4),
 		LayoutOrder = 7,
 		Visible = false,
-		Parent = holder,
+		Parent = sideHost,
 	})
 
 	-- touch: the line opens the mission sheet. The hit box sits in a Folder so the list layout ignores it; it is as
@@ -271,6 +317,9 @@ function GoalLine.setVisible(on: boolean)
 	if ui.holder then
 		ui.holder.Visible = on and goal ~= nil
 	end
+	if ui.sideHost then
+		ui.sideHost.Visible = on and goal ~= nil
+	end
 end
 
 -- Text change: the skin's goal-change transition (type-in / cross-fade / cursor rewrite) plus a one-off flash.
@@ -298,6 +347,9 @@ local function refresh()
 	end
 	local g = goal
 	ui.holder.Visible = want and g ~= nil
+	if ui.sideHost then
+		ui.sideHost.Visible = want and g ~= nil
+	end
 	if not g then
 		return
 	end
@@ -320,8 +372,9 @@ local function refresh()
 	if frac then
 		Theme.tween(ui.fill, 0.15, { Size = UDim2.fromScale(frac, 1) })
 	end
-	-- phones: the alert bar sits right under the goal line (y 44), so the next steps and the side line live in the sheet
-	local showNext = workspace:GetAttribute("Feel_GoalLines") == "next" and not extractText and not touch
+	-- phones: the alert bar sits right under the goal line, so the next steps and the side line live in the sheet
+	local E = InfoLayer.entry("goal", touch)
+	local showNext = workspace:GetAttribute("Feel_GoalLines") == "next" and not extractText and not touch and not E.HideNext
 	for i = 1, 2 do
 		local s = g.nextSteps[i]
 		ui.next[i].Visible = showNext and s ~= nil

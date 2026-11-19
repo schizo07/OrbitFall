@@ -41,13 +41,13 @@ function Compass.build(parent: Instance, touch: boolean): Frame
 	table.clear(blips)
 	headingShown, headingLabel = -1, nil
 	local skin = HudSkin.current()
+	local preset = HudLayout.preset()
+	local lay = if skin then HudLayout.get("compass", touch) else nil
 	local tapeH = TAPE_H
 	local holder = Instance.new("Frame")
 	holder.Name = "CompassHolder"
 	holder.BackgroundTransparency = 1
-	if skin then
-		-- new layout (UI/HudLayout): 0.29 x screen PC, 240 px phone; tape in the skin's look, no red panel
-		local lay = HudLayout.get("compass", touch)
+	if skin and lay then
 		HudLayout.apply(holder, "compass", touch)
 		tapeH = lay.Size.Y.Offset
 	else
@@ -57,7 +57,8 @@ function Compass.build(parent: Instance, touch: boolean): Frame
 	end
 	holder.Parent = parent
 	local lim = Instance.new("UISizeConstraint")
-	lim.MinSize = Vector2.new(if skin then 200 else 340, tapeH)
+	local minW = if lay and lay.Size.X.Offset > 0 then lay.Size.X.Offset elseif skin then 160 else 340
+	lim.MinSize = Vector2.new(minW, tapeH)
 	lim.Parent = holder
 	ui.holder = holder
 
@@ -70,20 +71,23 @@ function Compass.build(parent: Instance, touch: boolean): Frame
 		tape.Size = UDim2.fromScale(1, 1)
 		tape.ClipsDescendants = true
 		tape.Parent = holder
-		-- edges fade out so the tape has no hard ends; glass gets a soft pill behind it
-		if skin.id == "glass" then
+		-- edges fade out so the tape has no hard ends; glass/clean get a soft pill; bold gets a stronger backing plate
+		if preset == "bold" then
+			local back = HudSkin.panel("banner", { Name = "Back", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = tape })
+			back.BackgroundTransparency = 0.28
+		elseif skin.id == "glass" then
 			local back = HudSkin.panel("glass", { Name = "Back", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = tape })
 			back.BackgroundTransparency = 0.2
 			local cr = back:FindFirstChildOfClass("UICorner")
 			if cr then
 				cr.CornerRadius = UDim.new(0.5, 0)
 			end
-		else
+		elseif preset ~= "frame" then
 			local base = Instance.new("Frame")
 			base.Name = "Baseline"
 			base.BorderSizePixel = 0
 			base.BackgroundColor3 = skin.colors.line
-			base.BackgroundTransparency = 0.6
+			base.BackgroundTransparency = 0.55
 			base.AnchorPoint = Vector2.new(0, 1)
 			base.Position = UDim2.fromScale(0, 1)
 			base.Size = UDim2.new(1, 0, 0, 1)
@@ -109,28 +113,31 @@ function Compass.build(parent: Instance, touch: boolean): Frame
 	end
 	ui.tape = tape
 	local TAPE_H = tapeH -- the tape nodes below follow the layout height
+	local cardinalSize = if lay then (lay.CardinalSize or 20) else 13
+	local interSize = if lay then (lay.InterSize or 16) else 10
+	local compact = lay ~= nil and lay.Compact == true
 
 	for b = 0, 345, 15 do
 		local node: GuiObject
 		if CARDINAL[b] then
 			node = Style.label({
 				Text = CARDINAL[b],
-				TextSize = 13,
+				TextSize = cardinalSize,
 				Color = if b == 0 then Style.Amber else Style.White,
 				XAlign = Enum.TextXAlignment.Center,
 				AnchorPoint = Vector2.new(0.5, 0.5),
-				Size = UDim2.fromOffset(18, TAPE_H),
+				Size = UDim2.fromOffset(math.max(20, cardinalSize + 8), TAPE_H),
 				Position = UDim2.fromScale(0.5, 0.5),
 				Parent = tape,
 			})
-		elseif INTER[b] then
+		elseif INTER[b] and not compact then
 			node = Style.label({
 				Text = INTER[b],
-				TextSize = 10,
+				TextSize = interSize,
 				Color = Style.Grey,
 				XAlign = Enum.TextXAlignment.Center,
 				AnchorPoint = Vector2.new(0.5, 0.5),
-				Size = UDim2.fromOffset(18, TAPE_H),
+				Size = UDim2.fromOffset(math.max(22, interSize + 10), TAPE_H),
 				Position = UDim2.fromScale(0.5, 0.5),
 				Parent = tape,
 			})
@@ -139,7 +146,7 @@ function Compass.build(parent: Instance, touch: boolean): Frame
 				Color = Style.White,
 				Transparency = 0.45,
 				AnchorPoint = Vector2.new(0.5, 0.5),
-				Size = UDim2.fromOffset(1, 5),
+				Size = UDim2.fromOffset(1, if compact then 6 else 5),
 				Position = UDim2.fromScale(0.5, 0.5),
 				Parent = tape,
 			})
@@ -179,21 +186,25 @@ function Compass.build(parent: Instance, touch: boolean): Frame
 		Parent = layer,
 	})
 
-	-- heading chip hanging under the tape
+	-- heading chip hanging under the tape (or beside the tape inside Frame's top bar)
+	local headingSize = if lay then (lay.HeadingSize or 18) else 12
+	local beside = lay ~= nil and lay.HeadingBeside == true
+	local chipW = if skin then math.max(80, math.round(headingSize * 4.8)) else 72
+	local chipH = if skin then headingSize + 6 else 16
 	local chipProps = {
 		Name = "Heading",
-		Size = UDim2.fromOffset(72, 16),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 1, 2),
+		Size = UDim2.fromOffset(chipW, chipH),
+		AnchorPoint = if beside then Vector2.new(0, 0.5) else Vector2.new(0.5, 0),
+		Position = if beside then UDim2.new(1, 6, 0.5, 0) else UDim2.new(0.5, 0, 1, 2),
 		Parent = holder,
 	}
-	-- new skins: bare text under the tape (no box), dim, in the number font
+	-- new skins: bare text under the tape (no box), dim (brighter in Frame), in the number font
 	local chip = if skin then HudSkin.panel("none", chipProps) else Style.panel(chipProps)
 	ui.heading = Style.label({
 		Text = "N [000]",
-		TextSize = 12,
-		Color = if skin then skin.colors.dim else nil,
-		XAlign = Enum.TextXAlignment.Center,
+		TextSize = headingSize,
+		Color = if skin then HudSkin.color("dim") else nil,
+		XAlign = if beside then Enum.TextXAlignment.Left else Enum.TextXAlignment.Center,
 		Size = UDim2.fromScale(1, 1),
 		Parent = chip,
 	})
@@ -204,15 +215,15 @@ function Compass.build(parent: Instance, touch: boolean): Frame
 	-- RADAR ONLINE tag left of the heading chip (radar side objective: workspace attribute RadarOnline)
 	local radarTag = Style.panel({
 		Name = "RadarTag",
-		Size = UDim2.fromOffset(96, 16),
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(0.5, -40, 1, 2),
+		Size = UDim2.fromOffset(112, chipH),
+		AnchorPoint = if beside then Vector2.new(0, 0) else Vector2.new(1, 0),
+		Position = if beside then UDim2.new(0, 0, 1, 4) else UDim2.new(0.5, -math.round(chipW * 0.5 + 8), 1, 2),
 		Visible = false,
 		Parent = holder,
 	})
 	Style.label({
 		Text = "RADAR ONLINE",
-		TextSize = 12,
+		TextSize = math.max(12, headingSize - 2),
 		Color = Style.Green,
 		XAlign = Enum.TextXAlignment.Center,
 		Size = UDim2.fromScale(1, 1),

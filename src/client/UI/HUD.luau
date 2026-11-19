@@ -784,11 +784,11 @@ local function buildToasts(root: Instance)
 	holder.Name = "Toasts"
 	holder.BackgroundTransparency = 1
 	holder.AnchorPoint = Vector2.new(0.5, 1)
-	holder.Position = UDim2.new(0.5, 0, 0.8, 0)
+	holder.Position = UDim2.new(0.5, 0, if HudLayout.preset() == "frame" then 0.74 else 0.8, 0)
 	holder.Size = UDim2.fromOffset(440, 0)
 	if touch then
-		-- between the left column and the touch buttons, above the SIDE chip (bottom centre)
-		holder.Position = UDim2.new(0.44, 0, 0.74, 0)
+		-- between the left column and the touch buttons, above the SIDE chip / Frame bottom bar
+		holder.Position = UDim2.new(0.44, 0, if HudLayout.preset() == "frame" then 0.66 else 0.74, 0)
 		holder.Size = UDim2.fromOffset(380, 0)
 	end
 	holder.AutomaticSize = Enum.AutomaticSize.Y
@@ -809,6 +809,61 @@ local function buildMainNew()
 	ui.screenScale = screenScale
 	ui.root = screen
 	local root = screen
+
+	-- Frame preset: solid high-contrast edge bars (top bar for compass + objective + timer, bottom bar for vitals + call-ins + weapon)
+	if HudLayout.preset() == "frame" then
+		local topCfg = HudLayout.get("topBar", touch)
+		local botCfg = HudLayout.get("bottomBar", touch)
+		local topH = topCfg.Height or 67
+		local botH = botCfg.Height or 75
+		local barColor = Color3.fromHex("06090F")
+		local edgeColor = HudSkin.color("objective")
+
+		local topBar = Instance.new("Frame")
+		topBar.Name = "FrameTopBar"
+		topBar.BackgroundColor3 = barColor
+		topBar.BackgroundTransparency = 0.08
+		topBar.BorderSizePixel = 0
+		topBar.Position = UDim2.fromOffset(0, 0)
+		topBar.Size = UDim2.new(1, 0, 0, topH)
+		topBar.ZIndex = 0
+		topBar.Parent = root
+		local topLine = Instance.new("Frame")
+		topLine.Name = "Edge"
+		topLine.BorderSizePixel = 0
+		topLine.BackgroundColor3 = edgeColor
+		topLine.BackgroundTransparency = 0.25
+		topLine.AnchorPoint = Vector2.new(0, 1)
+		topLine.Position = UDim2.fromScale(0, 1)
+		topLine.Size = UDim2.new(1, 0, 0, 2)
+		topLine.Parent = topBar
+
+		local botBar = Instance.new("Frame")
+		botBar.Name = "FrameBottomBar"
+		botBar.BackgroundColor3 = barColor
+		botBar.BackgroundTransparency = 0.08
+		botBar.BorderSizePixel = 0
+		botBar.AnchorPoint = Vector2.new(0, 1)
+		botBar.Position = UDim2.fromScale(0, 1)
+		botBar.Size = if touch then UDim2.fromOffset(HudLayout.phoneBottomWidth(), botH) else UDim2.new(1, 0, 0, botH)
+		botBar.ZIndex = 0
+		botBar.Parent = root
+		if touch then
+			Theme.onScaleChanged(function()
+				if botBar.Parent then
+					botBar.Size = UDim2.fromOffset(HudLayout.phoneBottomWidth(), botH)
+				end
+			end)
+		end
+		local botLine = Instance.new("Frame")
+		botLine.Name = "Edge"
+		botLine.BorderSizePixel = 0
+		botLine.BackgroundColor3 = edgeColor
+		botLine.BackgroundTransparency = 0.25
+		botLine.Position = UDim2.fromOffset(0, 0)
+		botLine.Size = UDim2.new(1, 0, 0, 2)
+		botLine.Parent = botBar
+	end
 
 	-- ship info (lobby only): the old top-left column, unchanged
 	local legacy = Style.content(screen, touch)
@@ -2720,8 +2775,11 @@ function HUD.init()
 	updateSquad()
 	updatePrompt()
 
-	-- UI STYLE switch (Studio Variants): rebuild live
+	-- UI STYLE / HUD preset switch (Studio Variants): rebuild live
 	workspace:GetAttributeChangedSignal(HudSkin.ATTR):Connect(function()
+		task.defer(HUD.rebuild)
+	end)
+	workspace:GetAttributeChangedSignal(HudLayout.ATTR):Connect(function()
 		task.defer(HUD.rebuild)
 	end)
 	HudSkin.fireRebuild({ skin = HudSkin.current(), id = HudSkin.id(), touch = touch, gui = ui.mainGui, root = ui.root, first = true })

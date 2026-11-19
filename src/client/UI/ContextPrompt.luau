@@ -96,7 +96,7 @@ local function build()
 	newMode = InfoLayer.isNew()
 	if newMode then
 		local E = InfoLayer.entry("prompt", touch)
-		local g = Theme.gui("OrbitPrompt", { DisplayOrder = 11, Insets = "CoreUISafeInsets" })
+		local g = Theme.gui("OrbitPrompt", { DisplayOrder = 12, Insets = "CoreUISafeInsets" })
 		ui.gui = g
 		local r = Theme.root(g, "hud")
 		H = E.Size.Y.Offset

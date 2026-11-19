@@ -236,13 +236,16 @@ local function pushNew(text: string, color: Color3?, kind: string?, shape: strin
 	row.AutomaticSize = Enum.AutomaticSize.X
 	row.LayoutOrder = -serial -- newest on top
 	Theme.list(row, Enum.FillDirection.Horizontal, E.GlyphGap or 8, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
-	if InfoLayer.style() == "glass" then
-		Theme.pad(row, 10, 0, 10, 0)
+	local preset = InfoLayer.preset()
+	if InfoLayer.style() == "glass" or preset == "clean" then
+		Theme.pad(row, 12, 0, 12, 0)
 		local b = InfoLayer.backing(row)
-		local c = b:FindFirstChildOfClass("UICorner")
-		if c then
-			c.CornerRadius = UDim.new(0.5, 0)
-		end
+		local c = b:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0.5, 0)
+		c.Parent = b
+	elseif preset == "bold" or preset == "frame" then
+		Theme.pad(row, 10, 0, 10, 0)
+		InfoLayer.backing(row, true)
 	end
 	local textSize: number = E.TextSize or 15
 	local g = Style.glyph(shape or KIND_SHAPE[kind or ""] or "dot", {

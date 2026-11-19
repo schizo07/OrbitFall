@@ -548,6 +548,16 @@ function Theme.minTextPx(): number
 	return 12 + 2 * a
 end
 
+-- HUD text floor for the new HUD presets: ~18 px at 720p, scaled with screen size ((short / 720) ^ 0.6).
+function Theme.hudMinTextPx(): number
+	if Theme.uiOld() or workspace:GetAttribute("Feel_UiStyle") == "old" then
+		return Theme.minTextPx()
+	end
+	local vp = viewport()
+	local short = math.max(math.min(vp.X, vp.Y), 200)
+	return Theme.clamp(18 * (short / 720) ^ 0.6, 12, 24)
+end
+
 -- One watcher for everything that changes the scale: viewport size, camera swap, the Feel_UiScale attribute.
 local scaleListeners: { () -> () } = {}
 local scaleWatching = false
@@ -587,6 +597,7 @@ end
 -- Returns a transparent full-size Frame whose children are laid out in "virtual" pixels
 -- (1080p on PC, ~1030x470 on phones) and uniformly scaled to the real viewport.
 function Theme.root(gui: ScreenGui, kind: string?): (Frame, UIScale)
+	gui:SetAttribute("TextFloorKind", kind or "hud")
 	local root = Instance.new("Frame")
 	root.Name = "Root"
 	root.BackgroundTransparency = 1
@@ -651,7 +662,7 @@ local function floorOne(t: any, minPx: number)
 	end
 end
 
-local function watchText(t: any)
+local function watchText(t: any, gui: Instance?)
 	if t:GetAttribute("FloorWatch") then
 		return
 	end
@@ -661,16 +672,20 @@ local function watchText(t: any)
 			return
 		end
 		t:SetAttribute("BaseTextSize", t.TextSize)
-		floorOne(t, Theme.minTextPx())
+		local minPx = if gui and gui:GetAttribute("TextFloorKind") == "hud" then Theme.hudMinTextPx() else Theme.minTextPx()
+		floorOne(t, minPx)
 	end)
 end
 
 function Theme.textFloor(gui: Instance)
+	local function getMin(): number
+		return if gui:GetAttribute("TextFloorKind") == "hud" then Theme.hudMinTextPx() else Theme.minTextPx()
+	end
 	local function refreshAll()
 		if not gui.Parent then
 			return
 		end
-		local minPx = Theme.minTextPx()
+		local minPx = getMin()
 		for _, d in gui:GetDescendants() do
 			if isText(d) then
 				floorOne(d, minPx)
@@ -682,8 +697,8 @@ function Theme.textFloor(gui: Instance)
 			-- deferred: the creator usually sets TextSize / parents the rest of the row right after
 			task.defer(function()
 				if d.Parent then
-					watchText(d)
-					floorOne(d, Theme.minTextPx())
+					watchText(d, gui)
+					floorOne(d, getMin())
 				end
 			end)
 		end
@@ -695,7 +710,7 @@ function Theme.textFloor(gui: Instance)
 	task.defer(function()
 		for _, d in gui:GetDescendants() do
 			if isText(d) then
-				watchText(d)
+				watchText(d, gui)
 			end
 		end
 		refreshAll()

@@ -18,6 +18,16 @@ local Variants = {}
 -- nil-valued keys are written as "clear" (attribute removed -> the code's default is used).
 -- A preset may also carry `sounds = { SoundKey = { [layerIndex] = "rbxassetid://..." } }` to swap sound layers.
 local GROUPS = {
+	{
+		-- client/UI/HudLayout + HudSkin + HUD.rebuild: 3 in-mission HUD presets (A = default in live games)
+		name = "HUD",
+		keys = { "Feel_HudPreset" },
+		presets = {
+			{ name = "A Bold (bigger text, taller banners, larger margins)", set = {} },
+			{ name = "B Clean (big top objective, smaller compass, compact chips)", set = { Feel_HudPreset = "clean" } },
+			{ name = "C Frame (docked solid top + bottom edge bars, high contrast)", set = { Feel_HudPreset = "frame" } },
+		},
+	},
 	-- 2026-11-15 playtest: framing, prone twist, explosions, UI scale, regen, damage fx, uplink arm, call-in cards, enemy aim,
 	-- carry, squad tags, pop sound, shot sound path, prone legs, stim sprint, pad interact, grenade throw, call-in punch,
 	-- armour tag, skiff, player splash, mission time, left shoulder, stim pose, perf saver, ammo pack, colour grade picked

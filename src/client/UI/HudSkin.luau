@@ -36,6 +36,16 @@ local HudSkin = {}
 local ATTR = "Feel_UiStyle"
 HudSkin.ATTR = ATTR
 
+local PRESET_ATTR = "Feel_HudPreset"
+HudSkin.PRESET_ATTR = PRESET_ATTR
+
+local PRESET_TO_ID = { clean = "clean", frame = "frame" }
+
+function HudSkin.preset(): string
+	local v = workspace:GetAttribute(PRESET_ATTR)
+	return (type(v) == "string" and PRESET_TO_ID[v]) or "bold"
+end
+
 local function hex(s: string): Color3
 	return Color3.fromHex(s)
 end
@@ -183,7 +193,16 @@ end
 function HudSkin.color(role: string): Color3
 	local s = HudSkin.current()
 	local set = if s then s.colors else OLD
-	return set[role] or set.text
+	local c = set[role] or set.text
+	if s and HudSkin.preset() == "frame" then
+		-- high-contrast frame preset: brighten muted/secondary text and keep text pure
+		if role == "text" and s.id ~= "visor" then
+			return Color3.new(1, 1, 1)
+		elseif role == "dim" then
+			return c:Lerp(set.text, 0.45)
+		end
+	end
+	return c
 end
 
 function HudSkin.font(role: string?): Font
@@ -216,8 +235,9 @@ function HudSkin.styleText(l: any, role: string?)
 	end
 	l.FontFace = s.fonts[role or "label"] or s.fonts.label
 	local st = strokeOf(l)
-	-- strokes cost a draw pass; phones skip them on small text (the soft shadow / plain text stays readable)
-	local small = isTouch() and (l.TextSize or 14) < 13
+	local preset = HudSkin.preset()
+	-- strokes cost a draw pass; phones skip them only on truly tiny text unless in high-contrast frame mode
+	local small = isTouch() and (l.TextSize or 14) < 12 and preset ~= "frame"
 	if s.stroke and not small then
 		if not st then
 			st = Instance.new("UIStroke")
@@ -226,9 +246,9 @@ function HudSkin.styleText(l: any, role: string?)
 			st.Parent = l
 		end
 		local stroke = st :: UIStroke
-		stroke.Thickness = s.stroke.thickness
+		stroke.Thickness = if preset == "frame" then math.max(s.stroke.thickness, 2) else s.stroke.thickness
 		stroke.Color = s.stroke.color
-		stroke.Transparency = s.stroke.transparency
+		stroke.Transparency = if preset == "frame" then math.min(s.stroke.transparency, 0.2) else s.stroke.transparency
 		l.TextStrokeTransparency = 1
 	else
 		if st then
@@ -328,6 +348,7 @@ end
 -- with the old HUD). props = any Frame property (Parent last).
 function HudSkin.panel(kind: string?, props: { [string]: any }?): Frame
 	local s = HudSkin.current()
+	local preset = HudSkin.preset()
 	local k = kind or "auto"
 	if k == "auto" then
 		k = if s then s.panelKind else "none"
@@ -336,15 +357,60 @@ function HudSkin.panel(kind: string?, props: { [string]: any }?): Frame
 	f.BorderSizePixel = 0
 	f.BackgroundTransparency = 1
 	f.BackgroundColor3 = Color3.new(0, 0, 0)
-	if k == "fade" then
+	if k == "banner" then
+		-- strong backing plate for banners (bold / clean)
+		f.BackgroundColor3 = if s and s.id == "glass" then HudSkin.SKINS.glass.colors.panel else hex("070B12")
+		f.BackgroundTransparency = if preset == "bold" then 0.16 else 0.24
+		if s and s.id == "glass" then
+			local cr = Instance.new("UICorner")
+			cr.CornerRadius = UDim.new(0, 10)
+			cr.Parent = f
+		end
+		local st = Instance.new("UIStroke")
+		st.Name = "SkinEdge"
+		st.Color = if s then s.colors.line else Color3.new(1, 1, 1)
+		st.Transparency = if preset == "frame" then 0.35 elseif preset == "bold" then 0.6 else 0.78
+		st.Thickness = if preset == "bold" then 1.5 else 1
+		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		st.Parent = f
+	elseif k == "chip" then
+		-- compact pill/chip backing for Clean preset
+		f.BackgroundColor3 = if s and s.id == "glass" then HudSkin.SKINS.glass.colors.panel else hex("0B111A")
+		f.BackgroundTransparency = 0.22
+		local cr = Instance.new("UICorner")
+		cr.CornerRadius = UDim.new(0.5, 0)
+		cr.Parent = f
+		local st = Instance.new("UIStroke")
+		st.Name = "SkinEdge"
+		st.Color = if s then s.colors.line else Color3.new(1, 1, 1)
+		st.Transparency = 0.72
+		st.Thickness = 1
+		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		st.Parent = f
+	elseif preset == "frame" and k ~= "none" then
+		-- high-contrast solid backing for Frame preset
+		f.BackgroundColor3 = hex("06090F")
+		f.BackgroundTransparency = 0.1
+		local st = Instance.new("UIStroke")
+		st.Name = "SkinEdge"
+		st.Color = if s then s.colors.line else Color3.new(1, 1, 1)
+		st.Transparency = 0.42
+		st.Thickness = 1.5
+		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		st.Parent = f
+	elseif k == "fade" then
 		f.BackgroundTransparency = 0
-		gradient(f, NumberSequence.new(0.35, 1), 0).Name = "SkinFade"
+		local a0 = if preset == "bold" then 0.14 else 0.35
+		local a1 = if preset == "bold" then 0.88 else 1
+		gradient(f, NumberSequence.new(a0, a1), 0).Name = "SkinFade"
 	elseif k == "glass" then
 		f.BackgroundTransparency = 0
 		f.BackgroundColor3 = HudSkin.SKINS.glass.colors.panel
+		local a0 = if preset == "bold" then 0.1 else 0.25
+		local a1 = if preset == "bold" then 0.34 else 0.55
 		gradient(
 			f,
-			NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.25), NumberSequenceKeypoint.new(1, 0.55) }),
+			NumberSequence.new({ NumberSequenceKeypoint.new(0, a0), NumberSequenceKeypoint.new(1, a1) }),
 			90
 		).Name = "SkinGlass"
 		local cr = Instance.new("UICorner")
@@ -353,8 +419,8 @@ function HudSkin.panel(kind: string?, props: { [string]: any }?): Frame
 		local st = Instance.new("UIStroke")
 		st.Name = "SkinEdge"
 		st.Color = Color3.new(1, 1, 1)
-		st.Transparency = 0.82
-		st.Thickness = 1
+		st.Transparency = if preset == "bold" then 0.62 else 0.82
+		st.Thickness = if preset == "bold" then 1.5 else 1
 		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		st.Parent = f
 		-- in a Folder so a UIListLayout inside the panel ignores it
@@ -365,13 +431,13 @@ function HudSkin.panel(kind: string?, props: { [string]: any }?): Frame
 		hi.Name = "SkinHighlight"
 		hi.BorderSizePixel = 0
 		hi.BackgroundColor3 = Color3.new(1, 1, 1)
-		hi.BackgroundTransparency = 0.88
+		hi.BackgroundTransparency = if preset == "bold" then 0.78 else 0.88
 		hi.Position = UDim2.fromOffset(6, 1)
 		hi.Size = UDim2.new(1, -12, 0, 1)
 		hi.Parent = deco
 	elseif k == "scan" then
-		f.BackgroundTransparency = 0
-		f.BackgroundColor3 = HudSkin.SKINS.visor.colors.panel
+		f.BackgroundTransparency = if preset == "bold" then 0.45 else 0
+		f.BackgroundColor3 = if preset == "bold" then hex("041815") else HudSkin.SKINS.visor.colors.panel
 		gradient(f, scanSeq(), 90).Name = "SkinScan"
 	end
 	f:SetAttribute("SkinPanel", k)
