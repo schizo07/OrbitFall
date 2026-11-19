@@ -93,7 +93,7 @@ local function tune(name: string, default: any): any
 	local v = Workspace:GetAttribute("PoseTune_" .. name)
 	return if v ~= nil and typeof(v) == typeof(default) then v else default
 end
-local CULL_DIST = 220
+local CULL_DIST = 100
 
 -- wrist position relative to what the hand holds (gun space)
 local R_WRIST = Vector3.new(0.05, 0.28, 0.12)
@@ -265,24 +265,28 @@ local function findGun(c: Model): (Instance?, BasePart?)
 	return nil, nil
 end
 
-local function release(r: Rig)
-	if not r.active then
-		return
-	end
+local function clearC0(r: Rig)
 	r.active = false
 	setC0(r.waist, r.waistBase)
 	if r.neck and r.neckBase then
 		setC0(r.neck, r.neckBase)
 	end
+	if r.grip and r.grip.Parent and r.gripBase then
+		r.grip.C0 = r.gripBase
+	end
+	r.grip, r.gripBase, r.gripHandle = nil, nil, nil
+end
+
+local function release(r: Rig)
+	if not r.active then
+		return
+	end
+	clearC0(r)
 	for _, arm in { r.R, r.L } do
 		arm.sh.Transform = CF0
 		arm.el.Transform = CF0
 		arm.wr.Transform = CF0
 	end
-	if r.grip and r.grip.Parent and r.gripBase then
-		r.grip.C0 = r.gripBase
-	end
-	r.grip, r.gripBase, r.gripHandle = nil, nil, nil
 end
 
 local function blocked(r: Rig, isLocal: boolean): boolean
@@ -442,15 +446,7 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 	-- haul objective: CellCarry owns the pose while carrying; restore C0s without clobbering CellCarry's Transforms
 	if CellCarry.ownsPose(r.c) then
 		if r.active then
-			r.active = false
-			setC0(r.waist, r.waistBase)
-			if r.neck and r.neckBase then
-				setC0(r.neck, r.neckBase)
-			end
-			if r.grip and r.grip.Parent and r.gripBase then
-				r.grip.C0 = r.gripBase
-			end
-			r.grip, r.gripBase, r.gripHandle = nil, nil, nil
+			clearC0(r)
 		end
 		r.pitch += (0 - r.pitch) * (1 - exp(-dt * 10))
 		r.low, r.ads = 0, 0
@@ -674,7 +670,13 @@ local function frame(dt: number)
 		local rr = r :: Rig
 		local isLocal = plr == player
 		if not isLocal and (rr.hrp.Position - camPos).Magnitude > CULL_DIST then
-			release(rr)
+			if CellCarry.ownsPose(rr.c) then
+				if rr.active then
+					clearC0(rr)
+				end
+			else
+				release(rr)
+			end
 			continue
 		end
 		local ok, err = pcall(step, rr, dt, isLocal, cam)

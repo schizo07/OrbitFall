@@ -164,7 +164,7 @@ local function groundHit(p: Vector3, from: number): RaycastResult?
 end
 local MAX_TILT = math.rad(40) -- foot follows the slope up to this angle
 local CORNERS = { { -0.8, -0.8 }, { 0.8, -0.8 }, { -0.8, 0.8 }, { 0.8, 0.8 } }
--- Studio A/B Feel_Perf ("PERF": "touch" = phones only, "all" = everywhere): heel and toe only (6 rays a frame, not 10)
+-- Touch devices (plus Studio A/B Feel_Perf): heel and toe only (6 rays a frame, not 10)
 local CORNERS_PERF = { { 0, -0.8 }, { 0, 0.8 } }
 local IS_STUDIO = RunService:IsStudio()
 local UserInputService = game:GetService("UserInputService")
@@ -207,13 +207,10 @@ local function step(dt: number)
 	end
 	lastOn = on
 	refreshFilter(r.char)
-	local corners = CORNERS
-	if IS_STUDIO then
-		local perf = workspace:GetAttribute("Feel_Perf")
-		if perf == "all" or (perf == "touch" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) then
-			corners = CORNERS_PERF
-		end
-	end
+	local touchOnly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	local perfMode = if IS_STUDIO then workspace:GetAttribute("Feel_Perf") else nil
+	local usePerf = if perfMode == "all" then true elseif perfMode == "off" then false else touchOnly
+	local corners = if usePerf then CORNERS_PERF else CORNERS
 
 	local ltCF = child(r.root.CFrame, r.rootJ)
 	local castFrom = r.root.Position.Y -- rays start at hip height: anything higher is a wall, not ground

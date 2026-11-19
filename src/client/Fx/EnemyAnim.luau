@@ -1186,12 +1186,13 @@ local function stepBody()
 	local camLook = cam.CFrame.LookVector
 	local now = os.clock()
 	local touchOnly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-	-- PERF (Studio A/B Feel_Perf "touch" = phones only, "all" = everywhere): the low-quality 100-stud range also covers
-	-- quality == 0.5 (phones on Automatic graphics), and at most HL_MAX_PERF hit Highlights at once
+	-- PERF (live touch devices + Studio A/B Feel_Perf "touch" / "all" / "off"): low-quality / touch devices cap at 100
+	-- studs and HL_MAX_PERF hit Highlights; desktop runs full IK within 80 studs and every 3rd frame from 80 to 200.
 	local perfMode = if IS_STUDIO then Workspace:GetAttribute("Feel_Perf") else nil
-	local perf = perfMode == "all" or (perfMode == "touch" and touchOnly)
-	hlCap = if perf then HL_MAX_PERF else HL_MAX
-	local maxDist = if quality < 0.5 or (perf and quality <= 0.5) then 100 else 160
+	local perf = if perfMode == "all" then true elseif perfMode == "off" then false else touchOnly
+	hlCap = if perf or quality <= 0.5 then HL_MAX_PERF else HL_MAX
+	local fullDist = 80
+	local maxDist = if quality < 0.5 or (perf and quality <= 0.5) then 100 else 200
 	-- perf saver: on by default for phones / tablets (2026-11-15). Studio A/B Feel_PerfSaver "off" / "all" override it.
 	local mode = if IS_STUDIO then Workspace:GetAttribute("Feel_PerfSaver") else nil
 	local saver = mode == "all" or (mode ~= "off" and touchOnly)
@@ -1212,8 +1213,15 @@ local function stepBody()
 		local pos = root.Position
 		local toCam = pos - camPos
 		local d = toCam.Magnitude
-		if d > maxDist + e.radius then
-			-- out of budget: forget the motion so we do not see one huge step on re-entry
+		local offscreen = false
+		if d <= maxDist + e.radius and d > e.radius then
+			local cosA = toCam:Dot(camLook) / d
+			if cosA < cos(min(2.0, 1.1 + e.radius / d)) then
+				offscreen = true
+			end
+		end
+		if d > maxDist + e.radius or offscreen then
+			-- out of budget or offscreen: forget the motion so we do not see one huge step on re-entry
 			e.lastPos = pos
 			e.lastMoveT = now
 			e.lastUpd = now
@@ -1222,17 +1230,14 @@ local function stepBody()
 			continue
 		end
 		if saver then
-			-- every 2nd frame beyond 35 studs, every 4th beyond 70, staggered by enemy slot (lastUpd is only set when
+			-- every 2nd frame beyond 35 studs, every 4th beyond 80, staggered by enemy slot (lastUpd is only set when
 			-- posed, so dt covers the skipped frames)
-			if d > 35 and (frame + e.slot) % (if d > 70 then 4 else 2) ~= 0 then
+			if d > 35 and (frame + e.slot) % (if d > fullDist then 4 else 2) ~= 0 then
 				continue
 			end
-		else
-			-- far ones update at 15 Hz
-			if d > 70 and now < e.nextT then
-				continue
-			end
-			e.nextT = now + (if d > 70 then 1 / 15 else 0)
+		elseif d > fullDist and (frame + e.slot) % 3 ~= 0 then
+			-- 80..200 studs: reduced-rate update (every 3rd frame, staggered by enemy slot)
+			continue
 		end
 
 		-- rigged but motors not all there yet (streaming): keep looking for a while
@@ -1299,18 +1304,6 @@ local function stepBody()
 			if drive >= 0.25 then
 				e.phase += rate * dt
 			end
-		end
-
-		-- off screen: motion tracking only
-		local offscreen = false
-		if d > e.radius then
-			local cosA = toCam:Dot(camLook) / d
-			if cosA < cos(min(2.0, 1.1 + e.radius / d)) then
-				offscreen = true
-			end
-		end
-		if offscreen then
-			continue
 		end
 
 		local t = now + e.seed
