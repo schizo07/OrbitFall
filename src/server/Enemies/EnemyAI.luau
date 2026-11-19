@@ -75,8 +75,12 @@ local tmap: { [any]: Target } = {}
 local snapshot: { any } = {}
 local lastFilter = 0
 local lastScreech = 0
-local beat = 0 -- Heartbeat counter for the perf saver's 30 Hz far-enemy moves
-local SAVER_FAR = 120 -- studs from every alive player
+local SAVER_NEAR = 60 -- studs: full-rate PivotTo + server leg CFrame writes within this range
+local SAVER_MID = 150 -- studs: 60..150 updates at SAVER_MID_HZ; beyond updates at SAVER_FAR_HZ
+local SAVER_MID_HZ = 20
+local SAVER_FAR_HZ = 8
+local SAVER_MID_DT = 1 / SAVER_MID_HZ
+local SAVER_FAR_DT = 1 / SAVER_FAR_HZ
 -- Studio A/B Feel_Perf (Variants "PERF", mirrored): non-fodder re-snap to the ground every PERF_SNAP studs instead of 0.25
 local perfOn = false
 local PERF_SNAP = 0.9
@@ -2176,14 +2180,22 @@ local function update(e: any, dt: number, now: number)
 		cf *= e.tumble -- blast tumble (ACTIVE.fling)
 	end
 	local last = e.lastCF
-	if not last or moving or e.windupV > 0.01 or e.air > 0 or e.tumble ~= nil or (last.Position - pos).Magnitude > 0.01 or math.abs(wrapPi(e.lastYaw - pivotYaw)) > 0.002 then
-		-- perf saver: far enemies skip the model write every 2nd frame (lastCF / lastYaw stay stale, so the next frame writes)
-		if not e.skipMove then
+	local needPoseReset = e.legsAnimated and not e.rig.mesh and (not e.close or (not moving and e.windupV <= 0.01))
+	if not last or moving or e.windupV > 0.01 or e.air > 0 or e.tumble ~= nil or needPoseReset or (last.Position - pos).Magnitude > 0.01 or math.abs(wrapPi(e.lastYaw - pivotYaw)) > 0.002 then
+		-- perf saver: 60..150 studs update at ~20 Hz, >150 studs at ~8 Hz; lastCF / lastYaw stay stale until a non-skipped frame writes
+		if not e.skipMove or not last then
 			e.model:PivotTo(cf)
 			e.lastCF = cf
 			e.lastYaw = pivotYaw
-			if (moving or e.windupV > 0.01) and e.near then
-				EnemyModels.animate(e.rig, cf, e.animT, move, e.windupV)
+			if not e.rig.mesh then
+				if (moving or e.windupV > 0.01) and e.close then
+					EnemyModels.animate(e.rig, cf, e.animT, move, e.windupV)
+					e.legsAnimated = true
+				elseif e.legsAnimated then
+					-- reset legs to neutral once when stopping or leaving 60 studs
+					EnemyModels.animate(e.rig, cf, 0, 0, 0)
+					e.legsAnimated = false
+				end
 			end
 		end
 		-- footsteps for the big ones
@@ -2292,39 +2304,50 @@ stepBody = function(dt: number, enemies: { [number]: any })
 		end
 	end
 
-	-- perf saver (Studio A/B Feel_PerfSaver, "touch" or "all"; the server can't tell who is on touch, so both count):
-	-- enemies more than SAVER_FAR studs from every player are moved (PivotTo + leg parts) on every 2nd Heartbeat only
-	local saver = false
+	-- perf saver: active by default on live servers; Studio Feel_PerfSaver ("off" / "touch" / "all") overrides it.
+	-- Within 60 studs: every frame; 60..150 studs: ~20 Hz; beyond: ~8 Hz.
+	local saverMode = if IS_STUDIO then workspace:GetAttribute("Feel_PerfSaver") else nil
+	local saver = saverMode ~= "off" and saverMode ~= false
 	if IS_STUDIO then
-		local mode = workspace:GetAttribute("Feel_PerfSaver")
-		saver = mode == "touch" or mode == "all"
 		local perf = workspace:GetAttribute("Feel_Perf")
 		perfOn = perf == "touch" or perf == "all"
 		local tm = workspace:GetAttribute("Feel_EnemyTactics")
 		tacMode = if tm == "strong" or tm == "off" then tm else "on"
 	end
-	beat += 1
 
 	for _, e in snapshot do
 		if e.alive then
-			-- only animate things anywhere near a player
-			local near = false
-			local far = saver
+			local minDsq = math.huge
 			for _, t in targets do
-				local d = t.pos - e.pos
-				local dsq = d.X * d.X + d.Z * d.Z
-				if dsq < 230 * 230 then
-					near = true
-				end
-				if far and dsq < SAVER_FAR * SAVER_FAR then
-					far = false
-				end
-				if near and not far then
-					break
+				local dx = t.pos.X - e.pos.X
+				local dz = t.pos.Z - e.pos.Z
+				local dsq = dx * dx + dz * dz
+				if dsq < minDsq then
+					minDsq = dsq
 				end
 			end
-			e.near = near
-			e.skipMove = far and (beat + (tonumber(e.id) or 0)) % 2 == 1
+			e.near = minDsq < 230 * 230
+			local close = not saver or minDsq <= SAVER_NEAR * SAVER_NEAR
+			e.close = close
+			if close then
+				e.skipMove = false
+				e.moveAccum = 0
+			else
+				local interval = if minDsq <= SAVER_MID * SAVER_MID then SAVER_MID_DT else SAVER_FAR_DT
+				local acc = e.moveAccum
+				if acc == nil then
+					-- stagger initial phase across enemies so throttled PivotTo calls spread evenly across frames
+					acc = ((tonumber(e.id) or 0) % 8) * (interval / 8)
+				end
+				acc += dt
+				if acc >= interval then
+					e.skipMove = false
+					e.moveAccum = acc % interval
+				else
+					e.skipMove = true
+					e.moveAccum = acc
+				end
+			end
 			update(e, dt, now)
 		end
 	end

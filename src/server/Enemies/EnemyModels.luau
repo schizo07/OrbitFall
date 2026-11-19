@@ -930,7 +930,11 @@ end
 -- Procedural animation --------------------------------------------------------------
 -- t: accumulated walk phase (advance by dt * speed * k), move: 0..1 how fast it is going,
 -- windup: 0..1 attack wind-up (raises front legs on big walkers).
+-- Skips MeshRig models because client/Fx/EnemyAnim.luau animates them locally.
 function EnemyModels.animate(rig: Rig, rootCF: CFrame, t: number, move: number, windup: number)
+	if rig.mesh then
+		return
+	end
 	for _, e in rig.legs do
 		local ang = math.sin(t + e.phase) * e.amp * move + e.lift * windup
 		local rot = if e.roll then CFrame.Angles(0, 0, ang) else CFrame.Angles(ang, 0, 0)
