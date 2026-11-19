@@ -52,6 +52,7 @@ local ops = 0
 local lights = 0
 local LIGHT_CAP = 10
 local rnd = Random.new(7311)
+local biomeName = "desert"
 local groundFn: (number, number) -> number = function(_x: number, _z: number): number
 	return 0
 end
@@ -301,8 +302,83 @@ local function crate(parent: Instance, pos: Vector3, yaw: number, w: number, h: 
 	part(parent, Vector3.new(w + 0.12, h * 0.2, d + 0.12), cf * CFrame.new(0, h * 0.18, 0), HAZ, false)
 end
 
--- a cluster of rounded rocks (cover)
+local DESERT_ROCK_KEYS = { "desert_boulder_a", "desert_boulder_b", "desert_boulder_a" }
+
+local function placeMesh(parent: Instance, key: string, x: number, z: number, scale: number, tint: Color3, collide: boolean, maxSlope: number?): (Model?, boolean?)
+	local size = Assets.size(key)
+	local r = (if size then math.max(size.X, size.Z) else 6) * scale * 0.4
+	local lo, hi = lowAt(x, z, r), highAt(x, z, r)
+	local lim = math.tan(math.rad(maxSlope or 45)) * 2 * math.max(r, 0.5)
+	if hi - lo > lim then
+		return nil, true
+	end
+	local m = Assets.get(key, { anchored = true })
+	if not m then
+		return nil
+	end
+	if scale ~= 1 then
+		m:ScaleTo(scale)
+	end
+	local h = (if size then size.Y else 6) * scale
+	local sink = rnd:NextNumber(0.12, 0.2)
+	m:PivotTo(CFrame.new(x, lo - h * sink, z) * CFrame.Angles(0, rnd:NextNumber(0, TAU), 0))
+	for _, p in m:GetDescendants() do
+		if p:IsA("BasePart") then
+			p.Anchored = true
+			p.CanCollide = collide
+			p.CanQuery = collide
+			p.CanTouch = false
+			p.Color = tint
+			p.Material = Enum.Material.Sandstone
+			p:SetAttribute("KeepMat", true)
+			count += 1
+		end
+	end
+	m.Parent = parent
+	ops += 1
+	if ops >= 40 then
+		ops = 0
+		task.wait()
+	end
+	return m
+end
+
+-- a cluster of rounded rocks (cover); in the desert, uses sandstone rock meshes with a rounded boulder fallback
 local function rockCluster(parent: Instance, c: Vector3, radius: number, n: number, color: Color3)
+	if biomeName == "desert" then
+		for i = 1, n do
+			local a = rnd:NextNumber(0, TAU)
+			local d = if i == 1 then 0 else rnd:NextNumber(radius * 0.35, radius)
+			local x, z = c.X + math.cos(a) * d, c.Z + math.sin(a) * d
+			local w = rnd:NextNumber(4, 8.5)
+			local h = w * rnd:NextNumber(0.55, 0.85)
+			local k = DESERT_ROCK_KEYS[rnd:NextInteger(1, #DESERT_ROCK_KEYS)]
+			local sz = Assets.size(k)
+			local scale = w / (if sz then math.max(sz.X, sz.Z) else 9)
+			local col = jit(color, 0.08)
+			local m, skipped = placeMesh(parent, k, x, z, scale, col, true, 45)
+			if not m and not skipped then
+				local y = lowAt(x, z, w * 0.4) + h * 0.32
+				local b = ball(parent, Vector3.new(w, h, w * rnd:NextNumber(0.8, 1.1)), CFrame.new(x, y, z) * CFrame.Angles(0, rnd:NextNumber(0, TAU), 0), col, true, { Material = Enum.Material.Sandstone })
+				b:SetAttribute("KeepMat", true)
+			end
+		end
+		-- one taller sandstone outcrop for cover
+		local a = rnd:NextNumber(0, TAU)
+		local x, z = c.X + math.cos(a) * radius * 0.5, c.Z + math.sin(a) * radius * 0.5
+		local ph = rnd:NextNumber(7, 10)
+		local sz = Assets.size("desert_butte")
+		local scale = ph / (if sz then sz.Y else 10.3)
+		local col = jit(color, 0.06)
+		local m, skipped = placeMesh(parent, "desert_butte", x, z, scale, col, true, 45)
+		if not m and not skipped then
+			local dia = ph * 0.72
+			local base = lowAt(x, z, dia * 0.4)
+			local b = ball(parent, Vector3.one * dia, CFrame.new(x, base + dia * 0.25, z), col, true, { Material = Enum.Material.Sandstone })
+			b:SetAttribute("KeepMat", true)
+		end
+		return
+	end
 	for i = 1, n do
 		local a = rnd:NextNumber(0, TAU)
 		local d = if i == 1 then 0 else rnd:NextNumber(radius * 0.35, radius)
@@ -1340,6 +1416,7 @@ function Places.build(map: any, parent: Instance, objective: string?): any
 			inst = inst and inst.Parent
 		end
 	end
+	biomeName = biome
 	local look = BIOME_LOOK[biome] or BIOME_LOOK.desert
 
 	local root = folder(parent, "Places")

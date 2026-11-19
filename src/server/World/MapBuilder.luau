@@ -1364,35 +1364,70 @@ local function pebble(parent: Instance, x: number, z: number)
 end
 
 -- Broken wall: a ragged line of round stone drums (varied heights, gaps, a ball cap on the tall ones) plus fallen rubble.
--- Never one big rectangle. Drums taller than 3 studs collide (cover, fat enough that nobody slips through); the rest is
+-- In the desert, uses sandstone rock meshes along the same line (with a rounded boulder fallback) instead of drums.
+-- Never one big rectangle. Pieces taller than 3 studs collide (cover, fat enough that nobody slips through); the rest is
 -- walk-through rubble.
 local function ruinedWall(parent: Instance, x: number, z: number, yaw: number, len: number)
-	local col = B.wall[rng:NextInteger(1, #B.wall)]:Lerp(B.rocks[1], 0.4)
 	local base = CFrame.new(x, 0, z) * CFrame.Angles(0, yaw, 0)
 	local half = math.min(len, 14) / 2
 	local cursor = -half
-	while cursor < half do
-		local seg = rng:NextNumber(2.6, 4.4)
-		if rng:NextNumber() > 0.14 then
-			local h = ({ 1.6, 2.6, 4, 5.5, 7.5 })[rng:NextInteger(1, 5)] * rng:NextNumber(0.8, 1.15)
-			local dia = rng:NextNumber(2.4, 3.4)
-			local wp = (base * CFrame.new(rng:NextNumber(-0.4, 0.4), 0, cursor + seg / 2)).Position
-			local gy = lowestGround(wp.X, wp.Z, seg * 0.5) -- lowest under the drum: no end hovers on a slope
-			local solid = h >= 3
-			local tilt = CFrame.Angles(math.rad(rng:NextNumber(-4, 4)), 0, math.rad(rng:NextNumber(-5, 5)))
-			local cf = CFrame.new(wp.X, gy + h / 2 - 0.8, wp.Z) * tilt
-			cyl(parent, dia, h + 1.6, cf, jitter(col, 0.08), Enum.Material.Concrete, { CanCollide = solid })
-			if h >= 3.6 then
-				blob(parent, Vector3.one * dia * 0.96, cf * CFrame.new(0, h / 2 + 0.8 - dia * 0.2, 0), jitter(col, 0.06), Enum.Material.Concrete, solid)
+	if biomeName == "desert" then
+		while cursor < half do
+			local seg = rng:NextNumber(3.4, 5.0)
+			if rng:NextNumber() > 0.14 then
+				local h = ({ 2.2, 3.2, 4.4, 5.8, 7.2 })[rng:NextInteger(1, 5)] * rng:NextNumber(0.85, 1.15)
+				local wp = (base * CFrame.new(rng:NextNumber(-0.5, 0.5), 0, cursor + seg / 2)).Position
+				local solid = h >= 3
+				local k = if not solid
+					then (if rng:NextNumber() < 0.5 then "desert_pebbles" else "desert_boulder_b")
+					elseif h >= 5.5 and rng:NextNumber() < 0.35 then "desert_butte"
+					else DESERT_ROCK_KEYS[rng:NextInteger(1, #DESERT_ROCK_KEYS)]
+				local sz = Assets.size(k)
+				local m, skipped = placeMesh(parent, k, wp.X, wp.Z, {
+					scale = h / (if sz then sz.Y else 6.5),
+					yaw = yaw + rng:NextNumber(-0.45, 0.45),
+					tint = rockTint(),
+					material = B.rockMat,
+					paint = keepMat,
+					collide = solid,
+					align = 0.7,
+					sink = rng:NextNumber(0.14, 0.22),
+					maxSlope = 45,
+				})
+				if not m and not skipped then
+					local dia = math.clamp(h * 1.15, 2.8, 7.5)
+					local gy = lowestGround(wp.X, wp.Z, dia * 0.4)
+					local b = blob(parent, Vector3.one * dia, CFrame.new(wp.X, gy + dia * 0.18, wp.Z), rockTint(), B.rockMat, solid)
+					keepMat(b)
+				end
 			end
-			if rng:NextNumber() < 0.45 then
-				-- a shorter drum beside it: uneven crest instead of a straight top
-				local h2 = h * rng:NextNumber(0.35, 0.7)
-				local d2 = dia * rng:NextNumber(0.7, 0.9)
-				cyl(parent, d2, h2 + 1, CFrame.new((cf * CFrame.new(dia * 0.9, 0, rng:NextNumber(-0.6, 0.6))).Position) * CFrame.new(0, h2 / 2 - h / 2 - 0.3, 0), jitter(col, 0.1), Enum.Material.Concrete, { CanCollide = false, CanQuery = false })
-			end
+			cursor += seg
 		end
-		cursor += seg
+	else
+		local col = B.wall[rng:NextInteger(1, #B.wall)]:Lerp(B.rocks[1], 0.4)
+		while cursor < half do
+			local seg = rng:NextNumber(2.6, 4.4)
+			if rng:NextNumber() > 0.14 then
+				local h = ({ 1.6, 2.6, 4, 5.5, 7.5 })[rng:NextInteger(1, 5)] * rng:NextNumber(0.8, 1.15)
+				local dia = rng:NextNumber(2.4, 3.4)
+				local wp = (base * CFrame.new(rng:NextNumber(-0.4, 0.4), 0, cursor + seg / 2)).Position
+				local gy = lowestGround(wp.X, wp.Z, seg * 0.5) -- lowest under the drum: no end hovers on a slope
+				local solid = h >= 3
+				local tilt = CFrame.Angles(math.rad(rng:NextNumber(-4, 4)), 0, math.rad(rng:NextNumber(-5, 5)))
+				local cf = CFrame.new(wp.X, gy + h / 2 - 0.8, wp.Z) * tilt
+				cyl(parent, dia, h + 1.6, cf, jitter(col, 0.08), Enum.Material.Concrete, { CanCollide = solid })
+				if h >= 3.6 then
+					blob(parent, Vector3.one * dia * 0.96, cf * CFrame.new(0, h / 2 + 0.8 - dia * 0.2, 0), jitter(col, 0.06), Enum.Material.Concrete, solid)
+				end
+				if rng:NextNumber() < 0.45 then
+					-- a shorter drum beside it: uneven crest instead of a straight top
+					local h2 = h * rng:NextNumber(0.35, 0.7)
+					local d2 = dia * rng:NextNumber(0.7, 0.9)
+					cyl(parent, d2, h2 + 1, CFrame.new((cf * CFrame.new(dia * 0.9, 0, rng:NextNumber(-0.6, 0.6))).Position) * CFrame.new(0, h2 / 2 - h / 2 - 0.3, 0), jitter(col, 0.1), Enum.Material.Concrete, { CanCollide = false, CanQuery = false })
+				end
+			end
+			cursor += seg
+		end
 	end
 	for _ = 1, 2 do -- fallen chunks at the ends
 		local e = (base * CFrame.new(rng:NextNumber(-1.5, 1.5), 0, (if rng:NextNumber() < 0.5 then -1 else 1) * (half + rng:NextNumber(0.5, 2.5)))).Position
