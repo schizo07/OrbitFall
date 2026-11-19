@@ -26,7 +26,7 @@ local POOL_LOW = 4
 
 type Look = { color: Color3, fill: number, outline: number, alertFill: number, alertOutline: number }
 local LOOKS: { [string]: Look } = {
-	COG = { color = Color3.fromRGB(255, 120, 70), fill = 0.86, outline = 0.5, alertFill = 0.76, alertOutline = 0.18 },
+	COG = { color = Color3.fromRGB(255, 172, 112), fill = 0.80, outline = 0.34, alertFill = 0.68, alertOutline = 0.10 },
 	BROOD = { color = Color3.fromRGB(140, 255, 90), fill = 0.86, outline = 0.5, alertFill = 0.76, alertOutline = 0.18 },
 	LUMEN = { color = Color3.fromRGB(190, 160, 255), fill = 0.88, outline = 0.55, alertFill = 0.78, alertOutline = 0.22 },
 }
