@@ -3,6 +3,10 @@ local ModelShare = require(script.Parent.Parent.ModelShare)
 
 local POD_FALL = 1.6
 local CRATE_LIFETIME = 90
+local MAX_TAKES = 4
+local SMOOTH_MAT = Enum.Material.SmoothPlastic
+local NEON_MAT = Enum.Material.Neon
+local DIM_COLOR = Color3.fromRGB(30, 38, 54)
 
 -- direction each petal of callin_supply_pod folds out to (model frame, front = -Z)
 local PETAL_OUT = {
@@ -78,15 +82,15 @@ return function(ctx)
 		})
 		body.Parent = model
 		part({
-			Name = "Lid", Size = Vector3.new(4.6, 0.35, 3.4), Material = Enum.Material.SmoothPlastic,
-			Color = Color3.fromRGB(30, 38, 54), CFrame = cf * CFrame.new(0, 1.4, 0), CanCollide = false,
+			Name = "Lid", Size = Vector3.new(4.6, 0.35, 3.4), Material = SMOOTH_MAT,
+			Color = DIM_COLOR, CFrame = cf * CFrame.new(0, 1.4, 0), CanCollide = false,
 		}).Parent = model
 		part({
-			Name = "Stripe", Size = Vector3.new(4.5, 0.5, 0.25), Material = Enum.Material.Neon,
+			Name = "Stripe", Size = Vector3.new(4.5, 0.5, 0.25), Material = NEON_MAT,
 			Color = Color3.fromRGB(47, 139, 255), CFrame = cf * CFrame.new(0, 0.3, 1.65), CanCollide = false,
 		}).Parent = model
 		part({
-			Name = "Stripe2", Size = Vector3.new(4.5, 0.5, 0.25), Material = Enum.Material.Neon,
+			Name = "Stripe2", Size = Vector3.new(4.5, 0.5, 0.25), Material = NEON_MAT,
 			Color = Color3.fromRGB(47, 139, 255), CFrame = cf * CFrame.new(0, 0.3, -1.65), CanCollide = false,
 		}).Parent = model
 		model.PrimaryPart = body
@@ -125,8 +129,10 @@ return function(ctx)
 		model:Destroy()
 	end)
 
-	local remaining = prm.players
+	local maxTakes = if type(prm.players) == "number" and prm.players > 0 then math.min(prm.players, MAX_TAKES) else MAX_TAKES
+	local remaining = maxTakes
 	local taken: { [number]: boolean } = {}
+	local closed = false
 
 	local gui = Instance.new("BillboardGui")
 	gui.Size = UDim2.fromOffset(150, 34)
@@ -142,21 +148,57 @@ return function(ctx)
 	label.TextColor3 = Color3.fromRGB(244, 246, 250)
 	label.TextStrokeTransparency = 0
 	label.Parent = gui
-	local function refreshLabel()
-		label.Text = ("SUPPLY  %d/%d"):format(remaining, prm.players)
-	end
-	refreshLabel()
 
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Resupply"
-	prompt.ObjectText = "Supply Crate"
 	prompt.HoldDuration = 0.3
 	prompt.MaxActivationDistance = 12
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = body
 
+	local function refreshState()
+		if remaining > 0 then
+			label.Text = ("SUPPLY  %d/%d"):format(remaining, maxTakes)
+			prompt.ActionText = "Resupply"
+			prompt.ObjectText = ("Supply Crate (%d/%d)"):format(remaining, maxTakes)
+		else
+			label.Text = "EMPTY"
+			prompt.ActionText = "EMPTY"
+			prompt.ObjectText = "Supply Crate (EMPTY)"
+		end
+	end
+
+	local function dimLights()
+		local ammoPack = model:FindFirstChild("AmmoPackPickup")
+		for _, d in model:GetDescendants() do
+			if ammoPack and (d == ammoPack or d:IsDescendantOf(ammoPack)) then
+				continue
+			end
+			if d:IsA("Light") then
+				d.Brightness = 0
+				d.Enabled = false
+			elseif d:IsA("BasePart") and d.Material == NEON_MAT then
+				d.Material = SMOOTH_MAT
+				d.Color = d.Color:Lerp(DIM_COLOR, 0.75)
+			end
+		end
+	end
+
+	local function closePod()
+		if closed then
+			return
+		end
+		closed = true
+		prompt.Enabled = false
+		prompt.ActionText = "EMPTY"
+		prompt.ObjectText = "Supply Crate (EMPTY)"
+		label.Text = "EMPTY"
+		dimLights()
+	end
+
+	refreshState()
+
 	local conn = prompt.Triggered:Connect(function(player)
-		if remaining <= 0 or not S.Players.isAlive(player) then
+		if closed or remaining <= 0 or not player or not S.Players.isAlive(player) then
 			return
 		end
 		if taken[player.UserId] then
@@ -168,17 +210,19 @@ return function(ctx)
 		S.Players.refill(player, { grenades = prm.grenades })
 		S.Fx.to(player, "Sound", { k = "CrateOpen", p = body.Position })
 		S.State.notify(player, "Resupplied", Color3.fromRGB(62, 230, 200), "callin")
-		refreshLabel()
+		refreshState()
+		if remaining <= 0 then
+			closePod()
+		end
 	end)
 	ctx.onStop(function()
 		conn:Disconnect()
 	end)
 
 	local t0 = os.clock()
-	while remaining > 0 and os.clock() - t0 < CRATE_LIFETIME do
+	while not closed and remaining > 0 and os.clock() - t0 < CRATE_LIFETIME do
 		task.wait(0.5)
 	end
-	prompt.Enabled = false
-	label.Text = "EMPTY"
+	closePod()
 	task.wait(1.5)
 end
