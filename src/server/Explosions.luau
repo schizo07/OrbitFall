@@ -11,8 +11,9 @@
 --         shakeRadius, coreDamage?, coreAp?, legacy? = { shake, shakeR, shockwave, crater } (replayed only by the
 --         "Current" explosion look in Studio A/B), noDamage? (effect + knock only), skipPlayer? (a Player never
 --         knocked by this blast, e.g. the trooper inside a landing drop pod), noEmit? (skip onBlast listeners: enemy
---         shells must not stagger their own side)
---   Troopers in debug god mode (S.Players.isGod) are never knocked.
+--         shells must not stagger their own side), noFx? (skip Blast fx), playerDamage? (enemy blast dmg to players),
+--         playerKind? (damage kind for playerDamage)
+--   Troopers in god mode (S.Players.isGod, God/GodMode attrs, ArenaGod/QuickStartGod) are never knocked or damaged.
 --   S.Explosions.playerFalloff(dist, core, radius) -> splash share for troopers (steeper than Damage.falloff)
 --
 -- Listener API (for enemy stagger / fling):
@@ -116,10 +117,11 @@ end
 -- Splash damage share for troopers. Enemies use Damage.falloff (soft: 1 -> 0.45 on a u^1.5 curve); troopers keep a
 -- steeper linear 1 -> PLAYER_EDGE so the edge of a mortar / cannon ring stays survivable.
 -- Studio A/B: Feel_PlayerSplash (Variants group "PLAYER SPLASH"): nil = steep, "enemy" = same curve as enemies.
-local PLAYER_EDGE = 0.25
+local PLAYER_EDGE = 0.2
 local IS_STUDIO = game:GetService("RunService"):IsStudio()
+local ws: any = workspace
 function Explosions.playerFalloff(dist: number, core: number, radius: number): number
-	if IS_STUDIO and workspace:GetAttribute("Feel_PlayerSplash") == "enemy" then
+	if IS_STUDIO and ws:GetAttribute("Feel_PlayerSplash") == "enemy" then
 		return Damage.falloff(dist, core, radius)
 	end
 	if dist <= core then
@@ -132,7 +134,24 @@ function Explosions.playerFalloff(dist: number, core: number, radius: number): n
 	return 1 - (1 - PLAYER_EDGE) * u
 end
 
--- Troopers: knockdown (heavy) or shove (light). Squadmates included; no damage unless Config.FriendlyFire.
+local function isGod(players: any, p: any): boolean
+	if players.isGod and players.isGod(p) then
+		return true
+	end
+	if p:GetAttribute("God") == true or p:GetAttribute("GodMode") == true then
+		return true
+	end
+	local ch = p.Character
+	if ch and (ch:GetAttribute("God") == true or ch:GetAttribute("GodMode") == true) then
+		return true
+	end
+	if ws:GetAttribute("ArenaGod") == true or ws:GetAttribute("QuickStartGod") == true then
+		return true
+	end
+	return false
+end
+
+-- Troopers: knockdown (heavy) or shove (light), plus enemy/friendly splash damage when enabled.
 local rng = Random.new()
 local function knockPlayers(pos: Vector3, spec: any, source: any?)
 	local s = services()
@@ -142,6 +161,7 @@ local function knockPlayers(pos: Vector3, spec: any, source: any?)
 	end
 	local knock = spec.knock or 0
 	local radius, core = spec.radius, spec.core
+	local playerDamage = spec.playerDamage or 0
 	local threshold = Config.Move.KnockdownSpeed
 	for _, p in players.getAlive() do
 		local root = players.getRoot(p)
@@ -150,7 +170,8 @@ local function knockPlayers(pos: Vector3, spec: any, source: any?)
 		end
 		local d = root.Position - pos
 		local dist = d.Magnitude
-		if knock > 0 and not (players.isGod and players.isGod(p)) then
+		local god = isGod(players, p)
+		if knock > 0 and not god then
 			local f = knockFrac(dist, core, radius)
 			if f > 0 then
 				local flat = Vector3.new(d.X, 0, d.Z)
@@ -167,10 +188,17 @@ local function knockPlayers(pos: Vector3, spec: any, source: any?)
 				end
 			end
 		end
-		if Config.FriendlyFire and (spec.damage or 0) > 0 and source and source.player and dist < radius then
-			local f = Explosions.playerFalloff(dist, core, radius)
-			if f > 0 and players.damage then
-				players.damage(p, spec.damage * f * 0.5, pos, { kind = "friendly" })
+		if dist < radius and players.damage and not god then
+			if playerDamage > 0 then
+				local f = Explosions.playerFalloff(dist, core, radius)
+				if f > 0 then
+					players.damage(p, playerDamage * f, pos, { kind = spec.playerKind or "enemy" })
+				end
+			elseif Config.FriendlyFire and (spec.damage or 0) > 0 and source and source.player then
+				local f = Explosions.playerFalloff(dist, core, radius)
+				if f > 0 then
+					players.damage(p, spec.damage * f * 0.5, pos, { kind = "friendly" })
+				end
 			end
 		end
 	end
@@ -230,23 +258,33 @@ function Explosions.blast(pos: Vector3, spec: any, source: any?): { killed: numb
 	end
 
 	-- 2. troopers
-	knockPlayers(pos, { radius = radius, core = core, knock = spec.knock or 0, damage = damage, skipPlayer = spec.skipPlayer }, source)
+	knockPlayers(pos, {
+		radius = radius,
+		core = core,
+		knock = spec.knock or 0,
+		damage = damage,
+		playerDamage = spec.playerDamage,
+		playerKind = spec.playerKind,
+		skipPlayer = spec.skipPlayer,
+	}, source)
 
 	-- 3. client effect
-	local lg = spec.legacy or {}
-	s.Fx.play("Blast", {
-		p = pos,
-		r = radius,
-		size = size,
-		style = style,
-		k = spec.vis,
-		sh = spec.shake,
-		shr = spec.shakeRadius,
-		sk = lg.shake,
-		skr = lg.shakeR,
-		sw = lg.shockwave,
-		cr = lg.crater,
-	})
+	if not spec.noFx then
+		local lg = spec.legacy or {}
+		s.Fx.play("Blast", {
+			p = pos,
+			r = radius,
+			size = size,
+			style = style,
+			k = spec.vis,
+			sh = spec.shake,
+			shr = spec.shakeRadius,
+			sk = lg.shake,
+			skr = lg.shakeR,
+			sw = lg.shockwave,
+			cr = lg.crater,
+		})
+	end
 
 	-- 4. listeners
 	if #listeners > 0 and not spec.noEmit then

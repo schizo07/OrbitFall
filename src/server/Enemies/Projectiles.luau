@@ -110,33 +110,37 @@ local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, bloc
 	live[n] = nil
 
 	local radius = pr.radius or 0
-	-- cannon / mortar shells go through the shared blast (server/Explosions.luau): its effect and knockdown, no enemy
-	-- damage and no onBlast listeners; trooper damage stays here with the numbers below
-	local shell = radius >= 3 and (pr.style == "cannon" or pr.style == "mortar") and S.Explosions ~= nil
-		and S.Explosions.blast ~= nil
+	-- explosive projectiles go through the shared blast (server/Explosions.luau) for trooper damage, falloff, god mode,
+	-- and knockdown, with no enemy damage or onBlast listeners (acid splash skips the fireball Blast fx)
+	local isBlastVisual = radius >= 3 and (pr.style == "cannon" or pr.style == "mortar")
+	local useExplosions = radius > 0 and S.Explosions ~= nil and S.Explosions.blast ~= nil
 	if not blocked and not miss then
 		if radius > 0 then
-			local falloff = if S.Explosions and S.Explosions.playerFalloff then S.Explosions.playerFalloff else Damage.falloff
-			for _, e in aliveRoots() do
-				local d = (e.pos - pos).Magnitude
-				if d < radius + 1.2 then
-					local f = falloff(math.max(d - 1.2, 0), radius * 0.35, radius)
-					if f > 0 then
-						damagePlayer(e.p, pr.damage * f, pos, if shell then 0 else (pr.knockback or 0) * f, pr.kind)
-					end
-				end
-			end
-			if shell then
+			if useExplosions then
 				S.Explosions.blast(pos, {
 					radius = radius,
 					core = radius * 0.35,
 					damage = 0,
 					noDamage = true,
 					noEmit = true,
+					noFx = not isBlastVisual,
+					playerDamage = pr.damage,
+					playerKind = pr.kind or "enemy",
 					knock = pr.knockback or 0,
 					size = if radius >= 6 then "L" else "M",
 					style = "fire",
 				}, { kind = pr.kind or "enemy" })
+			else
+				local falloff = if S.Explosions and S.Explosions.playerFalloff then S.Explosions.playerFalloff else Damage.falloff
+				for _, e in aliveRoots() do
+					local d = (e.pos - pos).Magnitude
+					if d < radius then
+						local f = falloff(d, radius * 0.35, radius)
+						if f > 0 then
+							damagePlayer(e.p, pr.damage * f, pos, (pr.knockback or 0) * f, pr.kind)
+						end
+					end
+				end
 			end
 		elseif hitPlayer then
 			damagePlayer(hitPlayer, pr.damage, pr.prev or pr.a, pr.knockback, pr.kind)
@@ -184,7 +188,7 @@ local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, bloc
 			data.hit = true -- struck a trooper / decoy: the client plays the bigger impact
 		end
 		fx.play("BoltEnd", data)
-		if not shell and radius >= 3 and not blocked and not miss and (pr.style == "cannon" or pr.style == "mortar") then
+		if not useExplosions and isBlastVisual and not blocked and not miss then
 			fx.play("Explosion", { p = pos, r = radius, size = radius >= 6 and "L" or "M", style = "fire" })
 		end
 		if pr.shake and pr.shake > 0 and not blocked and not miss then

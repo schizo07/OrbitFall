@@ -39,9 +39,23 @@ return function(ctx)
 	task.wait(POD_FALL)
 
 	-- crush
-	S.Fx.play("Explosion", { p = pos, r = prm.crushRadius + 2, size = "M", style = "spark" })
-	S.Fx.play("Shake", { p = pos, mag = 1.2, r = 60 })
-	S.Enemies.explode(pos, prm.crushRadius, prm.crushRadius, prm.crushDamage, prm.crushAp, ctx.source)
+	if S.Explosions and S.Explosions.blast then
+		S.Explosions.blast(pos, {
+			radius = prm.crushRadius,
+			core = prm.crushRadius,
+			damage = prm.crushDamage,
+			ap = prm.crushAp,
+			size = "M",
+			style = "spark",
+			knock = 70,
+			shake = 1.2,
+			shakeRadius = 60,
+		}, ctx.source)
+	else
+		S.Fx.play("Explosion", { p = pos, r = prm.crushRadius + 2, size = "M", style = "spark" })
+		S.Fx.play("Shake", { p = pos, mag = 1.2, r = 60 })
+		S.Enemies.explode(pos, prm.crushRadius, prm.crushRadius, prm.crushDamage, prm.crushAp, ctx.source)
+	end
 
 	-- crate
 	local yaw = math.atan2(-ctx.dir.X, -ctx.dir.Z)
