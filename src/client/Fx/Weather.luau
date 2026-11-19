@@ -29,7 +29,7 @@ local TOUCH_RATE = 0.4 -- particle rate cap on touch devices
 
 -- Colour grade per biome: tint, saturation, contrast, brightness (added to the map's own ColorCorrection)
 local GRADE = {
-	desert = { tint = RGB(255, 243, 226), sat = 0.06, contrast = 0.06, bright = 0 },
+	desert = { tint = RGB(255, 240, 222), sat = 0.06, contrast = 0.06, bright = 0.01 },
 	ash = { tint = RGB(255, 232, 222), sat = -0.12, contrast = 0.12, bright = -0.02 },
 	swamp = { tint = RGB(232, 255, 236), sat = 0.08, contrast = 0.04, bright = 0 },
 	ice = { tint = RGB(232, 244, 255), sat = -0.06, contrast = 0.05, bright = 0.03 },
@@ -40,9 +40,10 @@ local GRADE_STRONG = 1.9
 -- Storm look per biome (only desert / ash storm)
 local STORM = {
 	desert = {
-		-- lighter than it was (density 0.72, haze +3, sat -0.18): the storm turned the whole map a flat muddy olive
-		dust = RGB(214, 160, 110), atmColor = RGB(208, 142, 94), density = 0.52, hazeAdd = 1.4,
-		tint = RGB(255, 226, 192), sat = -0.08, contrast = -0.03, bright = -0.01,
+		-- warm dusty orange-amber haze (never green/olive): soft distance fade that keeps dark robots readable
+		dust = RGB(228, 140, 82), atmColor = RGB(232, 134, 74), atmDecay = RGB(194, 102, 54),
+		density = 0.40, hazeAdd = 1.1, offset = 0.2,
+		tint = RGB(255, 220, 184), sat = -0.02, contrast = 0, bright = 0,
 	},
 	ash = {
 		dust = RGB(96, 84, 80), atmColor = RGB(92, 78, 74), density = 0.75, hazeAdd = 3,
@@ -167,20 +168,23 @@ local function applyAtmosphere(storm: number)
 		if storm <= 0 then
 			return
 		end
-		b = { Density = atm.Density, Haze = atm.Haze, Color = atm.Color, Glare = atm.Glare, Offset = atm.Offset }
+		b = { Density = atm.Density, Haze = atm.Haze, Color = atm.Color, Decay = atm.Decay, Glare = atm.Glare, Offset = atm.Offset }
 		atmBase[atm] = b
 	end
 	local s = activeBiome and STORM[activeBiome]
 	if not s or storm <= 0 then
-		atm.Density, atm.Haze, atm.Color, atm.Glare, atm.Offset = b.Density, b.Haze, b.Color, b.Glare, b.Offset
+		atm.Density, atm.Haze, atm.Color, atm.Decay, atm.Glare, atm.Offset = b.Density, b.Haze, b.Color, b.Decay, b.Glare, b.Offset
 		atmBase[atm] = nil
 		return
 	end
 	atm.Density = lerp(b.Density, math.max(b.Density, s.density), storm)
 	atm.Haze = lerp(b.Haze, math.min(b.Haze + s.hazeAdd, 10), storm)
 	atm.Color = b.Color:Lerp(s.atmColor, 0.7 * storm)
+	if s.atmDecay then
+		atm.Decay = b.Decay:Lerp(s.atmDecay, 0.75 * storm)
+	end
 	atm.Glare = lerp(b.Glare, 0, storm)
-	atm.Offset = lerp(b.Offset, math.max(b.Offset, 0.4), storm)
+	atm.Offset = lerp(b.Offset, math.max(b.Offset, s.offset or 0.4), storm)
 end
 
 local function resetAtmosphere()
@@ -188,7 +192,7 @@ local function resetAtmosphere()
 		if atm.Parent then
 			pcall(function()
 				local a = atm :: Atmosphere
-				a.Density, a.Haze, a.Color, a.Glare, a.Offset = b.Density, b.Haze, b.Color, b.Glare, b.Offset
+				a.Density, a.Haze, a.Color, a.Decay, a.Glare, a.Offset = b.Density, b.Haze, b.Color, b.Decay, b.Glare, b.Offset
 			end)
 		end
 	end

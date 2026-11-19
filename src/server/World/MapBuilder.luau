@@ -210,13 +210,13 @@ local BIOMES: { [string]: Biome } = {
 		wall = { RGB(127, 104, 77), RGB(114, 92, 69), RGB(99, 81, 62) },
 		plant = { RGB(84, 67, 42), RGB(105, 84, 49) },
 		smoke = RGB(70, 56, 48),
-		mood = { -- gritty backlit hazy sun: low amber disc behind the play area, desaturated high-contrast grade
-			clock = 17.3, elev = 0.17, bright = 3.0, expo = -0.15, amb = RGB(46, 36, 32), out = RGB(96, 74, 62),
-			top = RGB(255, 206, 150), bottom = RGB(150, 104, 96),
-			atmDensity = 0.42, atmOffset = 0.08, haze = 3.2, glare = 2.2, atm = RGB(200, 132, 88), decay = RGB(80, 44, 30),
-			tint = RGB(255, 228, 200), sat = -0.18, contrast = 0.35, bloom = 0.55, rays = 0.1, sun = 11, stars = 0,
-			cloudCover = 0.75, cloudDensity = 0.6, cloudColor = RGB(150, 96, 70),
-			envDiffuse = 0.25, shadowSoft = 0.15,
+		mood = { -- warm clear desert sun: dusty orange-amber horizon (never green), crisp contrast so dark robots read on sand
+			clock = 17.3, elev = 0.17, bright = 3.2, expo = -0.08, amb = RGB(54, 40, 34), out = RGB(122, 92, 74),
+			top = RGB(255, 204, 146), bottom = RGB(168, 106, 82),
+			atmDensity = 0.27, atmOffset = 0.10, haze = 1.6, glare = 0.2, atm = RGB(228, 136, 82), decay = RGB(176, 98, 56),
+			tint = RGB(255, 234, 212), sat = 0.08, contrast = 0.30, bloom = 0.65, rays = 0.12, sun = 11, stars = 0,
+			cloudCover = 0.45, cloudDensity = 0.45, cloudColor = RGB(224, 154, 108),
+			envDiffuse = 0.28, shadowSoft = 0.15,
 		},
 	},
 	ash = { -- charcoal ground under a burning red sky (red lives in sky, haze and lava only)
@@ -3641,21 +3641,31 @@ local function applyLighting(faction: string, biome: string)
 		i.Parent = Lighting
 	end
 	-- spectacle pass: dustier, warmer air in every biome (density floor 0.35, +haze, atmosphere colour nudged toward warm dust);
-	-- the biome colour still dominates (swamp / ice only get a light nudge)
+	-- desert uses its own clear amber-orange atmosphere directly so distant landmarks stay readable and never turn olive
 	local DUST_WARM = RGB(214, 170, 124)
-	local HAZE_WARM = { desert = 0.2, ash = 0.14, swamp = 0.12, ice = 0.1, crystal = 0.06 }
-	local HAZE_EXTRA = { desert = 0.9, ash = 0.9, swamp = 1.0, ice = 0.8, crystal = 0.8 }
+	local HAZE_WARM = { desert = 0, ash = 0.14, swamp = 0.12, ice = 0.1, crystal = 0.06 }
+	local HAZE_EXTRA = { desert = 0, ash = 0.9, swamp = 1.0, ice = 0.8, crystal = 0.8 }
 	local atm = Instance.new("Atmosphere")
-	atm.Density = math.max(m.atmDensity, 0.35)
-	atm.Offset = m.atmOffset
-	atm.Haze = math.min(m.haze + (HAZE_EXTRA[biome] or 0.9), 6)
-	-- lighter dust than the first pass, so rocks, cliffs and props read at range (thick haze turned everything to mush),
-	-- and no sun glare in the air
-	atm.Density *= 0.8
-	atm.Haze *= 0.6
-	atm.Glare = 0
-	atm.Color = m.atm:Lerp(DUST_WARM, HAZE_WARM[biome] or 0.12)
-	atm.Decay = m.decay
+	if biome == "desert" then
+		atm.Density = m.atmDensity
+		atm.Offset = m.atmOffset
+		atm.Haze = m.haze
+		atm.Glare = m.glare or 0
+		atm.Color = m.atm
+		atm.Decay = m.decay
+		Lighting.FogColor = m.atm
+	else
+		atm.Density = math.max(m.atmDensity, 0.35)
+		atm.Offset = m.atmOffset
+		atm.Haze = math.min(m.haze + (HAZE_EXTRA[biome] or 0.9), 6)
+		-- lighter dust than the first pass, so rocks, cliffs and props read at range (thick haze turned everything to mush),
+		-- and no sun glare in the air
+		atm.Density *= 0.8
+		atm.Haze *= 0.6
+		atm.Glare = 0
+		atm.Color = m.atm:Lerp(DUST_WARM, HAZE_WARM[biome] or 0.12)
+		atm.Decay = m.decay
+	end
 	tag(atm)
 	local sky = Instance.new("Sky")
 	sky.StarCount = m.stars
@@ -3672,7 +3682,7 @@ local function applyLighting(faction: string, biome: string)
 	local bloom = Instance.new("BloomEffect")
 	bloom.Intensity = m.bloom * 0.45
 	bloom.Size = 40
-	bloom.Threshold = 1.5 -- only real light sources bloom, not sunlit sand
+	bloom.Threshold = if biome == "desert" then 1.25 else 1.5 -- only real light sources bloom, not sunlit sand
 	tag(bloom)
 	local rays = Instance.new("SunRaysEffect")
 	rays.Intensity = m.rays * 0.25
@@ -4150,7 +4160,7 @@ function MapBuilder.build(faction: string?, biome: string?): any
 		crash = MapPlan.crash(crashPick), -- the chosen MapPlan.crashes entry {name, crash, spilled}
 		places = placePos, -- ground positions: refinery / mesa / quarry / graveyard / saltpan / spilled / crash
 		shapes = shapeInfo, -- the terrain shapes' measurements (mesa top height + ramp, quarry terrace heights + ramp)
-		anchors = {},
+		anchors = {} :: { [string]: any },
 	}
 	MapBuilder.current = map
 
@@ -4172,6 +4182,206 @@ function MapBuilder.build(faction: string?, biome: string?): any
 				end
 			elseif not okReq then
 				warn("[Map] Places not loaded:", Places)
+			end
+		end
+		-- Desert landmark beacons/accents readable from 200+ studs (cheap: ~1 light or emitter per place)
+		if biomeName == "desert" then
+			local accents = Instance.new("Folder")
+			accents.Name = "PlaceAccents"
+			accents.Parent = placesFolder
+			local function accentLight(host: BasePart, col: Color3, range: number, brightness: number): PointLight
+				local l = Instance.new("PointLight")
+				l.Color = col
+				l.Range = range
+				l.Brightness = brightness
+				l.Shadows = false
+				l.Parent = host
+				return l
+			end
+
+			-- 1. Refinery: flare-stack flame and warm orange glow at the top of the chimney
+			do
+				local refFolder = placesFolder:FindFirstChild("Refinery", true)
+				local stack = refFolder and refFolder:FindFirstChild("cog_smokestack")
+				local pos = if stack and stack:IsA("Model")
+					then stack:GetPivot().Position + Vector3.new(0, 61.5, 0)
+					else placePos.refinery + Vector3.new(0, 61.5, 0)
+				local flare = decor(accents, Vector3.new(3.8, 5.2, 3.8), CFrame.new(pos), RGB(255, 140, 40), Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
+				accentLight(flare, RGB(255, 136, 40), 60, 3.5)
+				local pe = Instance.new("ParticleEmitter")
+				pe.Texture = "rbxasset://textures/particles/smoke_main.dds"
+				pe.Rate = 10
+				pe.Lifetime = NumberRange.new(0.7, 1.2)
+				pe.Speed = NumberRange.new(12, 18)
+				pe.SpreadAngle = Vector2.new(12, 12)
+				pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 4.5), NumberSequenceKeypoint.new(0.4, 7.5), NumberSequenceKeypoint.new(1, 1.5) })
+				pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(0.5, 0.35), NumberSequenceKeypoint.new(1, 1) })
+				pe.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, RGB(255, 235, 140)),
+					ColorSequenceKeypoint.new(0.45, RGB(255, 125, 30)),
+					ColorSequenceKeypoint.new(1, RGB(180, 45, 15)),
+				})
+				pe.LightEmission = 1
+				pe.Rotation = NumberRange.new(0, 360)
+				pe.RotSpeed = NumberRange.new(-40, 40)
+				pe.Parent = flare
+			end
+
+			-- 2. Signal Mesa: blinking red beacon flare at the top of the relay mast
+			do
+				local mastLamp = map.anchors and map.anchors.mastLight
+				local host: BasePart
+				local fallbackBlink = false
+				if mastLamp and typeof(mastLamp) == "Instance" and mastLamp:IsA("BasePart") then
+					host = mastLamp
+				else
+					host = decor(accents, Vector3.new(3.4, 3.4, 3.4), CFrame.new(placePos.mesa + Vector3.new(0, 74, 0)), RGB(255, 45, 35), Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
+					accentLight(host, RGB(255, 45, 35), 60, 3.0)
+					fallbackBlink = true
+				end
+				local pe = Instance.new("ParticleEmitter")
+				pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+				pe.Rate = 0
+				pe.Lifetime = NumberRange.new(0.75, 0.85)
+				pe.Speed = NumberRange.new(0, 0)
+				pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 14), NumberSequenceKeypoint.new(0.35, 22), NumberSequenceKeypoint.new(1, 0) })
+				pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(0.6, 0.35), NumberSequenceKeypoint.new(1, 1) })
+				pe.Color = ColorSequence.new(RGB(255, 65, 45), RGB(255, 30, 20))
+				pe.LightEmission = 1
+				pe.LockedToPart = true
+				pe.Parent = host
+				if fallbackBlink then
+					task.spawn(function()
+						local on = true
+						while host.Parent and folder.Parent do
+							on = not on
+							host.Transparency = if on then 0 else 0.75
+							if on then
+								pe:Emit(1)
+							end
+							task.wait(0.9)
+						end
+					end)
+				else
+					if host.Transparency < 0.5 then
+						pe:Emit(1)
+					end
+					host:GetPropertyChangedSignal("Transparency"):Connect(function()
+						if host.Transparency < 0.5 then
+							pe:Emit(1)
+						end
+					end)
+					task.spawn(function()
+						while host.Parent and folder.Parent do
+							if host:GetAttribute("Alarm") and host.Transparency < 0.5 then
+								pe:Emit(1)
+							end
+							task.wait(0.85)
+						end
+					end)
+				end
+			end
+
+			-- 3. Crash site: tall rising smoke column visible across the basin
+			do
+				local crashFolder = placesFolder:FindFirstChild("CrashedDrone", true)
+				local wreck = crashFolder and crashFolder:FindFirstChild("cog_drone_wreck")
+				local pos = if wreck and wreck:IsA("Model")
+					then wreck:GetPivot().Position + Vector3.new(0, 5, 0)
+					else placePos.crash + Vector3.new(0, 5, 0)
+				local host = emitterHost(accents, pos)
+				local pe = Instance.new("ParticleEmitter")
+				pe.Texture = "rbxasset://textures/particles/smoke_main.dds"
+				pe.Rate = 3.5
+				pe.Lifetime = NumberRange.new(12, 16)
+				pe.Speed = NumberRange.new(10, 14)
+				pe.SpreadAngle = Vector2.new(6, 6)
+				pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 7), NumberSequenceKeypoint.new(0.5, 17), NumberSequenceKeypoint.new(1, 26) })
+				pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(0.55, 0.52), NumberSequenceKeypoint.new(1, 1) })
+				pe.Color = ColorSequence.new(RGB(42, 36, 34), RGB(68, 56, 48))
+				pe.Rotation = NumberRange.new(0, 360)
+				pe.RotSpeed = NumberRange.new(-10, 10)
+				pe.Acceleration = Vector3.new(2, 0.8, 1.5)
+				pe.LightInfluence = 0.85
+				pe.Parent = host
+			end
+
+			-- 4. Quarry: pair of warm work lamps standing on opposite sides of the pit rim
+			do
+				local Q = placePos.quarry
+				local qInfo = shapeInfo.quarry
+				local rimR = (qInfo and qInfo.rimRadius or 40) + 3
+				local rampDir = (qInfo and qInfo.rampDir) or Vector3.xAxis
+				local side = Vector3.new(-rampDir.Z, 0, rampDir.X)
+				if side.Magnitude < 0.01 then
+					side = Vector3.zAxis
+				else
+					side = side.Unit
+				end
+				for idx, sgn in { -1, 1 } do
+					local lx, lz = Q.X + side.X * sgn * rimR, Q.Z + side.Z * sgn * rimR
+					local gy = groundY(lx, lz)
+					local poleH = 17
+					cyl(accents, 0.9, poleH, CFrame.new(lx, gy + poleH / 2 - 0.5, lz), RGB(56, 58, 64), Enum.Material.Metal, NOCOL)
+					local topPos = Vector3.new(lx, gy + poleH - 0.3, lz)
+					local lookCF = CFrame.lookAt(topPos, Vector3.new(Q.X, gy - 8, Q.Z))
+					local lampHead = decor(accents, Vector3.new(5.5, 2.0, 1.4), lookCF, RGB(255, 242, 200), Enum.Material.Neon, { CastShadow = false })
+					if idx == 1 then
+						accentLight(lampHead, RGB(255, 232, 180), 60, 3.2)
+						local pe = Instance.new("ParticleEmitter")
+						pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+						pe.Rate = 1.5
+						pe.Lifetime = NumberRange.new(1.5, 2.0)
+						pe.Speed = NumberRange.new(0, 0)
+						pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 14), NumberSequenceKeypoint.new(0.5, 18), NumberSequenceKeypoint.new(1, 14) })
+						pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 0.55), NumberSequenceKeypoint.new(1, 1) })
+						pe.Color = ColorSequence.new(RGB(255, 240, 195))
+						pe.LightEmission = 1
+						pe.LockedToPart = true
+						pe.Parent = lampHead
+					end
+				end
+			end
+
+			-- 5. Salt pan: bright sunlit shimmer / glare hovering over the salt flat
+			do
+				local S = placePos.saltpan
+				local host = emitterHost(accents, S + Vector3.new(0, 3.5, 0))
+				host.Size = Vector3.new(54, 4, 54)
+				local pe = Instance.new("ParticleEmitter")
+				pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+				pe.Shape = Enum.ParticleEmitterShape.Box
+				pe.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+				pe.Rate = 4
+				pe.Lifetime = NumberRange.new(3.0, 4.5)
+				pe.Speed = NumberRange.new(0.5, 1.2)
+				pe.SpreadAngle = Vector2.new(12, 12)
+				pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 12), NumberSequenceKeypoint.new(0.5, 28), NumberSequenceKeypoint.new(1, 16) })
+				pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.35, 0.62), NumberSequenceKeypoint.new(0.65, 0.66), NumberSequenceKeypoint.new(1, 1) })
+				pe.Color = ColorSequence.new(RGB(255, 252, 238), RGB(255, 238, 202))
+				pe.LightEmission = 1
+				pe.Rotation = NumberRange.new(0, 360)
+				pe.Parent = host
+			end
+
+			-- 6. Walker graveyard: dim cyan core glow inside the walker ribcage
+			do
+				local G = placePos.graveyard
+				local core = decor(accents, Vector3.new(4.4, 4.4, 4.4), CFrame.new(G + Vector3.new(0, 6.5, 0)), RGB(70, 225, 255), Enum.Material.Neon, { Shape = Enum.PartType.Ball, Transparency = 0.2, CastShadow = false })
+				accentLight(core, RGB(60, 220, 255), 60, 2.4)
+				local pe = Instance.new("ParticleEmitter")
+				pe.Texture = "rbxasset://textures/particles/smoke_main.dds"
+				pe.Rate = 2.5
+				pe.Lifetime = NumberRange.new(3.5, 5.0)
+				pe.Speed = NumberRange.new(3, 5)
+				pe.SpreadAngle = Vector2.new(18, 18)
+				pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 7), NumberSequenceKeypoint.new(0.5, 17), NumberSequenceKeypoint.new(1, 5) })
+				pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.35, 0.55), NumberSequenceKeypoint.new(1, 1) })
+				pe.Color = ColorSequence.new(RGB(80, 235, 255), RGB(35, 145, 210))
+				pe.LightEmission = 1
+				pe.Rotation = NumberRange.new(0, 360)
+				pe.RotSpeed = NumberRange.new(-15, 15)
+				pe.Parent = core
 			end
 		end
 	end
