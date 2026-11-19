@@ -1643,6 +1643,19 @@ function HUD.refreshMarkers()
 					glyph = o.main and "diamond" or "diamondHollow", -- Style.glyph shape
 				})
 			end
+			if not o.done and type(o.markers) == "table" then
+				for i, sub in o.markers do
+					if sub and typeof(sub.pos) == "Vector3" then
+						table.insert(list, {
+							key = "sub_" .. tostring(o.id) .. "_" .. tostring(sub.key or i),
+							pos = sub.pos,
+							color = sub.color or (o.main and Style.Cyan or Style.Green),
+							label = sub.label or "",
+							glyph = sub.glyph or "diamondHollow",
+						})
+					end
+				end
+			end
 		end
 	end
 	for id, b in beacons do

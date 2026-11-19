@@ -635,6 +635,7 @@ local function buildDrone(root: Instance, crashP: Vector3, spillP: Vector3, refP
 	glow(g, Vector3.new(1.6, 0.22, 0.12), pcf * CFrame.new(-0.4, -0.1, -0.25), RGB(220, 255, 250), false)
 	light(screen, TEAL, 14, 1.2)
 	anchors.flightLog = CFrame.lookAt(pp + out * 0.5, pp + out * 5)
+	anchors.flightLogPart = screen
 
 	-- debris along the line from the crash to the spilled crate
 	local a0 = crashP + toSpill * 20

@@ -363,6 +363,30 @@ local function renderSheet(objs: any)
 				})
 			end
 		end
+		if type(o.sites) == "table" then
+			for _, site in o.sites do
+				local row = Instance.new("Frame")
+				row.Name = "Site"
+				row.BackgroundTransparency = 1
+				row.Size = UDim2.new(1, 0, 0, 20)
+				row.LayoutOrder = nextOrder()
+				row.Parent = holder
+				local line = tostring(site.label or "")
+				if site.detail and site.detail ~= "" then
+					line ..= "  -  " .. tostring(site.detail)
+				end
+				InfoLayer.label({
+					Text = line,
+					TextSize = 15,
+					Color = if site.done then InfoLayer.col("dim") else col,
+					TextTransparency = if site.done then 0.4 else 0.1,
+					Position = UDim2.fromOffset(38, 0),
+					Size = UDim2.new(1, -38, 1, 0),
+					TextTruncate = Enum.TextTruncate.AtEnd,
+					Parent = row,
+				})
+			end
+		end
 	end
 	for _, o in mains do
 		block(o, true)
@@ -560,6 +584,15 @@ function ObjectiveList.render(objs: any): ({ string }, { string }, boolean)
 					continue -- shown as the instruction line above
 				end
 				addRow(s.text, s.done == true, s.active == true, Style.Cyan)
+			end
+		end
+		if type(o.sites) == "table" then
+			for _, site in o.sites do
+				local txt = tostring(site.label or "")
+				if site.detail and site.detail ~= "" and not touch then
+					txt ..= "  -  " .. tostring(site.detail)
+				end
+				addRow(txt, site.done == true, site.done ~= true, Style.Cyan)
 			end
 		end
 	end

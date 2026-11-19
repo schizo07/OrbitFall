@@ -56,7 +56,16 @@ local function snapshot(): { any }
 		for _, st in e.steps do
 			steps[#steps + 1] = { text = st.text, done = st.done, active = st.active, progress = st.progress }
 		end
-		out[#out + 1] = { id = e.id, title = e.title, main = e.main, done = e.done, steps = steps, marker = e.marker }
+		out[#out + 1] = {
+			id = e.id,
+			title = e.title,
+			main = e.main,
+			done = e.done,
+			steps = steps,
+			marker = e.marker,
+			markers = e.markers,
+			sites = e.sites,
+		}
 	end
 	return out
 end
@@ -698,6 +707,11 @@ function ObjectiveService.onExplosion(pos: Vector3, radius: number)
 	end
 	SideObjectives.onExplosion(pos, radius)
 	SideFoundry.onExplosion(pos, radius)
+	for _, c in controllers do
+		if c.onExplosion then
+			pcall(c.onExplosion, pos, radius)
+		end
+	end
 end
 
 function ObjectiveService.getState(): { any }

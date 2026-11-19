@@ -228,6 +228,21 @@ function PickupToast.route(text: string): boolean
 		PickupToast.show("SAMPLE COLLECTED", "diamond", Style.Green)
 		return true
 	end
+	-- Haul reveals and lifter charging beats
+	local sig = string.match(text, "^Cell signal found: (.+)$")
+	if sig then
+		PickupToast.show("CELL SIGNAL FOUND  " .. sig, "diamond", Style.Cyan)
+		return true
+	end
+	if string.find(lower, "^cell signal found") then
+		PickupToast.show("CELL SIGNAL FOUND", "diamond", Style.Cyan)
+		return true
+	end
+	local charge = string.match(text, "^Lifter charging (%d+/%d+)$")
+	if charge then
+		PickupToast.show("LIFTER CHARGING  " .. charge, "bar", Style.Amber)
+		return true
+	end
 	-- "Acquired <item> +N" (server/PlayerService.refill: ammo magazines, grenades, stims)
 	local item, amt = string.match(text, "^Acquired (.-) %+(%d+)$")
 	if item then

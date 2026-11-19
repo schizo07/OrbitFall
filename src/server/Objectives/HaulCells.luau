@@ -22,6 +22,7 @@ local Config = require(Shared.Config)
 local Carry = require(Shared.Carry)
 local SetPieces = require(script.Parent.SetPieces)
 local HaulTwists = require(script.Parent.HaulTwists)
+local HaulEncounters = require(script.Parent.HaulEncounters)
 local MapPlan = require(script.Parent.Parent.World.MapPlan)
 
 local HaulCells = {}
@@ -32,11 +33,13 @@ local PICK_HOLD = 0.5
 local LIFT_RADIUS = 7.5 -- horizontal studs from the cargo bed centre that load a carried cell
 local LIFT_DY = 9
 local REPICK_LOCK = 0.6 -- s after a drop before that trooper can grab again (holding Interact to drop doesn't re-grab)
-local LAUNCH_SECONDS = 25 -- last cell loaded -> the lifter leaves after this long (the big wave hits meanwhile)
-local DEBUG_LAUNCH_SECONDS = 4 -- same with the DebugFast attribute
+local LAUNCH_SECONDS = (MapPlan.haul and MapPlan.haul.launchSeconds) or 50 -- last cell loaded -> defend while lifter climbs
+local DEBUG_LAUNCH_SECONDS = 5 -- same with the DebugFast attribute
 local PAD_H = 0.2 -- height of the dark pad a resting cell stands on
 local STEP_FMT = "Load cells into the cargo lifter [%d/%d]"
-local LAUNCH_FMT = "Hold the cargo lifter: launching in %d s"
+local CHARGE_FMT = "LIFTER CHARGING %d/%d"
+local LAUNCH_FMT = "Defend the cargo lifter: climbing %d s"
+local LOG_AMBER = Color3.fromRGB(255, 190, 65)
 
 local DARK = Color3.fromRGB(40, 44, 52)
 local STEEL = Color3.fromRGB(112, 118, 128)
@@ -339,14 +342,31 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		if n > 0 then
 			local spots = restSpots(name, n)
 			cacheSpots[name] = spots
-			table.insert(caches, { name = name, pos = placePositions[name], spots = spots, cells = {}, marker = nil })
+			table.insert(caches, {
+				name = name,
+				pos = placePositions[name],
+				spots = spots,
+				cells = {},
+				marker = nil,
+				revealed = false,
+				activated = false,
+				encounter = nil,
+				trackPos = nil,
+			})
 		end
+	end
+
+	-- Assign one unique encounter per cell site (never repeated in the same mission)
+	HaulEncounters.assign(caches, ctx.rng)
+	local encounterMap: { [string]: string } = {}
+	for _, cache in caches do
+		encounterMap[cache.name] = cache.encounter
 	end
 
 	local function cacheLeft(cache: any): number
 		local n = 0
 		for _, c in cache.cells do
-			if c.state == "cache" then
+			if c.state == "cache" or c.state == "locked" then
 				n += 1
 			end
 		end
@@ -355,7 +375,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 
 	local function refreshCacheMarker(cache: any)
 		local n = cacheLeft(cache)
-		if n <= 0 then
+		if n <= 0 or not cache.revealed then
 			if cache.marker then
 				cache.marker:Destroy()
 				cache.marker = nil
@@ -376,8 +396,8 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 
 	local pickup: (Cell, Player) -> ()
 
-	-- place twists: crews, the mesa alarm, the graveyard wake-up and the refinery escalation
-	local twists = HaulTwists.new(ctx, { liftPos = plaza.Position, places = placePositions, spots = cacheSpots })
+	-- place twists: ambient crews, carrier draw, per-cell escalation, mid-mission surprise, finale
+	local twists = HaulTwists.new(ctx, { liftPos = plaza.Position, places = placePositions, spots = cacheSpots, encounters = encounterMap })
 
 	for _, cache in caches do
 		local f = Instance.new("Model")
@@ -396,7 +416,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			cell.cache = cache
 			table.insert(cache.cells, cell)
 			table.insert(cells, cell)
-			-- a short lamp post by the first cell carries the place's marker
+			-- a short lamp post by the first cell carries the place's marker once revealed
 			if k == 1 then
 				local post = at * CFrame.new(2.6, 0, 0)
 				ctx.cyl(f, 0.35, 3.2, post * CFrame.new(0, 1.6, 0), DARK, Enum.Material.Metal, { CanCollide = false })
@@ -506,6 +526,193 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	end
 	ctl.drop = drop
 
+	-- ============================================================ clues, site reveals & encounters
+	local flightLogRead = false
+	local flightLogPos: Vector3? = nil
+	local flightLogMarker: BillboardGui? = nil
+	local flightLogPrompt: ProximityPrompt? = nil
+	local encounters: any = nil
+
+	local function syncSiteMarkers(urgent: boolean?)
+		local outMarkers: { any } = {}
+		local outSites: { any } = {}
+		if not finished then
+			if not flightLogRead and flightLogPos then
+				table.insert(outMarkers, {
+					key = "haul_flightlog",
+					pos = flightLogPos + Vector3.new(0, 3, 0),
+					label = "FLIGHT LOG",
+					glyph = "diamondHollow",
+					color = LOG_AMBER,
+				})
+				table.insert(outSites, {
+					label = "Crashed drone flight log",
+					detail = "REVEALS 2 SITES",
+					done = false,
+				})
+			end
+			local hiddenCount = 0
+			for _, cache in caches do
+				local left = cacheLeft(cache)
+				if cache.revealed then
+					local label = PLACE_LABEL[cache.name] or "CORE CELL"
+					local encTag = HaulEncounters.LABELS[cache.encounter]
+					table.insert(outSites, {
+						label = label,
+						detail = if left <= 0 then "CLEARED" else string.format("%d LEFT  (%s)", left, encTag or "SITE"),
+						done = left <= 0,
+					})
+					if left > 0 then
+						local p = cache.trackPos or cache.pos
+						table.insert(outMarkers, {
+							key = "haul_" .. cache.name,
+							pos = p + Vector3.new(0, 4, 0),
+							label = if left == 1 then label else (label .. " x" .. left),
+							glyph = "diamond",
+							color = Carry.COLOR,
+						})
+					end
+				elseif left > 0 then
+					hiddenCount += 1
+				end
+			end
+			if hiddenCount > 0 then
+				table.insert(outSites, {
+					label = string.format("%d uncharted cell %s", hiddenCount, if hiddenCount == 1 then "site" else "sites"),
+					detail = "EXPLORE / RADAR",
+					done = false,
+				})
+			end
+		end
+		entry.markers = outMarkers
+		entry.sites = outSites
+		ctx.changed(urgent)
+	end
+
+	local function revealCache(cache: any, source: string?): boolean
+		if cache.revealed then
+			return false
+		end
+		cache.revealed = true
+		refreshCacheMarker(cache)
+		syncSiteMarkers(true)
+		if source == "los" then
+			local label = PLACE_LABEL[cache.name] or "CORE CELL"
+			if S and S.State then
+				S.State.notify(nil, "Cell signal found: " .. label, Carry.COLOR)
+			end
+			ctx.sound("Pickup", cache.pos)
+		end
+		return true
+	end
+
+	local function revealAllFromRadar()
+		if not alive or finished then
+			return
+		end
+		local newly = 0
+		for _, cache in caches do
+			if not cache.revealed and cacheLeft(cache) > 0 then
+				cache.revealed = true
+				refreshCacheMarker(cache)
+				newly += 1
+			end
+		end
+		if newly > 0 then
+			syncSiteMarkers(true)
+			if S and S.State then
+				S.State.notify(nil, "Cell signal found: ALL SITES (RADAR)", Carry.COLOR)
+			end
+		end
+	end
+
+	-- Crashed cargo drone "Flight Log" prompt: hold E to reveal 2 hidden cell sites
+	do
+		local anchors = if type(map.anchors) == "table" then map.anchors else nil
+		local logPart: BasePart? = nil
+		if anchors and typeof(anchors.flightLogPart) == "Instance" and anchors.flightLogPart:IsA("BasePart") then
+			logPart = anchors.flightLogPart
+		else
+			local logCF: CFrame? = if anchors and typeof(anchors.flightLog) == "CFrame" then anchors.flightLog else nil
+			if not logCF and typeof(map.insertion) == "CFrame" then
+				local p = map.insertion.Position + Vector3.new(10, 0, 0)
+				logCF = CFrame.new(p.X, groundAtXZ(p.X, p.Z) + 2.4, p.Z)
+			end
+			if logCF then
+				logPart = ctx.part(root, Vector3.new(1.2, 1.2, 0.4), logCF, LOG_AMBER, Enum.Material.Neon, {
+					Name = "FlightLogAnchor",
+					Transparency = 0.85,
+					CanCollide = false,
+					CanQuery = false,
+					CastShadow = false,
+				})
+			end
+		end
+		if logPart then
+			flightLogPos = logPart.Position
+			local bb = billboard(logPart, "FlightLogMarker", "FLIGHT LOG", Vector3.new(0, 2.4, 0), 220, 10)
+			local g = bb:FindFirstChild("Glyph") :: Frame?
+			if g then
+				g.BackgroundColor3 = LOG_AMBER
+			end
+			local cap = bb:FindFirstChild("Caption") :: TextLabel?
+			if cap then
+				cap.TextColor3 = LOG_AMBER
+			end
+			flightLogMarker = bb
+			flightLogPrompt = ctx.prompt(logPart, {
+				action = "Read",
+				object = "Flight Log",
+				hold = 1.2,
+				distance = 9,
+				onTrigger = function(player: Player)
+					if flightLogRead or not alive or finished then
+						return
+					end
+					flightLogRead = true
+					if flightLogPrompt then
+						flightLogPrompt.Enabled = false
+					end
+					if flightLogMarker and flightLogMarker.Parent then
+						flightLogMarker:Destroy()
+						flightLogMarker = nil
+					end
+					-- Pick up to 2 unrevealed sites (shuffled)
+					local hidden: { any } = {}
+					for _, cache in caches do
+						if not cache.revealed and cacheLeft(cache) > 0 then
+							table.insert(hidden, cache)
+						end
+					end
+					for i = #hidden, 2, -1 do
+						local j = ctx.rng:NextInteger(1, i)
+						hidden[i], hidden[j] = hidden[j], hidden[i]
+					end
+					local want = (MapPlan.haul and MapPlan.haul.flightLogReveals) or 2
+					local names: { string } = {}
+					for i = 1, math.min(want, #hidden) do
+						local c = hidden[i]
+						c.revealed = true
+						refreshCacheMarker(c)
+						table.insert(names, PLACE_LABEL[c.name] or c.name)
+					end
+					syncSiteMarkers(true)
+					ctx.sound("ObjectiveDone", logPart.Position)
+					if #names > 0 then
+						callout(player, "Flight log decoded — marking " .. table.concat(names, " and ") .. "!")
+						if S and S.State then
+							S.State.notify(nil, "Cell signal found: " .. table.concat(names, " & "), Carry.COLOR)
+						end
+					else
+						callout(player, "Flight log checked — all sites already marked.")
+					end
+				end,
+			})
+		else
+			flightLogRead = true
+		end
+	end
+
 	pickup = function(cell: Cell, p: Player)
 		if finished or not alive or carriers[p] then
 			return
@@ -551,13 +758,21 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		local above = billboard(cell.case, "CarrierIcon", nil, Vector3.new(0, 3.6, 0), 1000, 12)
 		above.PlayerToHideFrom = p
 		cell.above = above
-		if fromCache and cell.cache then
-			refreshCacheMarker(cell.cache)
+		if cell.cache then
+			if not cell.cache.revealed then
+				revealCache(cell.cache, "los")
+			else
+				refreshCacheMarker(cell.cache)
+				syncSiteMarkers(false)
+			end
 		end
 		callout(p, "Cell secured.")
 		ctx.sound("Pickup", torso.Position)
 		if fromCache and cell.cache then
 			twists.onLift(cell.cache.name, p)
+			if encounters then
+				encounters.onCellLift(cell.cache, cell, p)
+			end
 		end
 		if not cell.everTaken then
 			cell.everTaken = true
@@ -566,58 +781,70 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	end
 
 	-- ============================================================ delivery + completion
-	local function launchLifter()
-		ctx.sound("Generator", liftPos)
-		local beam = ctx.glow(lifter, Vector3.new(2.6, 600, 2.6), CFrame.new(liftPos + Vector3.new(0, 300, 0)), PANEL_BLUE, { Transparency = 1 })
-		ctx.tween(beam, 0.8, { Transparency = 0.45 })
+	local launchBeam: BasePart? = nil
+	local function collectMovers(): { BasePart }
 		local movers: { BasePart } = table.clone(bedParts)
 		for _, c in cells do
 			if c.state == "loaded" then
 				table.insert(movers, c.case)
 			end
 		end
-		task.delay(1.2, function()
-			if not ctx.alive() then
-				return
+		return movers
+	end
+
+	local function blastOffLifter()
+		ctx.sound("Generator", liftPos)
+		local movers = collectMovers()
+		for _, m in movers do
+			if m.Parent then
+				m.CanCollide = false
+				ctx.tween(m, 5.5, { CFrame = m.CFrame + Vector3.new(0, 150, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 			end
+		end
+		task.delay(5.7, function()
 			for _, m in movers do
-				if m.Parent then
-					m.CanCollide = false -- troopers standing on the bed stay on the plaza
-					ctx.tween(m, 6, { CFrame = m.CFrame + Vector3.new(0, 140, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+				if m.Parent and m ~= bed then
+					m.Transparency = 1
 				end
 			end
-			task.delay(6.2, function()
-				for _, m in movers do
-					if m.Parent and m ~= bed then
-						m.Transparency = 1
+			for _, c in cells do
+				if c.state == "loaded" then
+					for _, part in c.parts do
+						part.Transparency = 1
 					end
 				end
-				for _, c in cells do
-					if c.state == "loaded" then
-						for _, part in c.parts do
-							part.Transparency = 1
-						end
-					end
-				end
-				bed.Transparency = 1
-				if beam.Parent then
-					ctx.tween(beam, 1.5, { Transparency = 1 })
-				end
-			end)
+			end
+			bed.Transparency = 1
+			if launchBeam and launchBeam.Parent then
+				ctx.tween(launchBeam, 1.5, { Transparency = 1 })
+			end
 		end)
 	end
 
-	-- the last cell is in: the lifter spools up for LAUNCH_SECONDS while the big wave hits; the step completes when it ends
+	-- Finale: after the last cell, the lifter climbs for ~50 s while the bar fills and the toughest wave hits
 	local function beginLaunch()
 		local secs = if Workspace:GetAttribute("DebugFast") then DEBUG_LAUNCH_SECONDS else LAUNCH_SECONDS
 		local st = entry.steps[1]
 		st.text = string.format(LAUNCH_FMT, secs)
 		st.progress = 0
-		ctx.changed(true)
-		ctx.notify(string.format("All cells loaded! The lifter launches in %d s: hold the plaza!", secs), Config.Colors.Danger)
+		syncSiteMarkers(true)
+		ctx.notify(string.format("All cells loaded! Defend the cargo lifter while it climbs (%d s)!", secs), Config.Colors.Danger)
 		ctx.sound("Generator", liftPos)
 		ctx.sound("Alarm", liftPos)
-		twists.finalWave()
+
+		-- Ignite thruster beam and begin gradual climb during the defense hold
+		local beam = ctx.glow(lifter, Vector3.new(2.8, 600, 2.8), CFrame.new(liftPos + Vector3.new(0, 300, 0)), PANEL_BLUE, { Transparency = 1 })
+		launchBeam = beam
+		ctx.tween(beam, 0.8, { Transparency = 0.42 })
+		local movers = collectMovers()
+		for _, m in movers do
+			if m.Parent then
+				m.CanCollide = false -- troopers standing on the bed stay on the plaza
+				ctx.tween(m, secs, { CFrame = m.CFrame + Vector3.new(0, 28, 0) }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+			end
+		end
+
+		twists.finalWave(secs)
 		task.spawn(function()
 			local t0 = os.clock()
 			local shown = secs
@@ -630,7 +857,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 				if whole ~= shown then
 					shown = whole
 					st.text = string.format(LAUNCH_FMT, whole)
-					st.progress = 1 - left / secs
+					st.progress = math.clamp(1 - left / secs, 0, 1)
 					ctx.changed()
 				end
 				task.wait(0.25)
@@ -640,12 +867,13 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			end
 			st.text = string.format(STEP_FMT, total, total)
 			st.progress = nil
-			ctx.completeStep(entry, 1, "The cargo lifter is launching!")
-			launchLifter()
+			ctx.completeStep(entry, 1, "Cargo lifter launched! Extraction inbound!")
+			blastOffLifter()
 			onComplete()
 		end)
 	end
 
+	local chargeGen = 0
 	local function load(cell: Cell, by: Player?)
 		if cell.state == "loaded" or finished then
 			return
@@ -674,14 +902,33 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			callout(by, "Loading cell.")
 		end
 		ctx.sound("CrateOpen", liftPos)
+		ctx.sound("Generator", liftPos)
 		local st = entry.steps[1]
-		st.text = string.format(STEP_FMT, delivered, total)
 		st.progress = delivered / total
-		ctx.changed(true)
 		if delivered >= total then
 			finished = true
 			beginLaunch()
 		else
+			-- Short "LIFTER CHARGING x/N" beat + escalating reinforcement wave on every load
+			chargeGen += 1
+			local myGen = chargeGen
+			st.text = string.format(CHARGE_FMT, delivered, total)
+			screen.Color = Carry.COLOR
+			task.delay(0.7, function()
+				if alive and screen.Parent then
+					screen.Color = PANEL_BLUE
+				end
+			end)
+			if S and S.State then
+				S.State.notify(nil, string.format("Lifter charging %d/%d", delivered, total), Carry.COLOR)
+			end
+			syncSiteMarkers(true)
+			task.delay(3.2, function()
+				if alive and not finished and chargeGen == myGen then
+					st.text = string.format(STEP_FMT, delivered, total)
+					ctx.changed(true)
+				end
+			end)
 			twists.onDelivered(delivered, total)
 			if delivered % 2 == 0 then
 				ctx.intensity("MAIN_STEP")
@@ -706,11 +953,20 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 		for _, c in cells do
 			if c.state ~= "loaded" and c.state ~= "carried" then
+				if encounters then
+					encounters.forceUnlockCell(c)
+				end
 				load(c, player)
 				return true
 			end
 		end
 		return false
+	end
+
+	function ctl.onExplosion(pos: Vector3, radius: number)
+		if encounters then
+			encounters.onExplosion(pos, radius)
+		end
 	end
 
 	-- prompts (after `pickup` exists)
@@ -726,8 +982,69 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		})
 	end
 
-	-- ============================================================ watch loop: carriers (deliver / forced drops)
+	-- Set up each site's unique encounter (courier / cradle / conveyor / guardian / buried)
+	encounters = HaulEncounters.new(ctx, {
+		root = root,
+		liftPos = liftPos,
+		groundAt = groundAt,
+		groundAtXZ = function(x: number, z: number): Vector3
+			return Vector3.new(x, groundAtXZ(x, z), z)
+		end,
+		onReveal = function(cache: any)
+			revealCache(cache, "los")
+		end,
+		onSiteUpdated = function(cache: any)
+			refreshCacheMarker(cache)
+			syncSiteMarkers(true)
+		end,
+		setDroppedMarker = setDroppedMarker,
+		spawnWave = twists.spawnSmallWave,
+		wakeAlert = twists.wakeAlert,
+	})
+	for _, cache in caches do
+		encounters.setupCache(cache)
+	end
+
+	-- Line-of-sight helper for discovering hidden cell sites (~120 studs)
+	local revealDist = (MapPlan.haul and MapPlan.haul.revealDist) or 120
+	local closeRevealDist = (MapPlan.haul and MapPlan.haul.closeRevealDist) or 28
+	local function hasSiteLOS(fromPos: Vector3, targetPos: Vector3): boolean
+		local dir = targetPos - fromPos
+		if dir.Magnitude < 2 then
+			return true
+		end
+		local excl: { Instance } = {}
+		local ef = Workspace:FindFirstChild("Enemies")
+		if ef then
+			table.insert(excl, ef)
+		end
+		for _, p in Players:GetPlayers() do
+			if p.Character then
+				table.insert(excl, p.Character)
+			end
+		end
+		local rp = RaycastParams.new()
+		rp.FilterType = Enum.RaycastFilterType.Exclude
+		rp.FilterDescendantsInstances = excl
+		rp.RespectCanCollide = true
+		rp.IgnoreWater = true
+		local hit = Workspace:Raycast(fromPos, dir, rp)
+		if not hit then
+			return true
+		end
+		return (hit.Position - targetPos).Magnitude <= 6
+	end
+
+	local radarConn = Workspace:GetAttributeChangedSignal("RadarOnline"):Connect(function()
+		if Workspace:GetAttribute("RadarOnline") == true then
+			revealAllFromRadar()
+		end
+	end)
+
+	-- ============================================================ watch loop: carriers, reveals & encounters
 	task.spawn(function()
+		local revealAcc = 0
+		local trackAcc = 0
 		while alive and ctx.alive() do
 			task.wait(0.1)
 			if not alive or not ctx.alive() then
@@ -752,6 +1069,58 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 					load(cell, p)
 				end
 			end
+
+			-- Carrier tension: nearby COG drawn modestly toward active carriers
+			twists.tickCarriers(carriers)
+
+			-- Step per-site encounters + activate encounters on approach
+			if encounters then
+				for _, cache in caches do
+					if not cache.activated and #ctx.playersNear(cache.pos, 150) > 0 then
+						cache.activated = true
+						encounters.onSiteActive(cache)
+					end
+				end
+				encounters.step(0.1)
+			end
+
+			-- Refresh compass tracking pip when a courier is actively fleeing
+			trackAcc += 0.1
+			if trackAcc >= 0.8 then
+				trackAcc = 0
+				for _, cache in caches do
+					if cache.revealed and cache.trackPos then
+						syncSiteMarkers(false)
+						break
+					end
+				end
+			end
+
+			-- Reveal hidden cell sites by LOS (~120 studs) or Radar online
+			revealAcc += 0.1
+			if not finished and revealAcc >= 0.35 then
+				revealAcc = 0
+				if Workspace:GetAttribute("RadarOnline") == true then
+					revealAllFromRadar()
+				else
+					local plist = ctx.players()
+					for _, cache in caches do
+						if not cache.revealed and cacheLeft(cache) > 0 then
+							local cPos = cache.pos
+							for _, pl in plist do
+								local r = ctx.getRoot(pl)
+								if r then
+									local d = (r.Position - cPos).Magnitude
+									if d <= closeRevealDist or (d <= revealDist and hasSiteLOS(r.Position + Vector3.new(0, 3.5, 0), cPos + Vector3.new(0, 4.5, 0))) then
+										revealCache(cache, "los")
+										break
+									end
+								end
+							end
+						end
+					end
+				end
+			end
 		end
 	end)
 
@@ -764,13 +1133,25 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	end)
 
 	ctx.setMarker(entry, liftPos)
-	ctx.changed(true)
-	ctx.notify(string.format("Recover %d core cells and load them into the cargo lifter.", total), Config.Colors.Friendly)
+	syncSiteMarkers(true)
+	ctx.notify(string.format("Inspect the crashed drone's flight log or scout the basin to recover %d core cells.", total), Config.Colors.Friendly)
 	twists.start()
 
 	function ctl.stop()
 		alive = false
 		twists.stop()
+		if encounters then
+			encounters.stop()
+		end
+		if flightLogPrompt and flightLogPrompt.Parent then
+			flightLogPrompt:Destroy()
+			flightLogPrompt = nil
+		end
+		if flightLogMarker and flightLogMarker.Parent then
+			flightLogMarker:Destroy()
+			flightLogMarker = nil
+		end
+		radarConn:Disconnect()
 		leaveConn:Disconnect()
 		for p, cell in carriers do
 			setCarryAttr(p, false)

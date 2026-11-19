@@ -44,9 +44,14 @@ function HaulTwists.new(ctx: any, cfg: any): any
 	local difficulty = math.clamp(math.floor(tonumber(ctx.difficulty) or 1), 1, 5)
 	local anchors = map.anchors or {}
 	local liftPos: Vector3 = cfg.liftPos
+	local encounters: { [string]: string } = cfg.encounters or {}
+	local haulCfg = MapPlan.haul or {}
 	local tw: any = {}
 	local alive = true
 	local seq = 0
+	local surpriseDone = false
+	local stormActive = false
+	local carryPingAt: { [Player]: number } = {}
 
 	-- ------------------------------------------------------------------ small helpers
 	local function gp(x: number, z: number): Vector3
@@ -243,9 +248,10 @@ function HaulTwists.new(ctx: any, cfg: any): any
 
 	local function spawnSpilled()
 		local c = centroid(cfg.spots.spilled or {}, placePos("spilled"))
-		local n = squadCount(3, 4)
+		local enc = encounters.spilled
+		local n = if enc == "courier" or enc == "guardian" then 2 else squadCount(2, 3)
 		local squad = nextSquad("spilled")
-		local pts = ringPoints(c, n, 6, 10)
+		local pts = ringPoints(c, n, 7, 11)
 		-- one of them walks a small loop around the cell, the rest stand guard facing outward
 		local route: { Vector3 } = {}
 		for k = 0, 3 do
@@ -281,8 +287,8 @@ function HaulTwists.new(ctx: any, cfg: any): any
 				table.insert(terr, CFrame.lookAt(p, Vector3.new(centre.X, p.Y, centre.Z)))
 			end
 		end
-		local lo = 4 + (if difficulty >= 3 then 1 else 0) + (if difficulty >= 5 then 1 else 0)
-		local n = math.min(squadCount(lo, lo + 3), #terr)
+		local lo = 3 + (if difficulty >= 4 then 1 else 0)
+		local n = math.min(squadCount(lo, lo + 2), #terr)
 		local squad = nextSquad("quarry")
 		-- spread over the whole rim: every k-th spot
 		local step = #terr / math.max(n, 1)
@@ -292,9 +298,9 @@ function HaulTwists.new(ctx: any, cfg: any): any
 			spawnUnit(shooterKind(i), pos, pos + cf.LookVector * 10, { posture = "guard", squad = squad, home = pos, aggro = false, patrol = false }, true)
 			task.wait(0.05)
 		end
-		-- a few on the pit floor
-		local nf = squadCount(2, 3) + (if difficulty >= 4 then 1 else 0)
-		local pts = ringPoints(centre, nf, 6, 16)
+		-- a couple on the pit floor near the conveyor
+		local nf = squadCount(1, 2) + (if difficulty >= 4 then 1 else 0)
+		local pts = ringPoints(centre, nf, 7, 16)
 		local kinds = mix(nf, 0.34)
 		for i = 1, nf do
 			local pos = pts[i]
@@ -313,7 +319,8 @@ function HaulTwists.new(ctx: any, cfg: any): any
 				table.insert(spots, cf.Position)
 			end
 		end
-		local n = squadCount(4, 6)
+		local enc = encounters.graveyard
+		local n = if enc == "guardian" then squadCount(2, 3) else squadCount(3, 5)
 		if #spots == 0 then
 			spots = ringPoints(centre, n, 8, 20)
 		end
@@ -593,7 +600,105 @@ function HaulTwists.new(ctx: any, cfg: any): any
 		end
 	end
 
-	local fired = { guard = false, probe = false, counter = false, final = false }
+	local fired = { guard = false, final = false }
+
+	local function canAddHeavy(): boolean
+		if not roster.heavy or not (S and S.Enemies and S.Enemies.countByClass) then
+			return false
+		end
+		local ok, counts = pcall(S.Enemies.countByClass)
+		return ok and counts ~= nil and (counts.heavy or 0) < Config.MaxHeavies
+	end
+
+	-- ------------------------------------------------------------------ mid-mission surprise (once, random)
+	local function triggerSandstorm()
+		local dur = if workspace:GetAttribute("DebugFast") then 12 else (haulCfg.stormSeconds or 60)
+		local t0 = workspace:GetServerTimeNow()
+		local tEnd = t0 + dur
+		stormActive = true
+		workspace:SetAttribute("Weather", "storm")
+		workspace:SetAttribute("WeatherAt", t0)
+		workspace:SetAttribute("WeatherEnd", tEnd)
+		ctx.notify("Sandstorm rolling in! Visibility dropping!", DANGER)
+		say("Dust wall inbound — keep together!", nil)
+		task.spawn(function()
+			while alive and ctx.alive() and stormActive do
+				local now = workspace:GetServerTimeNow()
+				if now >= tEnd then
+					break
+				end
+				if workspace:GetAttribute("Weather") ~= "storm" then
+					workspace:SetAttribute("Weather", "storm")
+					workspace:SetAttribute("WeatherAt", t0)
+					workspace:SetAttribute("WeatherEnd", tEnd)
+				end
+				task.wait(1)
+			end
+			if stormActive then
+				stormActive = false
+				local now = workspace:GetServerTimeNow()
+				workspace:SetAttribute("Weather", "calm")
+				workspace:SetAttribute("WeatherAt", now)
+				workspace:SetAttribute("WeatherEnd", now + 180)
+				if alive and ctx.alive() then
+					ctx.notify("The sandstorm is clearing.", Config.Colors.Friendly)
+				end
+			end
+		end)
+	end
+
+	local function triggerRoamingPatrol()
+		local ps = playerPositions()
+		local centre = liftPos
+		if #ps > 0 then
+			local sum = Vector3.zero
+			for _, q in ps do
+				sum += q
+			end
+			centre = sum / #ps
+		end
+		local base = wavePoint(centre, 90, 120, ps)
+		local through = Vector3.new(centre.X - base.X, 0, centre.Z - base.Z)
+		local dir = if through.Magnitude > 1 then through.Unit else Vector3.new(1, 0, 0)
+		local dest = gp(math.clamp(centre.X + dir.X * 85, -220, 220), math.clamp(centre.Z + dir.Z * 85, -220, 220))
+		local n = math.clamp(squadCount(3, 4), 3, 4)
+		local kinds = mix(n, 0.34)
+		local sq = nextSquad("roam")
+		local across = Vector3.new(-dir.Z, 0, dir.X)
+		ctx.notify("COG patrol spotted crossing the basin!", DANGER)
+		say("Patrol moving across the ridge — watch our flank!", nil)
+		task.spawn(function()
+			for i, kind in kinds do
+				if not alive or not ctx.alive() then
+					return
+				end
+				local off = (i - (n + 1) / 2) * 3.5
+				local p = gp(base.X + across.X * off, base.Z + across.Z * off)
+				spawnUnit(kind, p, dest, {
+					posture = "patrol",
+					route = { dest, base },
+					dest = dest,
+					squad = sq,
+					home = p,
+					aggro = false,
+					patrol = false,
+				}, true)
+				task.wait(0.06)
+			end
+		end)
+	end
+
+	local function maybeTriggerSurprise()
+		if surpriseDone or not alive or fired.final then
+			return
+		end
+		surpriseDone = true
+		if rng:NextNumber() < 0.5 then
+			triggerSandstorm()
+		else
+			triggerRoamingPatrol()
+		end
+	end
 
 	local function refineryGuard()
 		if fired.guard then
@@ -610,51 +715,172 @@ function HaulTwists.new(ctx: any, cfg: any): any
 		end
 	end
 
+	-- Helpers exposed to HaulEncounters so waves and alerts share one system
+	function tw.spawnSmallWave(center: Vector3, count: number, tag: string)
+		if not alive or not ctx.alive() then
+			return
+		end
+		local ps = playerPositions()
+		local n = math.clamp(squadCount(math.max(2, count - 1), count + 1), 2, 6)
+		local base = wavePoint(center, 55, 78, ps)
+		task.spawn(spawnHunters, mix(n, 0.34), base, center, nextSquad(tag))
+	end
+
+	function tw.wakeAlert(e: any, who: Player?, pos: Vector3)
+		local target = who or nearestPlayer(pos)
+		local aw = awareness()
+		local root = target and ctx.getRoot(target)
+		if aw and aw.alert then
+			pcall(aw.alert, e, target, if root then root.Position else nil, "ally")
+		else
+			e.aggro = true
+		end
+	end
+
+	-- Modest carrier tension: nearby non-dormant COG get drawn toward anyone carrying a core cell
+	function tw.tickCarriers(carriers: { [Player]: any })
+		if not alive or not (S and S.Enemies and S.Enemies.getInRadius) then
+			return
+		end
+		local now = os.clock()
+		local attractR = haulCfg.carryAttractRadius or 85
+		local maxDraw = haulCfg.carryAttractMax or 3
+		local aw = awareness()
+		for p in carriers do
+			if now - (carryPingAt[p] or -99) < 3.5 then
+				continue
+			end
+			local root = ctx.getRoot(p)
+			if not root then
+				continue
+			end
+			carryPingAt[p] = now
+			local cPos = root.Position
+			local ok, list = pcall(S.Enemies.getInRadius, cPos, attractR)
+			if not ok or type(list) ~= "table" then
+				continue
+			end
+			local drawn = 0
+			for _, e in list do
+				if drawn >= maxDraw then
+					break
+				end
+				if e and e.alive and e.def and e.def.behavior ~= "flee" and (not e.nextThink or e.nextThink < DORMANT_OFF / 2) then
+					local st = e.awareState
+					if st ~= "alert" then
+						local d = if e.pos then flat(e.pos, cPos) else attractR
+						if d <= 40 and aw and aw.alert then
+							pcall(aw.alert, e, p, cPos, "noise")
+						else
+							e.lastKnown = cPos
+							e.awareTarget = p
+							if st == "guard" or st == "patrol" or st == nil then
+								e.awareState = "suspicious"
+								e.suspicion = math.max(e.suspicion or 0, 0.35)
+							end
+						end
+						drawn += 1
+					end
+				end
+			end
+		end
+	end
+
+	-- Every cell loaded escalates the mission a step with a reinforcement wave toward the lifter
 	function tw.onDelivered(delivered: number, total: number)
 		if not alive or delivered >= total then
 			return
 		end
-		if delivered == 2 and not fired.probe then
-			fired.probe = true
-			ctx.notify("Contacts at the refinery gates!", DANGER)
+		if delivered == 1 then
+			ctx.notify("Lifter power spike detected — contacts at the gates!", DANGER)
+			throughGates(mix(math.clamp(squadCount(2, 3), 2, 3), 0.25), "step1")
+		elseif delivered == 2 then
+			ctx.notify("Hostile squad pushing the refinery gates!", DANGER)
 			say("Movement at the gates!", nil)
-			throughGates(mix(math.clamp(squadCount(3, 4), 3, 4), 0.34), "probe")
-		end
-		local half = math.max(3, math.ceil(total / 2))
-		if delivered == half and not fired.counter then
-			fired.counter = true
-			ctx.notify("A counter-attack is hitting the refinery!", DANGER)
-			say("They're counter-attacking, hold the lifter!", nil)
+			throughGates(mix(math.clamp(squadCount(3, 5), 3, 5), 0.34), "step2")
+			task.delay(8, maybeTriggerSurprise)
+		elseif delivered == 3 then
+			ctx.notify("Flankers converging on the cargo lifter!", DANGER)
+			say("They're flanking the lifter!", nil)
 			ctx.sound("Alarm", liftPos)
-			fromRing(mix(math.clamp(squadCount(6, 8), 6, 8), 0.34), "counter")
+			fromRing(mix(math.clamp(squadCount(4, 6), 4, 6), 0.4), "step3")
+		else
+			ctx.notify("Heavy COG counter-attack hitting the refinery!", DANGER)
+			say("Big push on the lifter, hold the pad!", nil)
+			ctx.sound("Alarm", liftPos)
+			local kinds = mix(math.clamp(squadCount(5, 7), 5, 7), 0.45)
+			if difficulty >= 3 and canAddHeavy() then
+				kinds[1] = roster.heavy
+			end
+			local half = math.floor(#kinds / 2)
+			local viaG, viaR = {}, {}
+			for i, k in kinds do
+				table.insert(if i <= half then viaG else viaR, k)
+			end
+			if #viaG > 0 then
+				throughGates(viaG, "stepN")
+			end
+			if #viaR > 0 then
+				fromRing(viaR, "stepN")
+			end
 		end
 	end
 
-	function tw.finalWave()
+	-- Finale: toughest wave of the mission across the 45-60 s lifter launch defense
+	function tw.finalWave(durationSecs: number?)
 		if not alive or fired.final then
 			return
 		end
 		fired.final = true
-		say("Everything they've got is coming, hold the lifter!", nil)
-		local n = squadCount(8, 11)
-		local kinds = mix(n, 0.3)
-		if difficulty >= 3 and S and S.Enemies and S.Enemies.countByClass then
-			local ok, counts = pcall(S.Enemies.countByClass)
-			if ok and counts and counts.heavy < Config.MaxHeavies and roster.heavy then
+		local dur = durationSecs or (haulCfg.launchSeconds or 50)
+		ctx.intensity("FINAL_STEPS")
+		say("Everything they've got is coming — defend the lifter while it climbs!", nil)
+
+		local function sendAssault(nLo: number, nHi: number, medShare: number, allowHeavy: boolean, tag: string)
+			if not alive or not ctx.alive() then
+				return
+			end
+			local n = squadCount(nLo, nHi) + (if difficulty >= 4 then 1 else 0)
+			local kinds = mix(n, medShare)
+			if allowHeavy and canAddHeavy() then
 				kinds[1] = roster.heavy
 			end
+			local half = math.floor(#kinds / 2)
+			local viaGates: { string } = {}
+			local viaRing: { string } = {}
+			for i, k in kinds do
+				table.insert(if i <= half then viaGates else viaRing, k)
+			end
+			if #viaGates > 0 then
+				throughGates(viaGates, tag)
+			end
+			if #viaRing > 0 then
+				fromRing(viaRing, tag)
+			end
 		end
-		local half = math.floor(#kinds / 2)
-		local viaGates: { string } = {}
-		local viaRing: { string } = {}
-		for i, k in kinds do
-			table.insert(if i <= half then viaGates else viaRing, k)
+
+		-- Pulse 1: immediate heavy assault
+		sendAssault(7, 10, 0.38, true, "last1")
+
+		-- Pulse 2: mid-climb flanking push
+		if dur >= 15 then
+			task.delay(dur * 0.36, function()
+				if alive and ctx.alive() then
+					ctx.notify("Second assault wave closing on the lifter!", DANGER)
+					sendAssault(4, 6, 0.45, false, "last2")
+				end
+			end)
 		end
-		if #viaGates > 0 then
-			throughGates(viaGates, "last")
-		end
-		if #viaRing > 0 then
-			fromRing(viaRing, "last")
+
+		-- Pulse 3: final surge before liftoff
+		if dur >= 25 then
+			task.delay(dur * 0.68, function()
+				if alive and ctx.alive() then
+					ctx.sound("Alarm", liftPos)
+					ctx.notify("Final COG surge — hold until liftoff!", DANGER)
+					sendAssault(5, 7, 0.45, difficulty >= 3, "last3")
+				end
+			end)
 		end
 	end
 
@@ -662,7 +888,7 @@ function HaulTwists.new(ctx: any, cfg: any): any
 		if not alive then
 			return
 		end
-		if place == "mesa" and not mesaFired then
+		if place == "mesa" and not mesaFired and encounters.mesa ~= "guardian" then
 			mesaFired = true
 			startAlarm(player)
 		elseif place == "graveyard" then
@@ -683,6 +909,12 @@ function HaulTwists.new(ctx: any, cfg: any): any
 				refineryGuard()
 			end
 		end)
+		-- time-based fallback for the once-per-mission surprise if players explore slowly
+		task.delay(110, function()
+			if alive and ctx.alive() then
+				maybeTriggerSurprise()
+			end
+		end)
 		task.spawn(function()
 			while alive and ctx.alive() do
 				task.wait(0.25)
@@ -699,6 +931,13 @@ function HaulTwists.new(ctx: any, cfg: any): any
 
 	function tw.stop()
 		alive = false
+		if stormActive then
+			stormActive = false
+			local now = workspace:GetServerTimeNow()
+			workspace:SetAttribute("Weather", "calm")
+			workspace:SetAttribute("WeatherAt", now)
+			workspace:SetAttribute("WeatherEnd", now + 180)
+		end
 		if restoreMast then
 			restoreMast()
 			restoreMast = nil
@@ -709,6 +948,7 @@ function HaulTwists.new(ctx: any, cfg: any): any
 				e.nextThink = workspace:GetServerTimeNow()
 			end
 		end
+		table.clear(carryPingAt)
 	end
 
 	return tw

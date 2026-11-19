@@ -48,6 +48,20 @@ MapPlan.cells = {
 	graveyard = { 1, 1, 2, 2, 2 },
 }
 
+-- Dustbowl Ridge HAUL mission tuning (clues, per-site encounters, escalation, finale and mid-mission surprise).
+MapPlan.haul = {
+	revealDist = 120,
+	closeRevealDist = 28,
+	flightLogReveals = 2,
+	cradleSeconds = 20,
+	launchSeconds = 50,
+	stormSeconds = 60,
+	carryAttractRadius = 85,
+	carryAttractMax = 3,
+	encounterPool = { "courier", "cradle", "guardian", "buried" },
+	fixedEncounters = { quarry = "conveyor" },
+}
+
 -- Ground features (terrain only; World/Places adds the props along them).
 -- riverbed: a dry channel ~22 wide, ~6 deep, gentle banks, west edge -> the salt pan.
 MapPlan.riverbed = { V2(-250, 145), V2(-130, 135), V2(-10, 132), V2(90, 95), V2(160, 45), V2(215, 15) }
