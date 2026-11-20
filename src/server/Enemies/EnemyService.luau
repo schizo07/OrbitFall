@@ -51,6 +51,9 @@ local EnemyService = {}
 local S: { [string]: any } = {}
 local enemies: { [number]: any } = {}
 local ground: { [number]: any } = {} -- DRONE hook: every enemy except drones (the set EnemyAI steps)
+local cookingModels: { [Model]: boolean } = {}
+local clearGen = 0
+local COOKOFF_DUR = 1.0
 local liveCount = 0
 local liveLoad = 0 -- sum of e.cost over live enemies (the Director's cap is counted in load)
 local nextId = 0
@@ -221,16 +224,21 @@ local function removeEnemy(e: any)
 end
 
 local function kill(e: any, source: any?)
-	local center = e.root.Position + Vector3.new(0, e.def.size * 0.7, 0)
+	local rootPos = e.root.Position
+	local center = rootPos + Vector3.new(0, e.def.size * 0.7, 0)
 	if not removeEnemy(e) then
 		return
 	end
+	e.pos = e.pos or rootPos
 	EnemyService.kills += 1
 	local faction = EnemyData.Factions[e.faction]
+	local sKind = source and source.kind or "objective"
+	local killerId = if source and source.player then source.player.UserId else nil
+	local heavyCogCookoff = e.faction == "COG" and (e.class == "heavy" or e.class == "behemoth") and not e.fodder
+
 	if S.Fx then
 		-- dir = which way the killing blow was travelling (clients fling debris / goo along it), by = killer's userId (kill
 		-- streak HUD), src = "bullet" | "explosion" | ... (bullet kills already get their cue from HitConfirm)
-		local sKind = source and source.kind or "objective"
 		S.Fx.play("Death", {
 			p = center,
 			faction = e.faction,
@@ -240,11 +248,12 @@ local function kill(e: any, source: any?)
 			kind = e.kind,
 			fodder = e.fodder == true,
 			dir = e.lastDir,
-			by = if source and source.player then source.player.UserId else nil,
+			by = killerId,
 			src = sKind,
 			weak = e.lastWeak == true,
 			blast = sKind == "explosion" or sKind == "callin" or e.lastBlast == true,
 			elite = e.elite, -- affix name: the killer's HUD feed says "ELITE DOWN"
+			cookoff = heavyCogCookoff,
 		})
 	end
 	if e.elite then
@@ -253,10 +262,8 @@ local function kill(e: any, source: any?)
 			warn("[Enemies] Elites.onDeath failed:", errE)
 		end
 	end
-	if e.def.wreck then
-		Wrecks.spawn(e)
-	end
-	e.model:Destroy()
+
+	-- Credit Mission.onKill immediately so wave/objective counters never stall during the 1.0 s cook-off
 	local mission = S.Mission
 	if mission and mission.onKill then
 		local ok, err = pcall(mission.onKill, e, source or { kind = "objective" })
@@ -264,6 +271,63 @@ local function kill(e: any, source: any?)
 			warn("[Enemies] Mission.onKill failed:", err)
 		end
 	end
+
+	if heavyCogCookoff then
+		local m = e.model
+		if m and m.Parent then
+			cookingModels[m] = true
+			m:SetAttribute("CookingOff", true)
+			m:SetAttribute("CookOffDur", COOKOFF_DUR)
+			for _, d in m:GetDescendants() do
+				if d:IsA("BasePart") then
+					d.CanQuery = false
+					d.CanTouch = false
+				end
+			end
+		end
+		if S.Fx then
+			S.Fx.play("CookOff", {
+				p = center,
+				model = m,
+				kind = e.kind,
+				class = e.class,
+				size = e.def.size,
+				dur = COOKOFF_DUR,
+				by = killerId,
+			})
+		end
+		local myGen = clearGen
+		task.delay(COOKOFF_DUR, function()
+			if myGen ~= clearGen then
+				return
+			end
+			if m then
+				cookingModels[m] = nil
+			end
+			if e.def.wreck then
+				Wrecks.spawn(e)
+			end
+			if S.Fx then
+				S.Fx.play("CookOffBoom", {
+					p = center,
+					kind = e.kind,
+					class = e.class,
+					size = e.def.size,
+					dir = e.lastDir,
+					by = killerId,
+				})
+			end
+			if m and m.Parent then
+				m:Destroy()
+			end
+		end)
+		return
+	end
+
+	if e.def.wreck then
+		Wrecks.spawn(e)
+	end
+	e.model:Destroy()
 end
 
 function EnemyService.despawn(e: any)
@@ -667,10 +731,17 @@ end
 
 -- Lifecycle --------------------------------------------------------------------------
 function EnemyService.clear()
+	clearGen += 1
 	if conn then
 		conn:Disconnect()
 		conn = nil
 	end
+	for m in cookingModels do
+		if m and m.Parent then
+			m:Destroy()
+		end
+	end
+	table.clear(cookingModels)
 	for _, e in enemies do
 		e.alive = false
 		EnemyAI.unregister(e)

@@ -57,16 +57,25 @@ local HEAVY_DMG = 30
 local HEAVY_HITS = 4
 local PRONE_TIPS_MAX = 3
 
+local CRIMSON_EDGE = Color3.fromRGB(168, 16, 16) -- #A81010 border-only damage vignette & droplets
+local CRIMSON_DARK = Color3.fromRGB(124, 10, 10)
+local HEAL_RIM = Color3.fromRGB(40, 184, 200) -- #28B8C8 border-only stim/heal rim wash
+local HEAL_WASH_DUR = 3.0
+
 local gui: ScreenGui? = nil
 local edges: { Frame } = {}
+local healEdges: { Frame } = {}
+local splatters: { { frame: Frame, alpha: number, dur: number, age: number } } = {}
+local splatterNext = 1
 local cc: ColorCorrectionEffect? = nil
 local staticBands: { Frame } = {}
 local crackPool: { { Frame } } = {} -- each set: line frames
 local crackNext = 1
 
 local shownFrac = 1 -- eased health fraction for the screen effects
-local hitPulse = 0 -- 0..1 decays after each hit
+local hitPulse = 0 -- 0..1 decays over 2-3 s after each hit
 local hitDesat = 0
+local healWash = 0 -- seconds left on the 3 s cyan-teal stim rim wash
 local staticT = 0
 local staticJitter = 0
 local beatT = 0 -- seconds until the next heartbeat
@@ -133,17 +142,17 @@ local function build()
 		g.ScreenInsets = Enum.ScreenInsets.None
 	end)
 
-	-- edge vignette: four gradient bands
+	-- border-only crimson (#A81010) damage edge vignette: strictly outer 20% (80%+ center stays clear)
 	local defs = {
-		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.32), rot = 90 },
-		{ pos = UDim2.fromScale(0, 0.68), size = UDim2.fromScale(1, 0.32), rot = 270 },
-		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.24, 1), rot = 0 },
-		{ pos = UDim2.fromScale(0.76, 0), size = UDim2.fromScale(0.24, 1), rot = 180 },
+		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.20), rot = 90 },
+		{ pos = UDim2.fromScale(0, 0.80), size = UDim2.fromScale(1, 0.20), rot = 270 },
+		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.16, 1), rot = 0 },
+		{ pos = UDim2.fromScale(0.84, 0), size = UDim2.fromScale(0.16, 1), rot = 180 },
 	}
 	for _, d in defs do
 		local f = Instance.new("Frame")
 		f.Name = "Edge"
-		f.BackgroundColor3 = Color3.fromRGB(200, 24, 30)
+		f.BackgroundColor3 = CRIMSON_EDGE
 		f.BackgroundTransparency = 1
 		f.BorderSizePixel = 0
 		f.Position = d.pos
@@ -154,11 +163,58 @@ local function build()
 		gr.Rotation = d.rot
 		gr.Transparency = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, 0),
-			NumberSequenceKeypoint.new(0.45, 0.6),
+			NumberSequenceKeypoint.new(0.42, 0.52),
 			NumberSequenceKeypoint.new(1, 1),
 		})
 		gr.Parent = f
 		table.insert(edges, f)
+	end
+
+	-- border-only cyan-teal (#28B8C8) stim/heal rim wash (outer 16-18%, fades over 3 s)
+	local healDefs = {
+		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.18), rot = 90 },
+		{ pos = UDim2.fromScale(0, 0.82), size = UDim2.fromScale(1, 0.18), rot = 270 },
+		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.15, 1), rot = 0 },
+		{ pos = UDim2.fromScale(0.85, 0), size = UDim2.fromScale(0.15, 1), rot = 180 },
+	}
+	for _, d in healDefs do
+		local f = Instance.new("Frame")
+		f.Name = "HealEdge"
+		f.BackgroundColor3 = HEAL_RIM
+		f.BackgroundTransparency = 1
+		f.BorderSizePixel = 0
+		f.Position = d.pos
+		f.Size = d.size
+		f.Active = false
+		f.ZIndex = 2
+		f.Parent = g
+		local gr = Instance.new("UIGradient")
+		gr.Rotation = d.rot
+		gr.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.45, 0.5),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		gr.Parent = f
+		table.insert(healEdges, f)
+	end
+
+	-- border-only crimson splatter droplets (pooled, strictly placed inside the outer 18% perimeter)
+	for i = 1, 14 do
+		local drop = Instance.new("Frame")
+		drop.Name = "Splatter" .. i
+		drop.AnchorPoint = Vector2.new(0.5, 0.5)
+		drop.BackgroundColor3 = if i % 3 == 0 then CRIMSON_DARK else CRIMSON_EDGE
+		drop.BackgroundTransparency = 1
+		drop.BorderSizePixel = 0
+		drop.Active = false
+		drop.Visible = false
+		drop.ZIndex = 2
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = drop
+		drop.Parent = g
+		table.insert(splatters, { frame = drop, alpha = 0, dur = 2.4, age = 99 })
 	end
 
 	-- static smear bands (pooled, re-randomised while active)
@@ -320,10 +376,72 @@ local function stepStatic(dt: number)
 	end
 end
 
+local function splashBorder(from: Vector3?, strength: number)
+	if #splatters == 0 then
+		return
+	end
+	local vp = screenSize()
+	local dir = hitDir(from)
+	local count = math.clamp(math.floor(4 + strength * 4), 4, 8)
+	local scale = math.clamp(vp.Y / 720, 0.65, 1.5)
+	for i = 1, count do
+		local s = splatters[splatterNext]
+		splatterNext = splatterNext % #splatters + 1
+		-- Pick an edge biased toward the incoming hit direction, staying strictly within the outer 16% rim
+		local edgePick = if i <= 3 then (if math.abs(dir.X) >= math.abs(dir.Y) then (if dir.X >= 0 then 2 else 1) else (if dir.Y >= 0 then 4 else 3)) else math.random(1, 4)
+		local x, y
+		if edgePick == 1 then -- left border
+			x = 0.02 + math.random() * 0.11
+			y = 0.08 + math.random() * 0.84
+		elseif edgePick == 2 then -- right border
+			x = 0.87 + math.random() * 0.11
+			y = 0.08 + math.random() * 0.84
+		elseif edgePick == 3 then -- top border
+			x = 0.08 + math.random() * 0.84
+			y = 0.02 + math.random() * 0.12
+		else -- bottom border
+			x = 0.08 + math.random() * 0.84
+			y = 0.86 + math.random() * 0.12
+		end
+		local w = (18 + math.random() * 34) * scale * (0.85 + 0.35 * strength)
+		local h = w * (0.55 + math.random() * 0.85)
+		s.frame.Position = UDim2.fromScale(x, y)
+		s.frame.Size = UDim2.fromOffset(w, h)
+		s.frame.Rotation = math.random() * 360
+		s.alpha = math.clamp(0.45 + 0.35 * strength, 0.4, 0.82)
+		s.dur = 2.0 + math.random() * 1.0 -- fades cleanly over 2-3 s
+		s.age = 0
+		s.frame.BackgroundTransparency = 1 - s.alpha
+		s.frame.Visible = true
+	end
+end
+
+local function stepSplatters(dt: number)
+	for _, s in splatters do
+		if s.frame.Visible then
+			s.age += dt
+			if s.age >= s.dur then
+				s.frame.Visible = false
+				s.frame.BackgroundTransparency = 1
+			else
+				local u = s.age / s.dur
+				-- hold briefly then ease out over 2-3 s
+				local fade = if u < 0.15 then 1 else 1 - ((u - 0.15) / 0.85) ^ 1.3
+				s.frame.BackgroundTransparency = 1 - s.alpha * math.clamp(fade, 0, 1)
+			end
+		end
+	end
+end
+
 local function hideOverlays()
 	staticT = 0
 	for _, b in staticBands do
 		b.Visible = false
+	end
+	for _, s in splatters do
+		s.frame.Visible = false
+		s.frame.BackgroundTransparency = 1
+		s.age = 99
 	end
 end
 
@@ -344,20 +462,25 @@ local function onHurt(d: any)
 	-- edge + desaturation pulse, scaled up when health is already low
 	local _, me = meAlive()
 	local missing = 1 - hpFrac(me)
-	hitPulse = math.max(hitPulse, math.clamp(amount / 30 + 0.2 + missing * 0.3, 0, 1))
+	hitPulse = math.max(hitPulse, math.clamp(amount / 26 + 0.35 + missing * 0.25, 0, 1))
 	hitDesat = math.max(hitDesat, math.clamp(amount / 40, 0.1, 0.6))
-	-- physical damage impact: directional camera kick + crisp shake + red hit vignette (scaled by damage)
+	splashBorder(d.from, math.clamp(amount / 35, 0.35, 1.4) * math.min(k, 1.3))
+	-- physical damage impact: unmistakable 4-7 deg directional flinch kick (120-180 ms) + border crimson vignette
 	if Juice then
-		local scale = math.clamp(amount / 25, 0.35, 2.0) * math.min(k, 1.5)
+		local scale = math.clamp(amount / 22, 0.55, 1.85) * math.min(k, 1.4)
 		local dir = hitDir(d.from)
-		-- flinch away from the side the hit landed on, with a crisp upward-back snap
-		local yawKick = -dir.X * (0.9 + 1.6 * scale)
-		local pitchKick = (0.65 + 1.35 * scale) * (if dir.Y > 0.4 then -0.7 else 1)
-		Juice.kick(pitchKick, yawKick)
-		Juice.shake(0.55 + 1.15 * scale, 0.16 + 0.12 * scale)
-		Juice.vignette(Color3.fromRGB(220, 28, 32), math.clamp(0.22 + 0.26 * scale, 0.2, 0.6), 0.28 + 0.14 * scale)
-		if amount >= 25 then
-			Juice.punchFov(-2.2 * math.min(scale, 1.5))
+		local sideSign = if dir.X >= 0 then -1 else 1
+		local pitchPunch = math.clamp(3.6 + 2.4 * scale, 4.0, 6.8) * (if dir.Y > 0.45 then -0.75 else 1)
+		local yawPunch = sideSign * math.clamp(1.6 + 1.5 * scale, 1.5, 4.0)
+		local rollPunch = sideSign * math.clamp(3.8 + 2.4 * scale, 4.0, 6.8)
+		if Juice.flinch then
+			Juice.flinch(pitchPunch, yawPunch, rollPunch)
+		else
+			Juice.kick(pitchPunch * 0.5, yawPunch * 0.6)
+		end
+		Juice.shake(0.75 + 1.25 * scale, 0.16 + 0.1 * scale)
+		if amount >= 22 then
+			Juice.punchFov(-2.4 * math.min(scale, 1.4))
 		end
 	end
 	-- big-hit visor overlay
@@ -504,21 +627,25 @@ local function onStim(d: any)
 		if Audio then
 			Audio.play2D("StimInject")
 		end
-		if Juice then
-			Juice.flash(Color3.fromRGB(90, 255, 150), 0.22, 0.35)
-		end
+		-- 3 s border-only cool cyan-teal (#28B8C8) heal rim wash (keeps 80%+ center completely clear)
+		healWash = HEAL_WASH_DUR
 		hitPulse = 0
+		for _, s in splatters do
+			if s.frame.Visible then
+				s.dur = math.min(s.dur, s.age + 0.35)
+			end
+		end
 	elseif Audio and pos then
 		Audio.play("StimInject", pos)
 	end
-	-- green burst at the trooper (everyone sees it; cheap: two parts, auto-cleaned)
+	-- cyan-teal heal burst at the trooper (everyone sees it; cheap: two parts, auto-cleaned)
 	if pos and Fx and Fx.visual then
 		local cf = CFrame.new(pos)
-		local p = Fx.visual(Vector3.new(1.2, 1.2, 1.2), Color3.fromRGB(90, 255, 150), cf, Enum.PartType.Ball, Enum.Material.Neon, 0.25, 0.45)
+		local p = Fx.visual(Vector3.new(1.2, 1.2, 1.2), HEAL_RIM, cf, Enum.PartType.Ball, Enum.Material.Neon, 0.25, 0.45)
 		if p and Fx.tween then
 			Fx.tween(p, 0.4, { Size = Vector3.new(5, 5, 5), Transparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		end
-		local ring = Fx.visual(Vector3.new(0.2, 4, 4), Color3.fromRGB(170, 255, 200), cf * CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder, Enum.Material.Neon, 0.4, 0.5)
+		local ring = Fx.visual(Vector3.new(0.2, 4, 4), Color3.fromRGB(145, 240, 248), cf * CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder, Enum.Material.Neon, 0.4, 0.5)
 		if ring and Fx.tween then
 			ring.CFrame = CFrame.new(pos - Vector3.new(0, 1.5, 0)) * CFrame.Angles(0, 0, math.rad(90))
 			Fx.tween(ring, 0.5, { Size = Vector3.new(0.2, 9, 9), Transparency = 1, CFrame = ring.CFrame + Vector3.new(0, 3, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -554,6 +681,15 @@ local function setEdges(alpha: number)
 	end
 end
 
+local function setHealEdges(alpha: number)
+	local t = 1 - math.clamp(alpha, 0, 1)
+	for _, f in healEdges do
+		if math.abs(f.BackgroundTransparency - t) > 0.002 then
+			f.BackgroundTransparency = t
+		end
+	end
+end
+
 local idle = false
 local function step(dt: number)
 	if not gui then
@@ -565,8 +701,9 @@ local function step(dt: number)
 		if not idle then
 			idle = true
 			setEdges(0)
+			setHealEdges(0)
 			hideOverlays()
-			shownFrac, hitPulse, hitDesat, beatPulse = 1, 0, 0, 0
+			shownFrac, hitPulse, hitDesat, beatPulse, healWash = 1, 0, 0, 0, 0
 			if cc then
 				cc.Saturation, cc.Contrast, cc.TintColor = 0, 0, Color3.new(1, 1, 1)
 				cc.Enabled = false
@@ -595,13 +732,26 @@ local function step(dt: number)
 		beatT = 0
 	end
 	beatPulse = math.max(0, beatPulse - dt * 4)
-	hitPulse = math.max(0, hitPulse - dt * 2.2)
-	hitDesat = math.max(0, hitDesat - dt * 1.5)
+	-- border crimson vignette fades smoothly over ~2.4 s after each hit
+	hitPulse = math.max(0, hitPulse - dt * 0.42)
+	hitDesat = math.max(0, hitDesat - dt * 1.4)
 
-	-- edge vignette: shows from 75 % health down, peaks around 0.55 alpha at 0 hp (x intensity)
-	local base = math.clamp((missing - 0.25) / 0.75, 0, 1) ^ 1.2 * 0.5
-	local alpha = (base + 0.22 * beatPulse + 0.35 * hitPulse) * k
-	setEdges(math.min(alpha, 0.85))
+	-- border-only crimson edge vignette: shows on hit + grows as health drops, keeping 80%+ center clear
+	local base = math.clamp((missing - 0.25) / 0.75, 0, 1) ^ 1.2 * 0.52
+	local alpha = (base + 0.24 * beatPulse + 0.48 * (hitPulse ^ 1.15)) * k
+	setEdges(math.min(alpha, 0.86))
+
+	-- border-only cool cyan-teal (#28B8C8) stim/heal rim wash (3 s)
+	if healWash > 0 then
+		healWash = math.max(0, healWash - dt)
+		local u = healWash / HEAL_WASH_DUR
+		local pulse = 0.85 + 0.15 * math.sin(os.clock() * 6.5)
+		local ha = math.clamp((u ^ 0.75) * 0.62 * pulse, 0, 0.72)
+		setHealEdges(ha)
+	else
+		setHealEdges(0)
+	end
+	stepSplatters(dt)
 
 	-- desaturation / warm tint
 	local e = ensureCC()

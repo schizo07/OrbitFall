@@ -43,8 +43,9 @@ local MAX_BOLTS = 140
 local MAX_TELEGRAPHS = 48
 local MAX_LIT_BOLTS = 8 -- bolts that carry a PointLight at once
 local litBolts = 0
-local BOLT_CORE = C3(255, 90, 40) -- robot laser: red-orange body ...
-local BOLT_HOT = C3(255, 200, 170) -- ... with a warm white-hot centre (pure white Neon blooms into a blown-out blob)
+local BOLT_CORE = C3(255, 42, 20) -- #FF2A14 wide crimson-orange enemy fire bloom
+local BOLT_ORANGE = C3(255, 85, 0) -- #FF5500 heavy bolt bloom accent
+local BOLT_HOT = C3(255, 244, 210) -- #FFF4D2 unmistakable white-yellow core inside crimson bloom
 
 -- Every instance we create gets a hard deadline. A sweeper on its own thread (independent of RenderStepped, Debris and
 -- any per-effect task.delay) destroys anything past its deadline, so no code path can leave a glowing part behind.
@@ -362,18 +363,26 @@ local function stepBolt(b: any, now: number, camPos: Vector3?, viewPos: Vector3?
 	if not skipRay then
 		b.prev = pos
 	end
-	-- far bolts get a fatter shell / tail so they stay readable (cross-section only, updated in steps)
+	-- far bolts get a fatter shell / tail so enemy fire reads across 100+ studs of desert haze
 	if viewPos and (b.halo or b.tail) then
-		local k = math.clamp((pos - viewPos).Magnitude / 70, 1, 1.7)
-		if math.abs(k - b.k) > 0.12 then
+		local k = math.clamp((pos - viewPos).Magnitude / 52, 1, 2.35)
+		if math.abs(k - b.k) > 0.1 then
 			b.k = k
 			if b.halo then
 				local s = b.haloSize
-				b.halo.Size = Vector3.new(s.X, s.Y * k, s.Z * k)
+				if b.isOrb then
+					b.halo.Size = s * k
+				else
+					b.halo.Size = Vector3.new(s.X, s.Y * k, s.Z * k)
+				end
 			end
 			if b.tail then
 				local s = b.tailSize
 				b.tail.Size = Vector3.new(s.X, s.Y * k, s.Z * k)
+			end
+			if b.beam then
+				b.beam.Width0 = b.beamW0 * k
+				b.beam.Width1 = b.beamW1 * k
 			end
 		end
 	end
@@ -580,48 +589,104 @@ local function onBolt(d: any)
 	local start = if v0.Magnitude > 0.1 then CFrame.lookAt(d.a, d.a + v0) * CYL_ALONG_Z else CFrame.new(d.a)
 	local tail: Part? = nil
 	local tailBack = 0
-	-- chunky energy round: short hot core inside a fatter soft shell, plus a short faint tail, all along the velocity.
-	-- Phones (low quality) keep core + shell, no tail.
-	local function slug(coreLen: number, coreW: number, shellLen: number, shellW: number, tailLen: number, col: Color3)
-		local hot = col:Lerp(BOLT_HOT, 0.6)
-		part = mk(Vector3.new(coreLen, coreW, coreW), hot, start, Enum.PartType.Cylinder, nil, 0, partLife)
-		if hq >= 0.45 then
-			halo = mk(Vector3.new(shellLen, shellW, shellW), col, start, Enum.PartType.Cylinder, nil, 0.45, partLife)
+	local streakBeam: Beam? = nil
+	local beamW0, beamW1 = 0, 0
+	local isOrb = false
+	-- Unmistakable enemy fire lane: white-yellow core (#FFF4D2) inside wide crimson-orange bloom (#FF2A14 / #FF5500).
+	-- Straight camera-facing tapered Beam ribbon attached rigidly along local -X (cylinder flight tail) never kinks and
+	-- gives ~80-120 ms visual streak dwell across 100+ studs of haze.
+	local function attachStreakBeam(host: Part, length: number, w0: number, w1: number, coreC: Color3, bloomC: Color3)
+		if hq < 0.45 then
+			return
+		end
+		local a0 = Instance.new("Attachment")
+		a0.Position = Vector3.new(length * 0.15, 0, 0) -- head end (+X along CYL_ALONG_Z)
+		a0.Parent = host
+		local a1 = Instance.new("Attachment")
+		a1.Position = Vector3.new(-length, 0, 0) -- tapered crimson tail behind head
+		a1.Parent = host
+		local bm = Instance.new("Beam")
+		bm.Attachment0 = a0
+		bm.Attachment1 = a1
+		bm.FaceCamera = true
+		bm.Segments = 1
+		bm.LightEmission = 1
+		bm.LightInfluence = 0
+		bm.Brightness = 2.2
+		bm.Width0 = w0
+		bm.Width1 = w1
+		bm.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, coreC),
+			ColorSequenceKeypoint.new(0.22, bloomC),
+			ColorSequenceKeypoint.new(1, bloomC),
+		})
+		bm.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.08),
+			NumberSequenceKeypoint.new(0.45, 0.32),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		bm.Parent = host
+		streakBeam = bm
+		beamW0, beamW1 = w0, w1
+	end
+	local function slug(coreLen: number, coreW: number, shellLen: number, shellW: number, tailLen: number, bloomCol: Color3, coreCol: Color3)
+		part = mk(Vector3.new(coreLen, coreW, coreW), coreCol, start, Enum.PartType.Cylinder, nil, 0, partLife)
+		if hq >= 0.4 then
+			halo = mk(Vector3.new(shellLen, shellW, shellW), bloomCol, start, Enum.PartType.Cylinder, nil, 0.34, partLife)
 		else
-			part.Color = col
-			part.Size = Vector3.new(coreLen, shellW * 0.7, shellW * 0.7)
+			part.Color = bloomCol
+			part.Size = Vector3.new(coreLen, shellW * 0.78, shellW * 0.78)
 		end
 		if hq >= 0.6 then
-			tail = mk(Vector3.new(tailLen, shellW * 0.45, shellW * 0.45), col, start, Enum.PartType.Cylinder, nil, 0.72, partLife)
+			tail = mk(Vector3.new(tailLen, shellW * 0.46, shellW * 0.46), bloomCol, start, Enum.PartType.Cylinder, nil, 0.58, partLife)
 		end
+		attachStreakBeam(part, math.max(tailLen * 1.45, 9), shellW * 1.35, 0.14, coreCol, bloomCol)
 		oriented = v0.Magnitude > 0.1
-		back = shellLen * 0.5
-		tailBack = shellLen * 0.6 + tailLen * 0.5
+		back = shellLen * 0.42
+		tailBack = shellLen * 0.5 + tailLen * 0.5
 	end
-	local col: Color3 = if typeof(d.c) == "Color3" then d.c else BOLT_CORE
+	local function heavyOrb(coreD: number, haloD: number, tailLen: number, bloomCol: Color3, coreCol: Color3)
+		isOrb = true
+		part = mk(Vector3.one * coreD, coreCol, start, Enum.PartType.Ball, nil, 0, partLife)
+		halo = mk(Vector3.one * haloD, bloomCol, start, Enum.PartType.Ball, nil, 0.36, partLife)
+		if hq >= 0.55 then
+			tail = mk(Vector3.new(tailLen, haloD * 0.42, haloD * 0.42), bloomCol, start, Enum.PartType.Cylinder, nil, 0.55, partLife)
+		end
+		attachStreakBeam(part, math.max(tailLen * 1.4, 11), haloD * 1.15, 0.22, coreCol, bloomCol)
+		oriented = v0.Magnitude > 0.1
+		back = 0
+		tailBack = haloD * 0.35 + tailLen * 0.5
+	end
+	local rawCol: Color3? = if typeof(d.c) == "Color3" then d.c else nil
+	local isCoolEnemy = rawCol ~= nil and rawCol.B > rawCol.R * 1.15 -- Lumen violet/cyan keeps its cool hue
+	local col: Color3 = if isCoolEnemy then rawCol :: Color3 else BOLT_CORE
+	local coreCol: Color3 = if isCoolEnemy then (rawCol :: Color3):Lerp(Color3.new(1, 1, 1), 0.75) else BOLT_HOT
 	local cls = d.cls
 	local ek = d.ek
 	local isHeavy = d.hv == true or style == "cannon" or style == "mortar" or cls == "heavy" or cls == "behemoth"
 	local isFodder = ek == "TINKER_SWARM" or ek == "DRONE_COG"
+	local speedMag = v0.Magnitude
+	-- ~80-120 ms visual streak length scaled by projectile speed (clamped for readability)
+	local dwellLen = math.clamp(speedMag * 0.10, 7.5, 16.5)
 	if style == "bolt" then
 		if isFodder then
-			slug(1.3, 0.38, 2.0, 0.95, 2.5, col)
+			slug(2.6, 0.42, 4.2, 1.2, dwellLen * 0.75, col, coreCol)
 		elseif isHeavy then
-			slug(2.4, 0.95, 3.6, 2.1, 5.8, col)
+			heavyOrb(1.65, 3.4, dwellLen * 1.1, if isCoolEnemy then col else BOLT_CORE, coreCol)
 		else
-			slug(1.8, 0.54, 2.8, 1.32, 4.2, col)
+			slug(4.2, 0.56, 6.8, 1.65, dwellLen, col, coreCol)
 		end
-		if camDist < 150 then
+		if camDist < 170 then
 			lightColor = col
 		end
 	elseif style == "cannon" then
-		col = if typeof(d.c) == "Color3" then d.c else ORANGE
-		slug(2.8, 1.38, 4.4, 2.95, 7.2, col)
-		lightColor = ORANGE
+		col = if isCoolEnemy then col else BOLT_ORANGE
+		heavyOrb(2.2, 4.6, dwellLen * 1.2, col, coreCol)
+		lightColor = col
 	elseif style == "mortar" then
-		col = if typeof(d.c) == "Color3" then d.c else ORANGE
-		slug(2.4, 1.35, 3.8, 2.85, 5.4, col)
-		lightColor = ORANGE
+		col = if isCoolEnemy then col else BOLT_ORANGE
+		heavyOrb(2.0, 4.2, dwellLen * 0.95, col, coreCol)
+		lightColor = col
 	else -- acid: green-yellow blob (wobbles in stepBolts), arcs with the projectile's gravity
 		col = ACID
 		style = "acid"
@@ -637,6 +702,10 @@ local function onBolt(d: any)
 		halo = halo,
 		tail = tail,
 		tailBack = tailBack,
+		beam = streakBeam,
+		beamW0 = beamW0,
+		beamW1 = beamW1,
+		isOrb = isOrb,
 		haloSize = if halo then halo.Size else nil,
 		tailSize = if tail then tail.Size else nil,
 		k = 1,
@@ -2113,6 +2182,9 @@ local function onHeavyDeath(d: any)
 		dronePop(d)
 		return
 	end
+	if d.cookoff == true then
+		return -- heavy COG cook-off flings burning plates on CookOffBoom after 1.0 s
+	end
 	if d.fodder == true or typeof(d.p) ~= "Vector3" or not Fx then
 		return
 	end
@@ -2543,6 +2615,170 @@ local function startElites()
 	end)
 end
 
+-- Heavy COG 1.0 s flaming cook-off + secondary sky-flashing 4-beat detonation -------------------------------------------
+local function onCookOff(d: any)
+	if type(d) ~= "table" or typeof(d.p) ~= "Vector3" or not Fx then
+		return
+	end
+	local p: Vector3 = d.p
+	local dur = math.clamp(tonumber(d.dur) or 1.0, 0.4, 2.0)
+	local isBehemoth = d.class == "behemoth"
+	local sz = math.clamp(tonumber(d.size) or (if isBehemoth then 12 else 5), 3, 14)
+	local k = math.clamp(sz / 5, 0.8, 2.6)
+	local q = quality()
+	local dist = if Fx.camDistance then Fx.camDistance(p) else 0
+	if dist > 450 then
+		return
+	end
+
+	-- Rising danger whine + crackling cook-off audio
+	if Audio and Audio.play then
+		pcall(Audio.play, "LanceCharge", p, { volume = 1.05, pitch = 1.15, priority = 5 })
+		pcall(Audio.play, "DeathScrap", p, { volume = 0.85, pitch = 0.72, priority = 4 })
+	end
+	if Juice and Juice.shake then
+		pcall(Juice.shake, 0.7 * k, dur, p, 90)
+	end
+
+	-- Violent flame + black charcoal smoke + flickering orange PointLight anchored at the dying hulk
+	local host = mk(Vector3.one * 0.6, C3(255, 140, 30), CFrame.new(p), Enum.PartType.Block, Enum.Material.SmoothPlastic, 1, dur + 2.8)
+	local flames = emitter(host, {
+		Texture = FIRE_TEX,
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, C3(255, 251, 224)),
+			ColorSequenceKeypoint.new(0.35, C3(255, 130, 28)),
+			ColorSequenceKeypoint.new(1, C3(210, 42, 12)),
+		}),
+		LightEmission = 1,
+		LightInfluence = 0,
+		EmissionDirection = Enum.NormalId.Top,
+		SpreadAngle = Vector2.new(65, 65),
+		Size = NumberSequence.new({ kp(0, 2.2 * k), kp(0.45, 4.6 * k), kp(1, 0.8 * k) }),
+		Transparency = NumberSequence.new({ kp(0, 0.05), kp(0.7, 0.35), kp(1, 1) }),
+		Lifetime = NumberRange.new(0.25, 0.5),
+		Speed = NumberRange.new(14 * k, 28 * k),
+		Rate = math.max(18, math.floor(42 * q)),
+	})
+	local soot = emitter(host, {
+		Texture = SMOKE_TEX,
+		Color = ColorSequence.new(C3(31, 27, 24), C3(74, 67, 60)),
+		LightEmission = 0,
+		LightInfluence = 0.4,
+		EmissionDirection = Enum.NormalId.Top,
+		SpreadAngle = Vector2.new(35, 35),
+		Size = NumberSequence.new({ kp(0, 2.4 * k), kp(1, 7.5 * k) }),
+		Transparency = NumberSequence.new({ kp(0, 0.15), kp(0.65, 0.45), kp(1, 1) }),
+		Lifetime = NumberRange.new(1.1, 1.9),
+		Speed = NumberRange.new(10 * k, 20 * k),
+		Acceleration = Vector3.new(1.5, 6, 0.8),
+		Rate = math.max(10, math.floor(24 * q)),
+	})
+	local sparks = emitter(host, {
+		Texture = SPARK_TEX,
+		Color = ColorSequence.new(C3(255, 248, 210), C3(255, 130, 30)),
+		LightEmission = 1,
+		LightInfluence = 0,
+		SpreadAngle = Vector2.new(180, 180),
+		Size = NumberSequence.new({ kp(0, 0.65 * k), kp(1, 0) }),
+		Transparency = NumberSequence.new({ kp(0, 0), kp(1, 1) }),
+		Lifetime = NumberRange.new(0.25, 0.55),
+		Speed = NumberRange.new(22, 52),
+		Acceleration = Vector3.new(0, -65, 0),
+		Rate = math.max(16, math.floor(36 * q)),
+	})
+	local glow = Instance.new("PointLight")
+	glow.Color = C3(255, 140, 26)
+	glow.Range = math.clamp(30 * k, 30, 60)
+	glow.Brightness = 4.5
+	glow.Shadows = false
+	glow.Parent = host
+
+	-- Violent hull shudder + rising danger pops at t = 0.25, 0.55, 0.82 s
+	local model: Model? = if typeof(d.model) == "Instance" and d.model:IsA("Model") then d.model else nil
+	local basePivot = if model and model.Parent then model:GetPivot() else nil
+	local t0 = os.clock()
+	local popTimes = { dur * 0.24, dur * 0.54, dur * 0.82 }
+	local nextPop = 1
+	addActor(function()
+		local elapsed = os.clock() - t0
+		if elapsed >= dur or not host.Parent then
+			flames.Enabled = false
+			soot.Enabled = false
+			sparks.Enabled = false
+			glow.Enabled = false
+			return true
+		end
+		local u = elapsed / dur
+		-- escalating flicker + sputter
+		glow.Brightness = (3.5 + 5.0 * u) * (0.65 + 0.55 * math.random())
+		if model and model.Parent and basePivot then
+			local j = (0.18 + 0.42 * u) * k
+			local off = Vector3.new((math.random() - 0.5) * j, (math.random() - 0.5) * j * 0.5, (math.random() - 0.5) * j)
+			local tilt = CFrame.Angles((math.random() - 0.5) * 0.08 * u, 0, (math.random() - 0.5) * 0.08 * u)
+			model:PivotTo(basePivot * CFrame.new(off) * tilt)
+		end
+		if nextPop <= #popTimes and elapsed >= popTimes[nextPop] then
+			nextPop += 1
+			local popOff = Vector3.new((math.random() - 0.5) * 3 * k, math.random() * 2.5 * k, (math.random() - 0.5) * 3 * k)
+			flash(p + popOff, C3(255, 238, 175), 5.5 * k, 0.14)
+			if Fx.burst then
+				Fx.burst("sparks", p + popOff, 14, { scale = 1.0 * k, speed = 1.3 })
+				Fx.burst("fire", p + popOff, 6, { scale = 0.9 * k, speed = 1.1 })
+			end
+			if Audio and Audio.play then
+				pcall(Audio.play, "ExplosionSmall", p, { volume = 0.85, pitch = 1.05 + 0.2 * u, priority = 4 })
+			end
+		end
+		return false
+	end)
+end
+
+local function onCookOffBoom(d: any)
+	if type(d) ~= "table" or typeof(d.p) ~= "Vector3" or not Fx then
+		return
+	end
+	local p: Vector3 = d.p
+	local isBehemoth = d.class == "behemoth"
+	local sz = math.clamp(tonumber(d.size) or (if isBehemoth then 12 else 5), 4, 14)
+
+	-- Secondary sky-flashing 4-beat detonation + audio ducking + chunky dark burning shrapnel
+	if Fx.explosion then
+		Fx.explosion(p, {
+			size = if isBehemoth then "XL" else "L",
+			r = if isBehemoth then 24 else 15,
+			k = if isBehemoth then 3.2 else 2.2,
+			style = "fire",
+			cookoff = true,
+		})
+	end
+	if Audio and Audio.play then
+		pcall(Audio.play, "DeathBig", p, { volume = 1.2, priority = 5 })
+	end
+	if Juice then
+		if Juice.flashAt then
+			pcall(Juice.flashAt, C3(255, 251, 224), if isBehemoth then 0.8 else 0.62, 0.36, p, 850)
+		end
+		if Juice.kill then
+			local mine = d.by == PlayersService.LocalPlayer.UserId
+			pcall(Juice.kill, if isBehemoth then 3 else 2, mine, p)
+		end
+	end
+	if Fx.debris then
+		Fx.debris(p + Vector3.new(0, 1.5, 0), {
+			n = if isBehemoth then 12 else 10,
+			style = "shrapnel",
+			speed = 46 + sz * 1.8,
+			up = 1.9,
+			scale = if isBehemoth then 1.65 else 1.25,
+			life = 1.4,
+			dir = if typeof(d.dir) == "Vector3" then d.dir else nil,
+			bias = 0.6,
+		})
+	end
+	-- Also fling burning COG armor plates
+	onHeavyDeath({ p = p, kind = d.kind, dir = d.dir, fodder = false, cookoff = false })
+end
+
 -- Init -------------------------------------------------------------------------------
 function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx = fx
@@ -2555,6 +2791,8 @@ function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx.register("Breach", onBreach)
 	Fx.register("EnemyAttack", onEnemyAttack)
 	Fx.register("Death", onHeavyDeath) -- staged kinds: flung burning plates (the generic death burst stays in Fx/init.luau)
+	Fx.register("CookOff", onCookOff)
+	Fx.register("CookOffBoom", onCookOffBoom)
 	Fx.register("LootBurst", onLootBurst)
 	Fx.register("LootEscape", onLootEscape)
 	startStaged()

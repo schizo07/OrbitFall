@@ -1317,15 +1317,74 @@ local function openTrajectory(data: any)
 	end)
 end
 
--- ---------------------------------------------------------------- distant battle (mission maps only)
--- Far horizon dressing: 5 tall dark smoke columns on a ring (r 300-420) outside the play area, random distant explosion
--- flashes (3 pooled flash parts, round-robin) and an occasional faint tracer arc across the sky (max 3 live bars).
--- Everything lives in one folder that is destroyed as soon as the Map folder goes away. No sounds, no collision.
+-- ---------------------------------------------------------------- distant battle + orbital cruisers (mission maps only)
+-- Far horizon dressing: 3 chunky stylized orbital cruiser silhouettes high in the sky, 5 tall dark smoke columns on a
+-- ring (r 300-420) outside the play area, random distant explosion flashes (3 pooled flash parts, round-robin) and an
+-- occasional faint tracer arc across the sky (max 3 live bars). Everything lives in one folder destroyed as soon as the
+-- Map folder goes away. No sounds, no collision.
 local HORIZON_COLUMNS = 5
 local FLASH_POOL = 3
 local TRACER_MAX = 3
 
 local horizon: { folder: Folder, conn: RBXScriptConnection?, alive: boolean }? = nil
+
+local function buildOrbitalCruiser(parent: Instance, scale: number, name: string): (Model, { BasePart })
+	local m = Instance.new("Model")
+	m.Name = name
+	local hullDark = Color3.fromRGB(22, 26, 34)
+	local hullMid = Color3.fromRGB(36, 42, 54)
+	local hullEdge = Color3.fromRGB(54, 62, 76)
+	local engineCyan = Color3.fromRGB(85, 184, 255) -- #55B8FF
+	local engineHot = Color3.fromRGB(255, 251, 232) -- #FFFBE8
+	local bridgeLit = Color3.fromRGB(255, 240, 190)
+	local navRed = Color3.fromRGB(255, 62, 48)
+	local glows: { BasePart } = {}
+
+	local function part(size: Vector3, cf: CFrame, color: Color3, mat: Enum.Material?, shape: Enum.PartType?, glow: boolean?): Part
+		local p = Instance.new("Part")
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		p.Shape = shape or Enum.PartType.Block
+		p.Material = mat or Enum.Material.SmoothPlastic
+		p.Color = color
+		p.Size = size * scale
+		p.CFrame = CFrame.new(cf.Position * scale) * cf.Rotation
+		p.Parent = m
+		if glow then
+			table.insert(glows, p)
+		end
+		return p
+	end
+
+	-- Chunky stylized wedge-cruiser silhouette (nose along -Z, stern at +Z)
+	local root = part(Vector3.new(26, 13, 86), CFrame.new(0, 0, 0), hullDark)
+	part(Vector3.new(18, 9, 44), CFrame.new(0, -1, -56), hullDark) -- forward prow
+	part(Vector3.new(44, 7, 36), CFrame.new(0, -2.5, 12), hullMid) -- chunky flank armor wings
+	part(Vector3.new(12, 11, 22), CFrame.new(0, 10, 14), hullMid) -- command superstructure
+	part(Vector3.new(14, 4, 10), CFrame.new(0, 17, 16), hullEdge) -- bridge crown
+	part(Vector3.new(10, 6, 30), CFrame.new(0, -8.5, -18), hullEdge) -- ventral drop-pod bay / cannon spine
+	-- Glowing bridge visor slit + port/starboard nav beacons
+	part(Vector3.new(12.6, 2.2, 1.4), CFrame.new(0, 15.8, 10.6), bridgeLit, Enum.Material.Neon, nil, false)
+	part(Vector3.new(2.2, 2.2, 2.2), CFrame.new(-22.5, -1.5, 6), navRed, Enum.Material.Neon, Enum.PartType.Ball, false)
+	part(Vector3.new(2.2, 2.2, 2.2), CFrame.new(22.5, -1.5, 6), engineCyan, Enum.Material.Neon, Enum.PartType.Ball, false)
+	-- Twin glowing engine banks + hot inner cores at the stern (+Z)
+	for _, s in { -1, 1 } do
+		part(Vector3.new(10, 9, 14), CFrame.new(s * 12, -1, 44), hullMid)
+		part(Vector3.new(2.4, 8.2, 8.2), CFrame.new(s * 12, -1, 51.6) * CFrame.Angles(0, math.pi / 2, 0), engineCyan, Enum.Material.Neon, Enum.PartType.Cylinder, true)
+		part(Vector3.new(2.6, 4.4, 4.4), CFrame.new(s * 12, -1, 52.4) * CFrame.Angles(0, math.pi / 2, 0), engineHot, Enum.Material.Neon, Enum.PartType.Cylinder, true)
+	end
+	-- Center main thruster glow
+	part(Vector3.new(2.6, 7.2, 7.2), CFrame.new(0, -1, 44.5) * CFrame.Angles(0, math.pi / 2, 0), engineCyan, Enum.Material.Neon, Enum.PartType.Cylinder, true)
+
+	m.PrimaryPart = root
+	m.Parent = parent
+	return m, glows
+end
 
 local function ringPoint(angle: number, radius: number, y: number): Vector3
 	return Vector3.new(math.cos(angle) * radius, y, math.sin(angle) * radius)
@@ -1366,6 +1425,36 @@ local function startHorizon()
 		local d = game:GetService("Lighting"):GetSunDirection()
 		sunAngle = math.atan2(d.Z, d.X)
 	end)
+
+	-- orbital cruisers: 3 chunky backlit silhouettes high in the mission sky, drifting slowly overhead
+	type CruiserRec = { model: Model, basePos: Vector3, dir: Vector3, yaw: number, pitch: number, roll: number, speed: number, phase: number }
+	local cruisers: { CruiserRec } = {}
+	local cruiserSpecs = {
+		{ ang = sunAngle + 0.22, r = 310, y = 255, sc = 1.35, yawOff = 1.25, pitch = -0.05, roll = 0.04, spd = 1.6 },
+		{ ang = sunAngle - 0.72, r = 385, y = 305, sc = 1.0, yawOff = 1.55, pitch = -0.03, roll = -0.05, spd = 1.25 },
+		{ ang = sunAngle + 2.1, r = 430, y = 345, sc = 0.85, yawOff = -1.35, pitch = -0.04, roll = 0.03, spd = 1.05 },
+	}
+	local cruiserCount = if q < 0.5 then 2 else 3
+	for i = 1, cruiserCount do
+		local sp = cruiserSpecs[i]
+		local m = buildOrbitalCruiser(folder, sp.sc, "OrbitalCruiser" .. i)
+		local pos = ringPoint(sp.ang, sp.r, sp.y)
+		local yaw = sp.ang + sp.yawOff
+		local cf = CFrame.new(pos) * CFrame.Angles(sp.pitch, yaw, sp.roll)
+		m:PivotTo(cf)
+		cruisers[#cruisers + 1] = {
+			model = m,
+			basePos = pos,
+			dir = cf.LookVector,
+			yaw = yaw,
+			pitch = sp.pitch,
+			roll = sp.roll,
+			speed = sp.spd,
+			phase = i * 2.1,
+		}
+	end
+	local cruiserT0 = os.clock()
+	local nextCruiserStep = 0
 	local count = if q < 0.6 then 3 else HORIZON_COLUMNS
 	for i = 1, count do
 		local a = (if i <= 2 then sunAngle + (i - 1.5) * 0.7 else (i / count) * math.pi * 2 + sunAngle + 1.2) + rnd:NextNumber(-0.25, 0.25)
@@ -1483,6 +1572,21 @@ local function startHorizon()
 		end
 	end
 	state.conn = RunService.Heartbeat:Connect(function(dt)
+		local now = os.clock()
+		if now >= nextCruiserStep then
+			nextCruiserStep = now + 0.05 -- 20 Hz stately drift (phone-friendly)
+			local elapsed = now - cruiserT0
+			for _, cr in cruisers do
+				if cr.model.Parent then
+					-- gentle back-and-forth orbital patrol sway + slight altitude breathe so they stay framed overhead
+					local drift = math.sin(elapsed * 0.035 + cr.phase) * 38 * cr.speed
+					local bob = math.sin(elapsed * 0.22 + cr.phase) * 2.4
+					local rollWob = math.sin(elapsed * 0.16 + cr.phase) * 0.025
+					local p = cr.basePos + cr.dir * drift + Vector3.new(0, bob, 0)
+					cr.model:PivotTo(CFrame.new(p) * CFrame.Angles(cr.pitch, cr.yaw, cr.roll + rollWob))
+				end
+			end
+		end
 		for i = #tracers, 1, -1 do
 			local tr = tracers[i]
 			if tr.delay > 0 then

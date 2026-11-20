@@ -35,12 +35,12 @@ local KICK: { [string]: number } = {
 	P3 = 0.6, BP2 = 1.0, PR7 = 0.8, VR1 = 0.8, SM2 = 0.5, SG4 = 1.6, HS3 = 1.8, MR9 = 1.4, ROCKET = 2.2, RAIL = 2.0, GATLING = 0.3,
 }
 -- ejected casing type
-local CASING: { [string]: string } = { PR7 = "brass", SM2 = "brass", MR9 = "brass", P3 = "brass", GATLING = "brass", SG4 = "shell", HS3 = "shell" }
+local CASING: { [string]: string } = { PR7 = "brass", SM2 = "brass", MR9 = "brass", P3 = "brass", BP2 = "brass", GATLING = "brass", SG4 = "shell", HS3 = "shell" }
 -- energy weapons flash in their tracer colour
 local ENERGY: { [string]: boolean } = { VR1 = true, RAIL = true, MR9 = false }
-local WARM = C3(255, 200, 120)
-local BRASS = C3(214, 170, 80)
-local SHELL_RED = C3(205, 52, 44)
+local WARM = C3(255, 198, 96) -- golden-amber player flash (never crimson)
+local BRASS = C3(248, 202, 88) -- bright gleaming chunky brass
+local SHELL_RED = C3(214, 62, 42)
 
 -- ---------------------------------------------------------------------------------------------
 -- Gun lookup
@@ -268,9 +268,10 @@ end
 local shellParity = 0
 
 local function ejectCasing(w: any, handle: BasePart)
-	if not Fx or Fx.quality < 0.6 then
+	if not Fx or Fx.quality < 0.35 then
 		return
 	end
+	local cap = if Fx.quality < 0.6 then 12 else MAX_CASINGS
 	-- gatling: every other shot (15 casings/s would only hit the cap)
 	shellParity += 1
 	if w.id == "GATLING" and shellParity % 2 == 0 then
@@ -280,18 +281,43 @@ local function ejectCasing(w: any, handle: BasePart)
 	if not kind then
 		return
 	end
+	-- Chunky oversized spinning brass casings / shotgun hulls so 3-4 read cleanly arcing across the upper/side foreground
+	local heavyCasing = w.id == "MR9" or w.id == "HS3" or w.id == "SG4" or w.id == "BP2" or w.id == "GATLING"
+	local szScale = if heavyCasing then 1.25 else 1.0
 	local part = if kind == "shell"
-		then newBitPart(Vector3.new(0.16, 0.16, 0.42), SHELL_RED, Enum.Material.SmoothPlastic)
-		else newBitPart(Vector3.new(0.12, 0.12, 0.3), BRASS, Enum.Material.Metal)
+		then newBitPart(Vector3.new(0.24, 0.24, 0.62) * szScale, SHELL_RED, Enum.Material.SmoothPlastic)
+		else newBitPart(Vector3.new(0.2, 0.2, 0.54) * szScale, BRASS, Enum.Material.Metal)
+	-- Bright brass rim glint on one face so tumbling casings catch the desert light cleanly
 	local cf = handle.CFrame
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local inherit = if root then root.AssemblyLinearVelocity * 0.85 else Vector3.zero
+	local inherit = if root then root.AssemblyLinearVelocity * 0.8 else Vector3.zero
 	-- gun in the left hand (left shoulder): brass goes out to the left, away from the face. Studio A/B "LEFT HAND"
 	-- (Feel_LeftCasings): nil = follow the hand, "port" = always the gun's right (its ejection port)
 	local hs = if (GunFeel.hand or 1) < 0 and workspace:GetAttribute("Feel_LeftCasings") ~= "port" then -1 else 1
-	local pos = (cf * CFrame.new(0.12 * hs, 0.18, -0.55)).Position
-	local vel = cf.RightVector * hs * rng:NextNumber(7, 11) + cf.UpVector * rng:NextNumber(5, 9) + cf.LookVector * rng:NextNumber(-3, 1) + inherit
-	addBit(part, pos, vel, 2, true)
+	local pos = (cf * CFrame.new(0.28 * hs, 0.32, -0.45)).Position
+	-- Arc briskly across the upper/side foreground relative to camera without crossing the center reticle
+	local cam = workspace.CurrentCamera
+	local sideVec = if cam then cam.CFrame.RightVector * hs else cf.RightVector * hs
+	local upVec = if cam then cam.CFrame.UpVector else cf.UpVector
+	local backVec = if cam then -cam.CFrame.LookVector else -cf.LookVector
+	local vel = sideVec * rng:NextNumber(9.5, 14.5)
+		+ upVec * rng:NextNumber(8.5, 13.5)
+		+ backVec * rng:NextNumber(2.0, 5.5)
+		+ inherit
+	if casingCount >= cap then
+		for i = 1, #bits do
+			if bits[i].casing then
+				killBit(i)
+				break
+			end
+		end
+	end
+	addBit(part, pos, vel, 1.85, true)
+	-- Crank spin so casings visibly tumble in the foreground
+	local latest = bits[#bits]
+	if latest then
+		latest.spin = (if rng:NextNumber() < 0.5 then -1 else 1) * rng:NextNumber(32, 48)
+	end
 end
 
 local function dropMagazine(w: any, handle: BasePart)

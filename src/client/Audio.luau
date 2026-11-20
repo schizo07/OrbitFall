@@ -454,13 +454,17 @@ local function updateDucks()
 			table.remove(ducks, i)
 		else
 			local m
-			local hold = d.dur * 0.4
-			if t < 0.04 then
-				m = 1 + (d.mult - 1) * (t / 0.04)
+			local attack = math.min(0.025, d.dur * 0.12)
+			local hold = d.dur * 0.35
+			if t < attack then
+				m = 1 + (d.mult - 1) * (t / math.max(attack, 0.001))
 			elseif t < hold then
 				m = d.mult
 			else
-				m = d.mult + (1 - d.mult) * ((t - hold) / (d.dur - hold))
+				-- smooth quad ease-out release back to full bus level
+				local u = math.clamp((t - hold) / math.max(d.dur - hold, 0.001), 0, 1)
+				local ease = 1 - (1 - u) * (1 - u)
+				m = d.mult + (1 - d.mult) * ease
 			end
 			local cur = mults[d.group]
 			if cur == nil or m < cur then
@@ -477,20 +481,123 @@ local function updateDucks()
 	end
 end
 
-function Audio.duck(groups: { string } | string, db: number, seconds: number)
+function Audio.duck(groups: ({ string } | string)?, db: number?, seconds: number?)
 	ensure()
-	if type(groups) == "string" then
-		groups = { groups }
+	local list: { string }
+	if groups == nil then
+		list = { "Ambience", "Music" }
+	elseif type(groups) == "string" then
+		list = { groups }
+	else
+		list = groups
 	end
-	local mult = 10 ^ (db / 20)
+	local mult = 10 ^ ((db or -7) / 20)
+	local dur = math.max(seconds or 0.75, 0.1)
 	local now = os.clock()
-	for _, g in groups do
+	for _, g in list do
 		if groupObjs[g] then
-			table.insert(ducks, { group = g, mult = mult, t0 = now, dur = math.max(seconds, 0.1) })
+			table.insert(ducks, { group = g, mult = mult, t0 = now, dur = dur })
 		end
 	end
 	if not duckConn and #ducks > 0 then
 		duckConn = RunService.Heartbeat:Connect(updateDucks)
+	end
+end
+
+-- Major blast mix punch: -7 dB (~0.447x) ambience/music duck for ~0.75 s with smooth release,
+-- paired with a crisp ~40 ms crack transient and lingering low-end boom tail.
+local lastBlastPunch = 0
+local CRACK_ID = "rbxassetid://138533090376585"
+local BOOM_TAIL_ID = "rbxassetid://2089920319"
+
+function Audio.blastPunch(at: any?, strength: number?)
+	ensure()
+	local now = os.clock()
+	if now - lastBlastPunch < 0.18 then
+		return
+	end
+	local pos = resolvePos(at)
+	local dist = if pos then Audio.distanceToListener(pos) else 0
+	if pos and dist > 420 then
+		return
+	end
+	lastBlastPunch = now
+	local str = math.clamp(strength or 1, 0.5, 2.2)
+	local distScale = if pos then math.clamp(1 - dist / 420, 0.25, 1) else 1
+
+	-- -7 dB ambience + music bus duck (~0.447x linear) over ~0.75 s
+	local duckDb = -7 * math.clamp(0.75 + 0.25 * str, 0.8, 1.15) * math.clamp(distScale * 1.2, 0.5, 1)
+	local duckSec = math.clamp(0.7 + 0.12 * str, 0.65, 1.0)
+	Audio.duck({ "Ambience", "Music" }, duckDb, duckSec)
+	Audio.duck({ "Enemies" }, -3.5 * distScale, 0.45)
+
+	local expGroup = groupObjs.Explosions
+	if not expGroup then
+		return
+	end
+	-- 1. Sharp ~40 ms transient crack
+	if voiceCount < VOICE_CAP or cullFor(5) then
+		local crack = acquireSound(CRACK_ID)
+		crack.Looped = false
+		crack.SoundGroup = expGroup
+		crack.PlaybackSpeed = 1.26 + rng:NextNumber() * 0.16
+		crack.TimePosition = 0
+		crack.Volume = math.clamp(0.85 * distScale * math.min(str, 1.4), 0.15, 1.2)
+		local att: Attachment? = nil
+		if pos and dist > 28 then
+			att = getAttachment()
+			att.WorldPosition = pos
+			crack.RollOffMinDistance = 24
+			crack.RollOffMaxDistance = 550
+			crack.Parent = att
+		else
+			crack.Parent = SoundService
+		end
+		local v = { sound = crack, att = att, priority = 5, t = now, done = false, conns = {} }
+		voiceSet[v] = true
+		voiceCount += 1
+		v.conns[1] = crack.Ended:Once(function()
+			finishVoice(v)
+		end)
+		v.conns[2] = crack.Stopped:Once(function()
+			finishVoice(v)
+		end)
+		crack:Play()
+		-- shape to a snappy ~40 ms crack transient with tight 55 ms tail-off
+		task.delay(0.04, function()
+			if not v.done and crack.Parent then
+				TweenService:Create(crack, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Volume = 0 }):Play()
+			end
+		end)
+		task.delay(0.12, finishVoice, v)
+	end
+
+	-- 2. Lingering low-end sub-boom tail (~1.8-2.3 s)
+	if voiceCount < VOICE_CAP or cullFor(5) then
+		local tail = acquireSound(BOOM_TAIL_ID)
+		tail.Looped = false
+		tail.SoundGroup = expGroup
+		tail.PlaybackSpeed = 0.46 + rng:NextNumber() * 0.08
+		tail.TimePosition = 0.04
+		tail.Volume = math.clamp(0.75 * distScale * math.min(str, 1.45), 0.18, 1.15)
+		tail.Parent = SoundService -- felt low-end tail
+		local v = { sound = tail, att = nil, priority = 5, t = now, done = false, conns = {} }
+		voiceSet[v] = true
+		voiceCount += 1
+		v.conns[1] = tail.Ended:Once(function()
+			finishVoice(v)
+		end)
+		v.conns[2] = tail.Stopped:Once(function()
+			finishVoice(v)
+		end)
+		tail:Play()
+		local tailDur = math.clamp(1.75 + 0.25 * str, 1.6, 2.4)
+		task.delay(0.25, function()
+			if not v.done and tail.Parent then
+				TweenService:Create(tail, TweenInfo.new(tailDur - 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Volume = 0 }):Play()
+			end
+		end)
+		task.delay(tailDur + 0.1, finishVoice, v)
 	end
 end
 
@@ -608,7 +715,25 @@ function Audio.play(key: string, at: any?, opts: { volume: number?, pitch: numbe
 	end
 
 	if played and entry.duck and dist <= farDist * 1.5 then
-		Audio.duck(entry.duck.groups, entry.duck.db, entry.duck.seconds)
+		local groups = entry.duck.groups
+		if entry.group == "Explosions" then
+			-- Ensure Music ducks alongside Ambience by at least -7 dB on major blasts
+			local hasMusic = false
+			for _, g in groups do
+				if g == "Music" then
+					hasMusic = true
+					break
+				end
+			end
+			if not hasMusic then
+				local merged = table.clone(groups)
+				table.insert(merged, "Music")
+				groups = merged
+			end
+			Audio.duck(groups, math.min(entry.duck.db, -7), math.max(entry.duck.seconds, 0.75))
+		else
+			Audio.duck(groups, entry.duck.db, entry.duck.seconds)
+		end
 	end
 	return played
 end

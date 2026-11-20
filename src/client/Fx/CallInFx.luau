@@ -19,8 +19,13 @@ local function perfOn(): boolean
 end
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local CallInsData = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("CallIns"))
 local OverwatchPath = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("OverwatchPath"))
 local CallInModels = require(script.Parent.Parent:WaitForChild("CallInModels"))
+
+local BEAM_CRIMSON = Color3.fromRGB(255, 51, 51) -- #FF3333 offensive strikes
+local BEAM_CYAN = Color3.fromRGB(85, 184, 255) -- #55B8FF friendly drops / support / uplinks
+local BEAM_CORE_WHITE = Color3.fromRGB(255, 251, 232) -- #FFFBE8 white-hot inner core
 
 local TEX_SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local TEX_SPARK = "rbxasset://textures/particles/sparkles_main.dds"
@@ -260,11 +265,107 @@ type BeaconRec = {
 	loop: any,
 	light: PointLight,
 	parts: { Part },
+	beams: { Beam },
 	endAt: number?, -- BeaconEnd seen: the beam stays at full heat until this clock time (payload in flight), then fades
-	far: Frame?,
 	callin: string?,
 }
 local beacons: { [any]: BeaconRec } = {}
+
+-- Strict color coding: crimson (#FF3333) for offensive strikes, cyan (#55B8FF) for friendly support/drops/uplinks.
+local function beaconColorFor(callin: string?, fallback: Color3?): Color3
+	if type(callin) == "string" then
+		local def = CallInsData.get(callin)
+		if def then
+			if def.beacon == "offense" then
+				return BEAM_CRIMSON
+			end
+			return BEAM_CYAN
+		end
+	end
+	if typeof(fallback) == "Color3" then
+		-- Red-dominant fallback -> crimson, otherwise cyan
+		if fallback.R > fallback.B * 1.25 and fallback.R > fallback.G * 1.25 then
+			return BEAM_CRIMSON
+		end
+		return BEAM_CYAN
+	end
+	return BEAM_CRIMSON
+end
+
+-- Dual-layer razor-sharp sky-to-ground Beam pillar (600-900 studs): ~0.6 stud #FFFBE8 core + ~2.5 stud translucent sheath.
+local function makeSkyBeamPillar(parent: Instance, pos: Vector3, height: number, color: Color3): (Part, Part, Beam, Beam, Beam)
+	local bot = mkPart({
+		Size = Vector3.new(0.2, 0.2, 0.2),
+		Transparency = 1,
+		CFrame = CFrame.new(pos),
+	}, parent)
+	local top = mkPart({
+		Size = Vector3.new(0.2, 0.2, 0.2),
+		Transparency = 1,
+		CFrame = CFrame.new(pos + Vector3.new(0, height, 0)),
+	}, parent)
+	local a0 = Instance.new("Attachment")
+	a0.Parent = bot
+	local a1 = Instance.new("Attachment")
+	a1.Parent = top
+
+	local function mkBeam(name: string, w0: number, w1: number, col: Color3, transp: NumberSequence, zOff: number): Beam
+		local bm = Instance.new("Beam")
+		bm.Name = name
+		bm.Attachment0 = a0
+		bm.Attachment1 = a1
+		bm.FaceCamera = true
+		bm.Segments = 1
+		bm.LightEmission = 1
+		bm.LightInfluence = 0
+		bm.Brightness = 2.4
+		bm.Width0 = w0
+		bm.Width1 = w1
+		bm.Color = ColorSequence.new(col)
+		bm.Transparency = transp
+		bm.ZOffset = zOff
+		bm.Parent = bot
+		return bm
+	end
+
+	local coreBeam = mkBeam(
+		"CoreBeam",
+		0.62,
+		0.55,
+		BEAM_CORE_WHITE,
+		NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.72, 0.05),
+			NumberSequenceKeypoint.new(1, 0.45),
+		}),
+		0.15
+	)
+	local sheathBeam = mkBeam(
+		"SheathBeam",
+		2.5,
+		2.8,
+		color,
+		NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.22),
+			NumberSequenceKeypoint.new(0.65, 0.42),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		0
+	)
+	local bloomBeam = mkBeam(
+		"BloomBeam",
+		6.2,
+		7.6,
+		color,
+		NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.72),
+			NumberSequenceKeypoint.new(0.6, 0.84),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		-0.15
+	)
+	return bot, top, coreBeam, sheathBeam, bloomBeam
+end
 
 -- Seconds between BeaconEnd (payload launched) and the impact, per call-in: the beam holds at full heat meanwhile.
 -- Mirrors the FALL / approach constants in server/CallIns/Effects/*.luau.
@@ -294,13 +395,13 @@ local function endBeacon(id: any)
 	b.conn:Disconnect()
 	stopLoop(b.loop)
 	for _, p in b.parts do
-		tween(p, 0.45, { Transparency = 1 })
+		tween(p, 0.42, { Transparency = 1 })
 	end
-	if b.far then
-		tween(b.far, 0.45, { BackgroundTransparency = 1 })
+	for _, bm in b.beams do
+		tween(bm, 0.42, { Width0 = 0, Width1 = 0 })
 	end
-	tween(b.light, 0.45, { Brightness = 0 })
-	Debris:AddItem(b.model, 0.6)
+	tween(b.light, 0.42, { Brightness = 0 })
+	Debris:AddItem(b.model, 0.55)
 end
 
 -- BeaconEnd: keep the beam burning (at full heat) until the payload lands, then fade it out
@@ -316,10 +417,8 @@ end
 local function registerBeacon(Fx: any)
 	Fx.register("Beacon", function(d)
 		local pos: Vector3 = d.p
-		local color: Color3 = d.color or Config.Colors.BeaconOffense
+		local main = beaconColorFor(d.callin, d.color)
 		local perfect = d.perfect == true
-		local main = if perfect then color:Lerp(Config.Colors.Gold, 0.65) else color
-		local coreCol = if perfect then Color3.fromRGB(255, 240, 190) else Color3.new(1, 1, 1)
 
 		endBeacon(d.id) -- (defensive: duplicate id)
 		local model = Instance.new("Model")
@@ -328,77 +427,31 @@ local function registerBeacon(Fx: any)
 
 		local base = mkPart({
 			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(0.3, 3.2, 3.2),
+			Size = Vector3.new(0.32, 3.6, 3.6),
 			Color = main,
-			Transparency = 0.2,
-			CFrame = CFrame.new(pos + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+			Transparency = 0.15,
+			CFrame = CFrame.new(pos + Vector3.new(0, 0.14, 0)) * CFrame.Angles(0, 0, math.pi / 2),
 		}, model)
-		local HEIGHT = 1200 -- was 700
-		local column = mkPart({
-			Size = Vector3.new(1.4, HEIGHT, 1.4),
-			Color = main,
-			Transparency = 0.55,
-			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
+		local baseCore = mkPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.36, 1.4, 1.4),
+			Color = BEAM_CORE_WHITE,
+			Transparency = 0.05,
+			CFrame = CFrame.new(pos + Vector3.new(0, 0.16, 0)) * CFrame.Angles(0, 0, math.pi / 2),
 		}, model)
-		local core = mkPart({
-			Size = Vector3.new(0.45, HEIGHT, 0.45),
-			Color = coreCol,
-			Transparency = 0.1,
-			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
-		}, model)
-		local halo = mkPart({
-			Size = Vector3.new(3.4, HEIGHT, 3.4),
-			Color = main,
-			Transparency = 0.88,
-			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
-		}, model)
-		-- wide, nearly invisible bloom sleeve: keeps the beam readable from across the map
-		local bloomSleeve = mkPart({
-			Size = Vector3.new(10, HEIGHT, 10),
-			Color = main,
-			Transparency = 0.94,
-			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
-		}, model)
-		-- far layer: a camera-facing billboard stripe (GUI is not fogged, so the beam cuts through the haze / dust storm).
-		-- Faded out up close, where the 3D parts read better; fully on from ~160 studs.
-		local farAnchor = mkPart({
-			Size = Vector3.new(0.2, 0.2, 0.2),
-			Transparency = 1,
-			CFrame = CFrame.new(pos + Vector3.new(0, HEIGHT / 2, 0)),
-		}, model)
-		local bb = Instance.new("BillboardGui")
-		bb.Size = UDim2.new(2.4, 0, HEIGHT, 0) -- scale = studs
-		bb.LightInfluence = 0
-		bb.Brightness = 2.5
-		bb.AlwaysOnTop = false
-		bb.ResetOnSpawn = false
-		bb.Adornee = farAnchor
-		bb.Parent = farAnchor
-		local far = Instance.new("Frame")
-		far.Size = UDim2.fromScale(1, 1)
-		far.BorderSizePixel = 0
-		far.BackgroundColor3 = main:Lerp(Color3.new(1, 1, 1), 0.25)
-		far.BackgroundTransparency = 1
-		far.Parent = bb
-		local grad = Instance.new("UIGradient")
-		grad.Rotation = 90 -- top of the stripe fades into the sky
-		grad.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.45, 0.35),
-			NumberSequenceKeypoint.new(1, 0),
-		})
-		grad.Parent = far
-		local lamp = light(base, main, 30, 3)
+		local HEIGHT = 820 -- razor-sharp sky-to-ground vertical pillar (600-900 studs)
+		local _, _, coreBeam, sheathBeam, bloomBeam = makeSkyBeamPillar(model, pos, HEIGHT, main)
+		local lamp = light(base, main, 36, 4.2)
 		local sparks = emitter(base, {
 			Texture = TEX_SPARK,
-			Color = ColorSequence.new(main),
-			Size = seq(0.5, 0),
+			Color = ColorSequence.new(BEAM_CORE_WHITE, main),
+			Size = seq(0.55, 0),
 			Transparency = seq(0, 1),
-			Lifetime = NumberRange.new(0.8, 1.5),
-			Speed = NumberRange.new(10, 22),
-			SpreadAngle = Vector2.new(25, 25),
+			Lifetime = NumberRange.new(0.7, 1.4),
+			Speed = NumberRange.new(12, 26),
+			SpreadAngle = Vector2.new(22, 22),
 			EmissionDirection = Enum.NormalId.Top,
-			Rate = perfect and 40 or 22,
+			Rate = perfect and 42 or 24,
 			LightEmission = 1,
 			Acceleration = Vector3.new(0, -4, 0),
 		})
@@ -433,27 +486,25 @@ local function registerBeacon(Fx: any)
 			end
 			local k = 0.5 + 0.5 * math.sin(phase)
 			if writePulse then
-				local w = 1 + 1.3 * heat
-				column.Transparency = 0.45 + 0.2 * k - 0.25 * heat
-				column.Size = Vector3.new((1.2 + 0.4 * k) * w, HEIGHT, (1.2 + 0.4 * k) * w)
-				core.Size = Vector3.new(0.45 * (1 + 0.8 * heat), HEIGHT, 0.45 * (1 + 0.8 * heat))
-				halo.Size = Vector3.new((3 + 1.2 * k) * w, HEIGHT, (3 + 1.2 * k) * w)
-				halo.Transparency = 0.88 - 0.18 * heat
-				bloomSleeve.Size = Vector3.new((9 + 3 * k) * w, HEIGHT, (9 + 3 * k) * w)
-				bloomSleeve.Transparency = 0.94 - 0.08 * heat
-				lamp.Brightness = (2 + 2 * k) * (1 + 1.5 * heat)
-				lamp.Range = 30 + 25 * heat
-				sparks.Rate = (if perfect then 40 else 22) * (1 + 2 * heat)
-				-- far billboard: off within 60 studs, full from 160
+				-- slight distance-aware boost so the razor beam stays crisp across 250+ studs of desert haze
 				local cam = workspace.CurrentCamera
 				local cd = if cam then (cam.CFrame.Position - pos).Magnitude else 0
-				local farA = math.clamp((cd - 60) / 100, 0, 1)
-				far.BackgroundTransparency = 1 - farA * (0.55 + 0.15 * k + 0.3 * heat)
-				bb.Size = UDim2.new(2.4 * w + cd * 0.004, 0, HEIGHT, 0) -- a little wider with distance so it stays a few pixels thick
+				local distBoost = 1 + math.clamp((cd - 90) / 360, 0, 0.85)
+				local w = (1 + 0.55 * heat) * distBoost
+				local pBoost = if perfect then 1.15 else 1
+				coreBeam.Width0 = (0.58 + 0.14 * k) * w * pBoost
+				coreBeam.Width1 = (0.52 + 0.12 * k) * w * pBoost
+				sheathBeam.Width0 = (2.4 + 0.55 * k) * w * pBoost
+				sheathBeam.Width1 = (2.7 + 0.65 * k) * w * pBoost
+				bloomBeam.Width0 = (6.0 + 1.6 * k) * w * pBoost
+				bloomBeam.Width1 = (7.2 + 2.0 * k) * w * pBoost
+				lamp.Brightness = (3.2 + 2.2 * k) * (1 + 1.1 * heat)
+				lamp.Range = 36 + 22 * heat
+				sparks.Rate = (if perfect then 42 else 24) * (1 + 1.8 * heat)
 			end
 			if t >= nextRing then
-				nextRing = t + 0.9 * (1 - 0.55 * heat)
-				ring(pos, main, 1, 7 + 5 * heat, 0.9)
+				nextRing = t + 0.85 * (1 - 0.52 * heat)
+				ring(pos, main, 1.2, 8 + 5 * heat, 0.85)
 			end
 			if t > 40 then
 				endBeacon(id)
@@ -470,8 +521,8 @@ local function registerBeacon(Fx: any)
 			conn = conn,
 			loop = loop,
 			light = lamp,
-			parts = { base, column, core, halo, bloomSleeve },
-			far = far,
+			parts = { base, baseCore },
+			beams = { coreBeam, sheathBeam, bloomBeam },
 			callin = d.callin,
 		}
 	end)
@@ -479,6 +530,47 @@ local function registerBeacon(Fx: any)
 	Fx.register("BeaconEnd", function(d)
 		local b = beacons[d.id]
 		holdBeacon(d.id, b and (b :: any).callin)
+	end)
+
+	-- Uplink / objective sky pillar watcher: upgrades server ObjectiveBeacon into a razor-sharp cyan (#55B8FF) sky beam
+	task.spawn(function()
+		local upModel: Model? = nil
+		local upBot: Part? = nil
+		local upTop: Part? = nil
+		local upBeams: { Beam } = {}
+		local function clearUplink()
+			if upModel then
+				upModel:Destroy()
+				upModel = nil
+				upBot = nil
+				upTop = nil
+				table.clear(upBeams)
+			end
+		end
+		while true do
+			local objFolder = workspace:FindFirstChild("ObjectiveObjects")
+			local bp = objFolder and objFolder:FindFirstChild("ObjectiveBeacon")
+			if bp and bp:IsA("BasePart") and bp.Transparency < 0.95 then
+				local groundPos = Vector3.new(bp.Position.X, bp.Position.Y - bp.Size.Y * 0.5, bp.Position.Z)
+				if not upModel or not upModel.Parent then
+					local m = Instance.new("Model")
+					m.Name = "UplinkSkyBeam"
+					m.Parent = getFolder()
+					local bot, top, cBm, sBm, bBm = makeSkyBeamPillar(m, groundPos, 760, BEAM_CYAN)
+					upModel, upBot, upTop = m, bot, top
+					upBeams = { cBm, sBm, bBm }
+				elseif upBot and upTop then
+					upBot.CFrame = CFrame.new(groundPos)
+					upTop.CFrame = CFrame.new(groundPos + Vector3.new(0, 760, 0))
+				end
+				for _, bm in upBeams do
+					bm.Enabled = true
+				end
+			else
+				clearUplink()
+			end
+			task.wait(0.25)
+		end
 	end)
 end
 
@@ -527,7 +619,14 @@ local function registerLance(Fx: any)
 			CFrame = CFrame.new(start + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
 		}, model)
 		local anchor = mkPart({ Size = Vector3.new(1, 1, 1), Transparency = 1, CFrame = CFrame.new(start + Vector3.new(0, 1, 0)) }, model)
-		local lamp = light(anchor, Color3.fromRGB(255, 150, 90), 55, 6)
+		local lamp = light(anchor, Color3.fromRGB(255, 140, 26), 70, 8)
+		local lanceBot, lanceTop, lanceCoreBm, lanceSheathBm, lanceBloomBm = makeSkyBeamPillar(model, start, 860, BEAM_CRIMSON)
+		lanceCoreBm.Width0, lanceCoreBm.Width1 = radius * 0.75, radius * 0.65
+		lanceSheathBm.Width0, lanceSheathBm.Width1 = radius * 2.4, radius * 2.8
+		lanceBloomBm.Width0, lanceBloomBm.Width1 = radius * 5.2, radius * 6.0
+		if Audio and Audio.blastPunch then
+			pcall(Audio.blastPunch, start, 1.5)
+		end
 		emitter(anchor, {
 			Texture = TEX_SPARK,
 			Color = ColorSequence.new(Color3.fromRGB(255, 190, 90), Color3.fromRGB(255, 60, 20)),
@@ -589,7 +688,12 @@ local function registerLance(Fx: any)
 			ground.CFrame = CFrame.new(pos + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, 0, math.pi / 2)
 			ground.Size = Vector3.new(0.3, radius * 6 * fade * jitter, radius * 6 * fade * jitter)
 			anchor.CFrame = CFrame.new(pos + Vector3.new(0, 1, 0))
-			lamp.Brightness = 6 * fade
+			lanceBot.CFrame = CFrame.new(pos)
+			lanceTop.CFrame = CFrame.new(pos + Vector3.new(0, 860, 0))
+			lanceCoreBm.Width0, lanceCoreBm.Width1 = radius * 0.75 * fade * jitter, radius * 0.65 * fade
+			lanceSheathBm.Width0, lanceSheathBm.Width1 = radius * 2.4 * fade * jitter, radius * 2.8 * fade
+			lanceBloomBm.Width0, lanceBloomBm.Width1 = radius * 5.2 * fade * jitter, radius * 6.0 * fade
+			lamp.Brightness = 8 * fade
 
 			if not rec.ending then
 				if t >= nextScorch then
@@ -1859,12 +1963,15 @@ local function registerNew(Fx: any)
 				Transparency = 0.55,
 				CFrame = beam.CFrame,
 			})
-			light(beam, RAIL, 40, 6)
+			light(beam, Color3.fromRGB(255, 140, 26), 70, 8)
 			tween(beam, 0.3, { Size = Vector3.new(H, 0.1, 0.1) })
 			tween(glow, 0.4, { Size = Vector3.new(H, 0.2, 0.2), Transparency = 1 })
 			Debris:AddItem(beam, 0.35)
 			Debris:AddItem(glow, 0.45)
 			snd("ShotRail", p)
+			if Audio and Audio.blastPunch then
+				pcall(Audio.blastPunch, p, 1.4)
+			end
 			ring(p, RAIL, 1, 9, 0.35, 0.3)
 			orbitalMini(p, 0.8, RAIL)
 			trauma(2.2, 0.45, p, 110)

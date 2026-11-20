@@ -467,6 +467,12 @@ local function makeDebrisPiece(style: string, scale: number, color: Color3?): (P
 		part.Color = color or C3(110, 235, 70):Lerp(C3(180, 255, 120), rng:NextNumber())
 		part.CustomPhysicalProperties = PhysicalProperties.new(0.2, 0.9, 0.05, 1, 1)
 		bounceFade = true
+	elseif style == "shrapnel" then
+		-- Dark opaque angular blast chunks that silhouette cleanly against the bright desert sky
+		part.Size = Vector3.new(rnd(0.55, 1.35), rnd(0.28, 0.72), rnd(0.5, 1.25)) * scale
+		part.Material = Enum.Material.Slate
+		part.Transparency = 0
+		part.Color = color or C3(30, 27, 25):Lerp(C3(52, 47, 44), rng:NextNumber())
 	elseif style == "rock" then
 		part.Size = Vector3.new(rnd(0.4, 1.3), rnd(0.3, 1.0), rnd(0.4, 1.3)) * scale
 		part.Material = Enum.Material.Slate
@@ -818,6 +824,9 @@ local function releaseTracerPart(p: Part)
 	end
 end
 
+local PLAYER_CORE = C3(255, 247, 204) -- #FFF7CC warm golden-white core
+local PLAYER_BLOOM = C3(255, 158, 44) -- #FF9E2C golden-amber bloom halo (never crimson)
+
 function Fx.tracer(a: Vector3, b: Vector3, color: Color3?, width: number?)
 	local v = b - a
 	local len = v.Magnitude
@@ -825,23 +834,27 @@ function Fx.tracer(a: Vector3, b: Vector3, color: Color3?, width: number?)
 		return
 	end
 	local dir = v / len
-	local w = width or 0.12
-	local base = color or C3(255, 215, 120)
-	-- bright white-hot core + a soft translucent glow of the weapon colour around it (skipped on weak devices)
+	local w = width or 0.14
+	local raw = color or PLAYER_BLOOM
+	-- Strict fire-lane color separation: warm player tracers always use golden-white core + #FF9E2C bloom (never crimson);
+	-- cool energy weapons (VR-1, Rail Lance, Marksman cyan) keep their electric cyan lane.
+	local isWarm = raw.R > raw.B * 1.15
+	local coreCol = if isWarm then PLAYER_CORE else raw:Lerp(Color3.new(1, 1, 1), 0.72)
+	local bloomCol = if isWarm then PLAYER_BLOOM else raw
 	local part = acquireTracerPart()
-	part.Color = base:Lerp(Color3.new(1, 1, 1), 0.7)
+	part.Color = coreCol
 	local glow: Part? = nil
-	if Fx.quality >= 0.6 and liveTracers < 50 then
+	if Fx.quality >= 0.45 and liveTracers < 60 then
 		glow = acquireTracerPart()
-		glow.Color = base
+		glow.Color = bloomCol
 	end
 	if w >= 0.45 and w < 0.55 then -- width 0.5 = rail lance (rocket is 0.6): lingering twin beams
-		Fx.beamTrail(a, b, base, w)
+		Fx.beamTrail(a, b, bloomCol, w)
 	end
 	liveTracers += 1
-	local seg = math.min(len, 8 + w * 40)
-	local travel = math.clamp(len / 900, 0.025, 0.2)
-	local fade = 0.07
+	local seg = math.min(len, 12 + w * 46)
+	local travel = math.clamp(len / 760, 0.032, 0.22)
+	local fade = 0.085
 	local age = 0
 	addAnim(function(dt)
 		age += dt
@@ -862,16 +875,16 @@ function Fx.tracer(a: Vector3, b: Vector3, color: Color3?, width: number?)
 			head = len
 			tail = math.max(0, len - seg) + math.min(seg, len) * f
 		end
-		local l = math.max(head - tail, 0.05)
+		local l = math.max(head - tail, 0.08)
 		local mid = a + dir * ((head + tail) * 0.5)
-		local ww = w * (1 - 0.6 * f)
-		part.Size = Vector3.new(ww * 0.75, ww * 0.75, l)
+		local ww = w * (1 - 0.5 * f)
+		part.Size = Vector3.new(ww * 0.95, ww * 0.95, l)
 		part.CFrame = CFrame.lookAt(mid, mid + dir)
 		part.Transparency = f * 0.9
 		if glow then
-			glow.Size = Vector3.new(ww * 2.6, ww * 2.6, l)
+			glow.Size = Vector3.new(ww * 3.4, ww * 3.4, l)
 			glow.CFrame = part.CFrame
-			glow.Transparency = 0.6 + f * 0.4
+			glow.Transparency = 0.42 + f * 0.58
 		end
 		return false
 	end, function()
@@ -1045,7 +1058,9 @@ local function impactChips(p: Vector3, opts)
 	Fx.debris(p, opts)
 end
 
-local SPARK_HOT = colorSeq({ { 0, C3(255, 250, 215) }, { 0.35, C3(255, 175, 60) }, { 1, C3(235, 85, 20) } })
+local SPARK_HOT = colorSeq({ { 0, C3(255, 247, 204) }, { 0.4, C3(255, 184, 68) }, { 1, C3(255, 130, 32) } })
+local CHARCOAL_PUFF = colorSeq({ { 0, C3(42, 38, 36) }, { 1, C3(74, 67, 60) } }) -- #2A2624 dark charcoal puff
+local SAND_PLUME = colorSeq({ { 0, C3(218, 188, 146) }, { 0.6, C3(176, 148, 112) }, { 1, C3(138, 116, 90) } })
 local GOO_SPRAY = colorSeq({ { 0, C3(205, 255, 140) }, { 0.5, C3(120, 235, 70) }, { 1, C3(55, 160, 45) } })
 
 function Fx.impact(p: Vector3, n: Vector3?, result: string?, material: string?)
@@ -1053,8 +1068,8 @@ function Fx.impact(p: Vector3, n: Vector3?, result: string?, material: string?)
 	result = result or "pen"
 	material = material or "metal"
 	local dist = camDist(p)
-	local visible = dist < 250
-	local near = dist < 70
+	local visible = dist < 260
+	local near = dist < 85
 	local cf = upCF(p, n)
 
 	-- bullets that land on an enemy (material metal / goo are enemy surfaces) jolt it right now (EnemyAnim.hitNear)
@@ -1065,10 +1080,12 @@ function Fx.impact(p: Vector3, n: Vector3?, result: string?, material: string?)
 	if result == "deflect" then
 		Audio.play("HitDeflect", p)
 		if visible then
-			burst("sparks", cf, 14, { scale = 1.0, speed = 1.4, color = SPARK_HOT })
+			-- 100-200 ms golden spark cone + immediate dark charcoal puff (#2A2624)
+			burst("sparks", cf, 16, { scale = 1.15, speed = 1.5, spread = 38, color = SPARK_HOT })
+			burst("puff", cf, 3, { scale = 0.85, speed = 0.9, spread = 35, color = CHARCOAL_PUFF })
 			if near then
-				impactFlash(p, C3(255, 240, 200), 0.9)
-				sparkStreaks(p, n, 2, C3(255, 225, 150))
+				impactFlash(p, C3(255, 247, 204), 1.05)
+				sparkStreaks(p, n, 3, PLAYER_BLOOM)
 			end
 			-- ricochet streak
 			local tang = randUnit()
@@ -1077,14 +1094,14 @@ function Fx.impact(p: Vector3, n: Vector3?, result: string?, material: string?)
 				tang = n:Cross(Vector3.xAxis)
 			end
 			local dir = (n * 0.55 + tang.Unit).Unit
-			Fx.tracer(p, p + dir * rnd(5, 9), C3(255, 235, 170), 0.1)
+			Fx.tracer(p, p + dir * rnd(6, 10), PLAYER_BLOOM, 0.11)
 		end
 	elseif result == "partial" then
 		Audio.play("HitPartial", p)
 		if visible then
-			burst("puff", cf, 4, { scale = 0.8 })
+			burst("puff", cf, 4, { scale = 0.9, speed = 0.85, spread = 40, color = CHARCOAL_PUFF })
 			if material == "metal" then
-				burst("sparks", cf, 6, { scale = 0.7, speed = 0.9, color = SPARK_HOT })
+				burst("sparks", cf, 8, { scale = 0.85, speed = 1.1, spread = 35, color = SPARK_HOT })
 			elseif material == "goo" then
 				burst("goo", cf, 4, { scale = 0.45, speed = 0.6 })
 			end
@@ -1105,29 +1122,34 @@ function Fx.impact(p: Vector3, n: Vector3?, result: string?, material: string?)
 		elseif material == "ground" then
 			Audio.play("HitGround", p)
 			if visible then
-				-- dust puff kicked up along the normal, a ring of grit and a few chips of ground
-				burst("dust", cf, 8, { scale = 0.9, speed = 1.2, spread = 70 })
-				burst("dust", cf, 3, { scale = 1.3, speed = 0.5 })
-				if dist < 120 then
-					burst("sparks", cf, 5, { scale = 0.5, speed = 0.8 })
+				-- Loud sand impact plume + directed golden spark cone + immediate dark charcoal puff (#2A2624)
+				burst("dust", cf, 12, { scale = 1.35, speed = 1.85, spread = 38, color = SAND_PLUME })
+				burst("dust", cf, 5, { scale = 1.75, speed = 0.75, spread = 75, color = SAND_PLUME })
+				burst("puff", cf, 3, { scale = 0.95, speed = 0.95, spread = 32, color = CHARCOAL_PUFF })
+				if dist < 140 then
+					burst("sparks", cf, 8, { scale = 0.8, speed = 1.25, spread = 34, color = SPARK_HOT })
 					Fx.bulletMark(p, n)
 				end
-				if dist < 60 then
-					impactChips(p + n * 0.2, { n = 3, style = "rock", speed = 14, scale = 0.22, life = 0.9, up = 1.2, dir = n, bias = 0.8 })
+				if near then
+					impactFlash(p, PLAYER_CORE, 0.85)
+					sparkStreaks(p, n, 2, PLAYER_BLOOM)
+				end
+				if dist < 75 then
+					impactChips(p + n * 0.2, { n = 4, style = "rock", speed = 18, scale = 0.28, life = 1.0, up = 1.4, dir = n, bias = 0.85 })
 				end
 			end
 		else
 			Audio.play("HitMetal", p)
 			if visible then
-				-- hot orange sparks (more, bigger, faster) + spark streaks, a white pop, grey smoke and metal chips
-				burst("sparks", cf, 14, { scale = 1.0, speed = 1.25, color = SPARK_HOT })
-				burst("puff", cf, 3, { scale = 0.7, color = C3(90, 90, 95) })
+				-- 100-200 ms golden spark cone + dark charcoal puff (#2A2624) rising vertically + metal chips
+				burst("sparks", cf, 16, { scale = 1.15, speed = 1.4, spread = 36, color = SPARK_HOT })
+				burst("puff", cf, 4, { scale = 0.95, speed = 0.9, spread = 34, color = CHARCOAL_PUFF })
 				if near then
-					impactFlash(p, C3(255, 245, 205), 0.8)
-					sparkStreaks(p, n, 2, C3(255, 205, 120))
+					impactFlash(p, PLAYER_CORE, 1.0)
+					sparkStreaks(p, n, 3, PLAYER_BLOOM)
 				end
-				if dist < 90 then
-					impactChips(p + n * 0.3, { n = 3, style = "scrap", speed = 18, scale = 0.32, life = 1, up = 1.1, dir = n, bias = 0.7 })
+				if dist < 100 then
+					impactChips(p + n * 0.3, { n = 3, style = "scrap", speed = 20, scale = 0.36, life = 1.0, up = 1.15, dir = n, bias = 0.75 })
 				end
 			end
 		end
@@ -1367,6 +1389,10 @@ local function death(d)
 	-- medium / heavy kills get an extra rewarding bell on top of the Kill pop (lower pitched for heavies)
 	if mine and (heavy or medium) then
 		Audio.play2D("KillWeak", { pitch = if heavy then 0.8 else 0.95, volume = 0.6, priority = 4 })
+	end
+	if d.cookoff == true then
+		-- Heavy COG cook-off holds the final fireball/shrapnel detonation for 1.0 s (handled by EnemyFx CookOff / CookOffBoom)
+		return
 	end
 	if dist > 400 then
 		return

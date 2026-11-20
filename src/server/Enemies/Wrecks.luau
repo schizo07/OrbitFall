@@ -21,10 +21,10 @@ local live: { { model: Model, sinking: boolean } } = {}
 local folder: Folder? = nil
 
 local RGB = Color3.fromRGB
-local SCORCH = RGB(44, 44, 48)
-local PLATE = RGB(62, 66, 76)
-local RUST = RGB(150, 84, 44)
-local EMBER = RGB(255, 120, 40)
+local SCORCH = RGB(28, 25, 24) -- heavily charred post-cook-off hull
+local PLATE = RGB(48, 50, 56)
+local RUST = RGB(128, 66, 34)
+local EMBER = RGB(255, 130, 32)
 local HUSK = RGB(70, 46, 40)
 local HUSK2 = RGB(58, 36, 66)
 local GOO = RGB(70, 170, 45)
@@ -66,15 +66,15 @@ end
 local function smoke(p: BasePart, k: number)
 	local em = Instance.new("ParticleEmitter")
 	em.Texture = "rbxasset://textures/particles/smoke_main.dds"
-	em.Color = ColorSequence.new(RGB(60, 58, 56), RGB(30, 30, 30))
-	em.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.2 * k), NumberSequenceKeypoint.new(1, 4 * k) })
-	em.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 1) })
-	em.Lifetime = NumberRange.new(2.5, 4)
-	em.Rate = 3
-	em.Speed = NumberRange.new(2, 4)
-	em.SpreadAngle = Vector2.new(12, 12)
-	em.Acceleration = Vector3.new(0.6, 1.2, 0)
-	em.LightInfluence = 1
+	em.Color = ColorSequence.new(RGB(31, 27, 24), RGB(74, 67, 60))
+	em.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.5 * k), NumberSequenceKeypoint.new(1, 5.2 * k) })
+	em.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(0.65, 0.55), NumberSequenceKeypoint.new(1, 1) })
+	em.Lifetime = NumberRange.new(3.0, 4.5)
+	em.Rate = 4.5
+	em.Speed = NumberRange.new(4, 7)
+	em.SpreadAngle = Vector2.new(10, 10)
+	em.Acceleration = Vector3.new(1.0, 2.5, 0.4)
+	em.LightInfluence = 0.4
 	em.EmissionDirection = Enum.NormalId.Top
 	em.Parent = p
 	task.delay(SMOKE_TIME, function()
@@ -176,7 +176,7 @@ function Wrecks.spawn(e: any)
 		return
 	end
 	local ok, err = pcall(function()
-		local pos: Vector3 = e.pos or e.root.Position
+		local pos: Vector3 = e.pos or (e.root and e.root.Position) or Vector3.zero
 		local yaw: number = e.yaw or 0
 		local base = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
 		local m = Instance.new("Model")

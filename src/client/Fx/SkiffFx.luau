@@ -35,28 +35,15 @@ local SkiffFx = {}
 local FxApi: any = nil
 local Audio: any = nil
 
-local TRACER = C3(255, 188, 72)
-local TRACER_CORE = C3(255, 242, 200)
-local BOARD_GLOW = C3(110, 245, 165)
+local TRACER = C3(255, 158, 44) -- warm golden-amber friendly fire lane (#FF9E2C)
+local TRACER_CORE = C3(255, 247, 204) -- #FFF7CC
+local BOARD_GLOW = C3(85, 184, 255) -- #55B8FF friendly cyan
+local SKIFF_CYAN = C3(85, 184, 255) -- #55B8FF sky-to-ground friendly extraction pillar
+local SKIFF_CORE = C3(255, 251, 232) -- #FFFBE8 white-hot inner core
 local DUST = C3(214, 184, 146)
 local DUST2 = C3(140, 120, 104)
 local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local FIRE = "rbxasset://textures/particles/fire_main.dds"
-
-local function quality(): number
-	return if FxApi and type(FxApi.quality) == "number" then FxApi.quality else 1
-end
-
--- hover -----------------------------------------------------------------------------------------------------------------
-local hover: { stop: () -> () }? = nil
-
-local function stopHover()
-	local h = hover
-	hover = nil
-	if h then
-		h.stop()
-	end
-end
 
 local function makeAnchor(name: string, cf: any): any
 	local p = INST("Part")
@@ -71,6 +58,84 @@ local function makeAnchor(name: string, cf: any): any
 	p.CFrame = cf
 	p.Parent = Workspace
 	return p
+end
+
+-- Dual-layer cyan sky-to-ground extraction pillar (760 studs): 0.6 stud #FFFBE8 core + 2.5 stud #55B8FF bloom sheath.
+local function buildCyanPillar(padPos: Vector3): (Model, Beam, Beam, Part)
+	local m = INST("Model")
+	m.Name = "SkiffSkyBeacon"
+	local bot = makeAnchor("SkiffBeamBot", CF(padPos + V3(0, 0.2, 0)))
+	bot.Parent = m
+	local top = makeAnchor("SkiffBeamTop", CF(padPos + V3(0, 760, 0)))
+	top.Parent = m
+	local a0 = INST("Attachment")
+	a0.Parent = bot
+	local a1 = INST("Attachment")
+	a1.Parent = top
+
+	local core = INST("Beam")
+	core.Name = "CoreBeam"
+	core.Attachment0 = a0
+	core.Attachment1 = a1
+	core.FaceCamera = true
+	core.Segments = 1
+	core.LightEmission = 1
+	core.LightInfluence = 0
+	core.Brightness = 2.4
+	core.Width0 = 0.62
+	core.Width1 = 0.55
+	core.Color = CS(SKIFF_CORE)
+	core.Transparency = NS({ NSK(0, 0), NSK(0.72, 0.06), NSK(1, 0.45) })
+	core.ZOffset = 0.15
+	core.Parent = bot
+
+	local sheath = INST("Beam")
+	sheath.Name = "SheathBeam"
+	sheath.Attachment0 = a0
+	sheath.Attachment1 = a1
+	sheath.FaceCamera = true
+	sheath.Segments = 1
+	sheath.LightEmission = 1
+	sheath.LightInfluence = 0
+	sheath.Brightness = 2.2
+	sheath.Width0 = 2.5
+	sheath.Width1 = 2.8
+	sheath.Color = CS(SKIFF_CYAN)
+	sheath.Transparency = NS({ NSK(0, 0.22), NSK(0.65, 0.42), NSK(1, 1) })
+	sheath.Parent = bot
+
+	local ring = INST("Part")
+	ring.Name = "SkiffLzRing"
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.CastShadow = false
+	ring.Shape = EN.PartType.Cylinder
+	ring.Material = EN.Material.Neon
+	ring.Color = SKIFF_CYAN
+	ring.Transparency = 0.32
+	ring.Size = V3(0.25, 22, 22)
+	ring.CFrame = CF(padPos + V3(0, 0.18, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+	ring.Parent = m
+
+	m.Parent = WS
+	return m, core, sheath, ring
+end
+
+local function quality(): number
+	return if FxApi and type(FxApi.quality) == "number" then FxApi.quality else 1
+end
+
+-- hover -----------------------------------------------------------------------------------------------------------------
+local hover: { stop: () -> () }? = nil
+
+local function stopHover()
+	local h = hover
+	hover = nil
+	if h then
+		h.stop()
+	end
 end
 
 local function startHover(root: any, padPos: any, model: any)
@@ -136,6 +201,7 @@ local function startHover(root: any, padPos: any, model: any)
 		local ok, h = pcall(Audio.loop, "SkiffEngine", root)
 		engine = if ok then h else nil
 	end
+	local pillarModel, pillarCore, pillarSheath, lzRing = buildCyanPillar(padPos)
 
 	local t0 = os.clock()
 	local dead = false
@@ -155,6 +221,9 @@ local function startHover(root: any, padPos: any, model: any)
 			j.light.Brightness = 0
 			Debris:AddItem(j.part, 1.5)
 		end
+		if pillarModel and pillarModel.Parent then
+			pillarModel:Destroy()
+		end
 		if engine and engine.stop then
 			pcall(engine.stop, 1.2)
 		end
@@ -168,7 +237,8 @@ local function startHover(root: any, padPos: any, model: any)
 			return
 		end
 		local q = quality()
-		local rampIn = math.clamp((os.clock() - t0) / 1.0, 0, 1)
+		local elapsed = os.clock() - t0
+		local rampIn = math.clamp(elapsed / 1.0, 0, 1)
 		-- wash strength grows smoothly as the Skiff descends toward the pad
 		local h = root.Position.Y - padPos.Y
 		local k = math.clamp(1 - (h - 6) / 42, 0.25, 1) * rampIn
@@ -179,6 +249,12 @@ local function startHover(root: any, padPos: any, model: any)
 			j.plume.Rate = 48 * q * rampIn
 			j.light.Brightness = 2.0 * rampIn
 		end
+		local pulse = 0.5 + 0.5 * math.sin(elapsed * 5.5)
+		pillarCore.Width0 = (0.58 + 0.14 * pulse) * rampIn
+		pillarCore.Width1 = (0.52 + 0.12 * pulse) * rampIn
+		pillarSheath.Width0 = (2.4 + 0.5 * pulse) * rampIn
+		pillarSheath.Width1 = (2.7 + 0.6 * pulse) * rampIn
+		lzRing.Transparency = 0.28 + 0.32 * (1 - pulse)
 	end)
 	hover = { stop = stop }
 end
@@ -338,6 +414,31 @@ function SkiffFx.init(Fx: any, audio: any, _juice: any)
 			startHover(d.root, d.p, d.m)
 		else
 			stopHover()
+		end
+	end)
+	-- Watch ExtractionPad during Extract state so the cyan LZ sky pillar stays up even before hover begins
+	TK.spawn(function()
+		local okS, Store = pcall(function()
+			return require(script.Parent.Parent.Store)
+		end)
+		local extractPillar: Model? = nil
+		while true do
+			local m = if okS and Store and Store.get then Store.get("mission") else nil
+			local inExtract = type(m) == "table" and m.state == "Extract"
+			local pad = if inExtract and hover == nil then WS:FindFirstChild("ExtractionPad", true) else nil
+			if pad then
+				if not extractPillar or not extractPillar.Parent then
+					local pos = if pad:IsA("Model") then pad:GetPivot().Position elseif pad:IsA("BasePart") then pad.Position else nil
+					if pos then
+						local pm = buildCyanPillar(pos)
+						extractPillar = pm
+					end
+				end
+			elseif extractPillar then
+				extractPillar:Destroy()
+				extractPillar = nil
+			end
+			TK.wait(0.4)
 		end
 	end)
 	-- Studio A/B: mirrors Feel_SkiffMode to the server

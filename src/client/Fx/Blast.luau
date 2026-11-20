@@ -36,18 +36,25 @@ local TEX_SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local TEX_SPARK = "rbxasset://textures/particles/sparkles_main.dds"
 
 -- caps -----------------------------------------------------------------------------------------------------------
-local BALL_CAP = 110 -- live fireball / smoke / mushroom balls (x quality at init: 77 on a phone)
+local BALL_CAP = 120 -- live fireball / smoke / mushroom balls (x quality at init)
 local lastMushroom = 0
-local LIGHT_CAP = 4
-local RING_CAP = 5
+local LIGHT_CAP = 6
+local RING_CAP = 6
 local RING_SEGS = 12
 local SCORCH_CAP = 14
 local COLUMN_CAP = 6
 local SCORCH_HOLD = 20 -- seconds fully dark
 local SCORCH_FADE = 10 -- then fades out (gone ~30 s after the blast)
 
+local FLASH_WHITE_GOLD = C3(255, 251, 224) -- #FFFBE0 Beat 1 flash
+local BOUNCE_ORANGE = C3(255, 140, 26) -- #FF8C1A Beat 1 dynamic bounce light
+local SOOT_BASE = C3(31, 27, 24) -- #1F1B18 Beat 4 dense charcoal column
+local SOOT_TOP = C3(74, 67, 60) -- #4A433C
+local SAND_BASE = C3(216, 186, 144) -- tan desert sand eruption plume
+local SAND_EDGE = C3(156, 132, 102)
+
 local STYLES = {
-	fire = { core = C3(255, 250, 215), hot = C3(255, 214, 90), mid = C3(255, 150, 40), edge = C3(225, 70, 25), smoke = C3(46, 42, 40), spark = C3(255, 200, 90), light = C3(255, 170, 80) },
+	fire = { core = FLASH_WHITE_GOLD, hot = C3(255, 198, 72), mid = C3(255, 122, 24), edge = C3(217, 56, 14), smoke = SOOT_BASE, spark = C3(255, 200, 82), light = BOUNCE_ORANGE },
 	emp = { core = C3(225, 250, 255), hot = C3(140, 220, 255), mid = C3(70, 170, 255), edge = C3(40, 110, 240), smoke = C3(70, 100, 140), spark = C3(150, 225, 255), light = C3(100, 200, 255) },
 	gas = { core = C3(235, 255, 205), hot = C3(190, 255, 120), mid = C3(130, 230, 70), edge = C3(70, 170, 40), smoke = C3(90, 160, 60), spark = C3(190, 255, 120), light = C3(150, 255, 90) },
 	goo = { core = C3(220, 255, 205), hot = C3(170, 250, 120), mid = C3(110, 225, 80), edge = C3(50, 155, 50), smoke = C3(60, 120, 55), spark = C3(160, 255, 110), light = C3(120, 255, 110) },
@@ -221,12 +228,14 @@ local function lightPop(at: Vector3, color: Color3, range: number, bright: numbe
 	end
 	local s = slot :: any
 	s.busy = true
-	s.part.CFrame = CFrame.new(at + V3(0, 1.5, 0))
+	s.part.CFrame = CFrame.new(at + V3(0, 2.5, 0))
 	s.light.Color = color
-	s.light.Range = math.clamp(range, 8, 60)
+	s.light.Range = math.clamp(range, 12, 70)
 	animate(dur, function(age)
 		local u = age / dur
-		s.light.Brightness = bright * (1 - u) * (1 - u)
+		-- sharp bright hold across Beat 1 (0-80 ms), then smooth quadratic decay
+		local k = if u < 0.22 then 1 else ((1 - u) / 0.78) ^ 1.7
+		s.light.Brightness = bright * math.clamp(k, 0, 1)
 	end, function()
 		s.light.Brightness = 0
 		s.part.CFrame = PARK
@@ -342,7 +351,8 @@ end
 
 local sparkEm: { ParticleEmitter } = {}
 local emberEm: { ParticleEmitter } = {}
-local sparkIdx, emberIdx = 0, 0
+local sandEm: { ParticleEmitter } = {}
+local sparkIdx, emberIdx, sandIdx = 0, 0, 0
 
 local function buildBurstEmitters()
 	for i = 1, 3 do
@@ -382,6 +392,42 @@ local function buildBurstEmitters()
 		em.Parent = part
 		emberEm[i] = em
 	end
+	-- Beat 2 tan sand eruption plume emitter pool (phone-safe)
+	for i = 1, 3 do
+		local part = newPart(Enum.PartType.Block, Enum.Material.SmoothPlastic)
+		part.Size = Vector3.one
+		local em = Instance.new("ParticleEmitter")
+		em.Enabled = false
+		em.Rate = 0
+		em.Texture = TEX_SMOKE
+		em.LightEmission = 0
+		em.LightInfluence = 0.65
+		em.Color = ColorSequence.new(SAND_BASE, SAND_EDGE)
+		em.EmissionDirection = Enum.NormalId.Top
+		em.SpreadAngle = Vector2.new(44, 44)
+		em.Rotation = NumberRange.new(0, 360)
+		em.RotSpeed = NumberRange.new(-55, 55)
+		em.Drag = 1.8
+		em.Acceleration = V3(0, -10, 0)
+		em.Transparency = seqT({ { 0, 0.16 }, { 0.55, 0.42 }, { 1, 1 } })
+		em.Parent = part
+		sandEm[i] = em
+	end
+end
+
+local function sandPlumeAt(at: Vector3, K: number)
+	if #sandEm == 0 then
+		return
+	end
+	sandIdx = sandIdx % #sandEm + 1
+	local em = sandEm[sandIdx]
+	local part = em.Parent :: Part
+	part.CFrame = CFrame.new(at + V3(0, 0.4, 0))
+	local sz = math.clamp(2.2 * K, 1.8, 9.5)
+	em.Size = seqT({ { 0, sz * 0.6 }, { 0.45, sz * 1.45 }, { 1, sz * 2.1 } })
+	em.Lifetime = NumberRange.new(0.8 + 0.25 * K, 1.4 + 0.4 * K)
+	em.Speed = NumberRange.new(18 + 9 * K, 34 + 14 * K)
+	em:Emit(q(8 + 6 * K))
 end
 
 local function sparksAt(at: Vector3, K: number, color: Color3)
@@ -408,14 +454,14 @@ local function embersAt(at: Vector3, K: number, color: Color3)
 	em:Emit(q(5 + 6 * K))
 end
 
--- smoke columns: pooled emitters that keep emitting for `life` seconds
+-- Beat 4: tall dense dark-charcoal smoke columns (#1F1B18 -> #4A433C, LightInfluence = 0.4) lasting 3-4.5 s as landmarks
 type Column = { part: Part, em: ParticleEmitter, untilT: number, pos: Vector3, busyUntil: number }
 local columns: { Column } = {}
 
 local function columnAt(at: Vector3, K: number, color: Color3)
 	local now = os.clock()
-	local life = math.clamp(1.5 + 3 * K, 1.5, 12)
-	local lifetime = 3 + 0.8 * K
+	local life = math.clamp(2.8 + 1.1 * K, 3.0, 5.2)
+	local lifetime = math.clamp(3.0 + 0.65 * K, 3.2, 4.6)
 	-- a column already burning close by just burns longer (cluster / barrage do not spawn 30 columns)
 	for _, c in columns do
 		if c.untilT > now and (c.pos - at).Magnitude < 4 + 2 * K then
@@ -441,12 +487,12 @@ local function columnAt(at: Vector3, K: number, color: Color3)
 		em.Enabled = false
 		em.Texture = TEX_SMOKE
 		em.LightEmission = 0
-		em.LightInfluence = 0.85
+		em.LightInfluence = 0.4 -- dense dark silhouette against bright desert sky
 		em.EmissionDirection = Enum.NormalId.Top
-		em.SpreadAngle = Vector2.new(9, 9)
+		em.SpreadAngle = Vector2.new(8, 8)
 		em.Rotation = NumberRange.new(0, 360)
-		em.RotSpeed = NumberRange.new(-20, 20)
-		em.Drag = 0.6
+		em.RotSpeed = NumberRange.new(-22, 22)
+		em.Drag = 0.45
 		em.Parent = part
 		slot = { part = part, em = em, untilT = 0, pos = at, busyUntil = 0 }
 		table.insert(columns, slot :: Column)
@@ -455,15 +501,15 @@ local function columnAt(at: Vector3, K: number, color: Color3)
 	c.pos = at
 	c.untilT = now + life
 	c.busyUntil = c.untilT + lifetime
-	c.part.CFrame = CFrame.new(at + V3(0, 0.5 + K, 0))
-	local w = math.clamp(2.2 * K, 1.6, 9)
-	c.em.Size = seqT({ { 0, w * 0.7 }, { 0.35, w * 1.3 }, { 1, w * 2.4 } })
-	c.em.Transparency = seqT({ { 0, 0.35 }, { 0.5, 0.55 }, { 1, 1 } })
-	c.em.Color = ColorSequence.new(color, color:Lerp(C3(95, 90, 86), 0.6))
-	c.em.Lifetime = NumberRange.new(lifetime * 0.75, lifetime)
-	c.em.Speed = NumberRange.new(5 + 2.5 * K, 8 + 4 * K)
-	c.em.Acceleration = V3(1.8, 1.5, 0.9) -- slow drift downwind
-	c.em.Rate = q(5 + 2.5 * K)
+	c.part.CFrame = CFrame.new(at + V3(0, 0.8 + K * 0.8, 0))
+	local w = math.clamp(2.6 * K, 2.2, 11)
+	c.em.Size = seqT({ { 0, w * 0.75 }, { 0.35, w * 1.45 }, { 1, w * 2.6 } })
+	c.em.Transparency = seqT({ { 0, 0.14 }, { 0.5, 0.34 }, { 0.82, 0.68 }, { 1, 1 } })
+	c.em.Color = ColorSequence.new(color, SOOT_TOP)
+	c.em.Lifetime = NumberRange.new(lifetime * 0.82, lifetime)
+	c.em.Speed = NumberRange.new(10 + 3.5 * K, 16 + 5.5 * K)
+	c.em.Acceleration = V3(2.0, 4.8, 1.0) -- climbs high with subtle wind lean
+	c.em.Rate = math.min(q(7 + 3.5 * K), 22)
 	c.em.Enabled = true
 end
 
@@ -573,6 +619,11 @@ function Blast.play(p: Vector3, opts: any?)
 
 	if not opts.silent then
 		playSound(size, style, p, K)
+		-- Beat 6: -7 dB bus ducking + 40 ms crack transient + lingering low-end boom tail on major blasts
+		local isMajor = size == "L" or size == "XL" or K >= 1.4 or opts.cookoff == true
+		if isMajor and Audio and Audio.blastPunch then
+			pcall(Audio.blastPunch, p, math.clamp(K * 0.65, 0.8, 2.0))
+		end
 	end
 	camera(p, K, R, st, opts)
 	if d > 900 then
@@ -582,36 +633,45 @@ function Blast.play(p: Vector3, opts: any?)
 	local gpos, gn = Fx.groundAt(p, 3, 10 + 2 * K)
 	local g = gpos or p
 	local n = gn or Vector3.yAxis
-	local FR = 4.2 * K -- fireball diameter unit
+	local FR = 4.4 * K -- fireball diameter unit
 	local isFire = style == "fire" or style == "spark" or style == "rail"
 	local soft = style == "gas" or style == "goo"
 	local mid = p + V3(0, FR * 0.25, 0)
+	local majorBlast = K >= 1.8 or size == "XL" or opts.cookoff == true
 
-	-- t = 0: flash + light pop
-	ball(Enum.Material.Neon, mid, FR * 0.3, FR * 1.9, FR * 2.6, 0.06, 0.16, C3(255, 255, 245), st.core, 0, 1, 0)
-	if d < 450 and (Fx.quality >= 0.75 or K >= 1.2) then
-		lightPop(mid, st.light, 14 + 14 * K, 4 + 2 * K, 0.3 + 0.12 * K)
+	-- Beat 1 (0-80 ms): blinding white-gold flash (#FFFBE0) + transient bounce PointLight (#FF8C1A, Range 70 / Brightness 8 on major blasts)
+	ball(Enum.Material.Neon, mid, FR * 0.35, FR * 2.15, FR * 2.8, 0.045, 0.095, FLASH_WHITE_GOLD, st.core, 0, 1, 0)
+	if d < 520 and (Fx.quality >= 0.6 or K >= 1.1 or majorBlast) then
+		local lRange = if majorBlast then 70 else math.clamp(24 + 22 * K, 24, 68)
+		local lBright = if majorBlast then 8 else math.clamp(3.8 + 2.2 * K, 3.8, 8)
+		lightPop(mid, st.light, lRange, lBright, 0.34 + 0.14 * K)
 	end
 
-	-- fireball: hot core, two yellow-orange layers, an orange outer shell; all shrink and redden as smoke takes over
+	-- Beat 2 (100-450 ms): multi-lobed orange-amber fireball (#FF7A18 -> #D9380E) expanding upward faster than outward + tan sand eruption plume
 	local fireTr = if soft then 0.35 else 0
-	ball(Enum.Material.Neon, mid, FR * 0.4, FR * 1.15, FR * 0.2, 0.07, 0.34, st.core, st.hot, fireTr, 1, FR * 0.2)
-	local nMid = if K >= 1.4 then q(4) else q(3)
+	ball(Enum.Material.Neon, mid, FR * 0.42, FR * 1.25, FR * 0.25, 0.08, 0.36, st.core, st.hot, fireTr, 1, FR * 0.55)
+	local nMid = if K >= 1.6 then q(6) elseif K >= 1.0 then q(4) else q(3)
 	for i = 1, nMid do
-		local off = V3(rnd(-1, 1), rnd(-0.2, 0.8), rnd(-1, 1)) * FR * 0.32
-		ball(Enum.Material.Neon, mid + off, FR * 0.35, FR * rnd(1.25, 1.6), FR * 0.55, rnd(0.09, 0.13), rnd(0.38, 0.5) + 0.1 * K,
-			st.hot, st.edge, fireTr, 1, FR * 0.45, (i - 1) * 0.015)
+		local ang = (i - 1) / math.max(nMid, 1) * math.pi * 2 + rnd(-0.3, 0.3)
+		local horiz = V3(math.cos(ang), 0, math.sin(ang))
+		local off = horiz * FR * rnd(0.18, 0.34) + V3(0, rnd(0.05, 0.65) * FR, 0)
+		-- rises ~2.5x faster upward than outward drift
+		ball(Enum.Material.Neon, mid + off, FR * 0.38, FR * rnd(1.3, 1.7), FR * 0.6, rnd(0.10, 0.16), rnd(0.36, 0.48) + 0.08 * K,
+			st.mid, st.edge, fireTr, 1, FR * rnd(0.95, 1.45), 0.02 + (i - 1) * 0.015, horiz * FR * 0.28)
 	end
-	ball(Enum.Material.Neon, mid, FR * 0.6, FR * 2.0, FR * 1.6, 0.14, 0.32 + 0.1 * K, st.mid, st.edge, 0.45 + fireTr * 0.4, 1, FR * 0.3, 0.02)
+	ball(Enum.Material.Neon, mid, FR * 0.6, FR * 2.1, FR * 1.65, 0.14, 0.36 + 0.08 * K, st.mid, st.edge, 0.4 + fireTr * 0.4, 1, FR * 0.7, 0.03)
+	if gpos and isFire and d < 520 then
+		sandPlumeAt(g, K)
+	end
 
 	-- smoke balls: start inside the fireball as it shrinks, grow, rise, fade
 	if style ~= "emp" and style ~= "ice" and d < 600 then
 		local nSmoke = q(if K >= 2 then 5 elseif K >= 1 then 4 else 2)
-		local smokeLife = 1.4 + 0.5 * K
+		local smokeLife = 1.6 + 0.55 * K
 		for i = 1, nSmoke do
-			local off = V3(rnd(-1, 1), rnd(0, 0.9), rnd(-1, 1)) * FR * 0.45
-			ball(Enum.Material.SmoothPlastic, mid + off, FR * 0.6, FR * rnd(1.2, 1.5), FR * rnd(1.9, 2.4), 0.5, smokeLife * rnd(0.8, 1.15),
-				st.smoke:Lerp(st.edge, 0.25), st.smoke:Lerp(C3(120, 115, 110), 0.35), 0.15, 1, FR * (1 + 0.4 * K), 0.18 + 0.03 * i)
+			local off = V3(rnd(-1, 1), rnd(0, 0.9), rnd(-1, 1)) * FR * 0.42
+			ball(Enum.Material.SmoothPlastic, mid + off, FR * 0.65, FR * rnd(1.25, 1.55), FR * rnd(2.0, 2.5), 0.48, smokeLife * rnd(0.85, 1.15),
+				st.smoke:Lerp(st.edge, 0.22), SOOT_TOP, 0.12, 1, FR * (1.2 + 0.45 * K), 0.16 + 0.03 * i)
 		end
 	end
 
@@ -625,23 +685,23 @@ function Blast.play(p: Vector3, opts: any?)
 		lastMushroom = now
 		local capK = if mushroom == "big" then 1.35 else 1
 		local capH = FR * (1.5 + 0.22 * K)
-		local life = 2.2 + 0.6 * K
-		local lit, dark = st.mid:Lerp(st.edge, 0.5), st.smoke:Lerp(C3(120, 115, 110), 0.3)
+		local life = 2.4 + 0.6 * K
+		local lit, dark = st.mid:Lerp(st.edge, 0.45), SOOT_BASE:Lerp(SOOT_TOP, 0.4)
 		local nStem = q(4)
 		for i = 1, nStem do
 			local h = capH * (i - 0.5) / nStem
-			ball(Enum.Material.SmoothPlastic, g + V3(0, h * 0.4, 0), FR * 0.3, FR * 0.6, FR * 0.8, 0.25, life * 0.8,
-				lit, dark, 0.05, 1, h * 0.6 + FR * 0.3, 0.04 * i)
+			ball(Enum.Material.SmoothPlastic, g + V3(0, h * 0.4, 0), FR * 0.3, FR * 0.6, FR * 0.85, 0.25, life * 0.8,
+				lit, dark, 0.05, 1, h * 0.65 + FR * 0.35, 0.04 * i)
 		end
-		ball(Enum.Material.SmoothPlastic, g + V3(0, capH * 0.6, 0), FR * 0.5 * capK, FR * 1.5 * capK, FR * 1.9 * capK, 0.35, life,
-			st.hot:Lerp(st.edge, 0.4), dark, 0.05, 1, capH * 0.4 + FR * 0.7, 0.1)
+		ball(Enum.Material.SmoothPlastic, g + V3(0, capH * 0.6, 0), FR * 0.5 * capK, FR * 1.55 * capK, FR * 1.95 * capK, 0.35, life,
+			st.hot:Lerp(st.edge, 0.38), dark, 0.05, 1, capH * 0.45 + FR * 0.75, 0.1)
 		local nRing = q(7)
 		local a0 = rnd(0, math.pi * 2)
 		for i = 1, nRing do
 			local a = a0 + (i - 1) / nRing * math.pi * 2
 			local dir = V3(math.cos(a), 0, math.sin(a))
 			ball(Enum.Material.SmoothPlastic, g + V3(0, capH * 0.5, 0) + dir * FR * 0.4, FR * 0.4 * capK, FR * 1.0 * capK,
-				FR * 1.4 * capK, 0.3, life * rnd(0.85, 1.05), lit, dark, 0.05, 1, capH * 0.45 + FR * 0.4, 0.14 + 0.01 * i,
+				FR * 1.4 * capK, 0.3, life * rnd(0.85, 1.05), lit, dark, 0.05, 1, capH * 0.45 + FR * 0.45, 0.14 + 0.01 * i,
 				dir * FR * 1.1 * capK)
 		end
 	end
@@ -654,15 +714,17 @@ function Blast.play(p: Vector3, opts: any?)
 		end
 	end
 
-	-- debris chunks (physics: arcs, bounce, fade)
-	if d < 400 and style ~= "gas" and K >= 0.5 then
-		pcall(Fx.debris, g + n * 0.6, {
-			n = math.clamp(math.floor(3 + 4 * K), 3, 16),
-			style = if style == "goo" then "goo" else "rock",
+	-- Beat 3 (150-900 ms): 8-12 dark opaque radial shrapnel chunks arcing cleanly against the bright sky
+	if d < 450 and style ~= "gas" and K >= 0.45 then
+		local chunkN = math.clamp(math.floor(7 + 2.5 * K + 0.5), 8, 12)
+		pcall(Fx.debris, g + n * 0.7, {
+			n = chunkN,
+			style = if style == "goo" then "goo" else "shrapnel",
 			color = if style == "goo" then st.mid else nil,
-			speed = 26 + 10 * K,
-			up = 1.3,
-			scale = math.clamp(0.6 + 0.25 * K, 0.6, 1.6),
+			speed = 34 + 13 * K,
+			up = 1.75,
+			scale = math.clamp(0.75 + 0.28 * K, 0.75, 1.75),
+			life = 1.15,
 		})
 	end
 
@@ -675,9 +737,9 @@ function Blast.play(p: Vector3, opts: any?)
 		end
 	end
 
-	-- lingering smoke column (fire only) and scorch (fire / spark)
-	if style == "fire" and K >= 0.7 then
-		columnAt(g, K, st.smoke)
+	-- Beat 4 (3-4.5 s): tall dense dark-charcoal smoke column landmark (fire only) and scorch
+	if style == "fire" and K >= 0.6 then
+		columnAt(g, K, SOOT_BASE)
 	end
 	if gpos and n.Y >= 0.55 and isFire and K >= 0.45 then
 		scorchAt(g, n, math.clamp(R * 1.1, 2.5, 46))

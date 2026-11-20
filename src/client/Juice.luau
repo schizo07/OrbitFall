@@ -21,16 +21,21 @@ local TweenService = game:GetService("TweenService")
 local Juice = {}
 Juice.intensity = 1
 
-local MAX_SHAKE_DEG = 7
-local MAX_KICK_DEG = 12
+local MAX_SHAKE_DEG = 9.5
+local MAX_KICK_DEG = 10
+local MAX_FLINCH_DEG = 7.5
 local MAX_SHAKES = 24
-local SHAKE_FREQ = 17
+local SHAKE_FREQ = 19
 
 local rng = Random.new()
 
-local shakes = {} -- {mag, dur, t, seed, freq}
-local kickP, kickPV = 0, 0 -- pitch spring (degrees)
+local shakes = {} -- {mag, dur, t, seed, freq, kind}
+local kickP, kickPV = 0, 0 -- weapon recoil pitch spring (degrees)
 local kickY, kickYV = 0, 0
+local kickR, kickRV = 0, 0 -- brief roll jitter on shots
+local flinchP, flinchPV = 0, 0 -- direct hit flinch spring (4-7 deg, 120-180 ms)
+local flinchY, flinchYV = 0, 0
+local flinchR, flinchRV = 0, 0
 local kickBack, kickBackV = 0, 0 -- camera pushback in studs
 local fovOff, fovVel = 0, 0
 local holdUntil = 0
@@ -83,8 +88,8 @@ function Juice.shake(mag: number, dur: number, pos: Vector3?, range: number?)
 	})
 end
 
--- Explosion-style trauma: magnitude falls off ~1/distance (full strength inside `near` studs) and fades to zero at `range`
--- (default 120). Unlike shake(mag, dur, pos) this does not square the falloff, so a big blast stays felt across the map.
+-- Explosion-style trauma: distance-scaled exponential decay (0.35-0.50 s) with a hard initial 100 ms snap
+-- and a low-frequency settle tail. Full strength inside 22 studs, fading smoothly to `range` (default 140).
 function Juice.trauma(mag: number, dur: number, pos: Vector3?, range: number?)
 	if Juice.intensity <= 0 or mag <= 0 then
 		return
@@ -92,16 +97,31 @@ function Juice.trauma(mag: number, dur: number, pos: Vector3?, range: number?)
 	if pos then
 		local cam = workspace.CurrentCamera
 		if cam then
-			local r = range or 120
+			local r = range or 140
 			local d = (cam.CFrame.Position - pos).Magnitude
 			if d >= r then
 				return
 			end
 			local u = d / r
-			mag *= math.min(1, 14 / math.max(d, 1)) * (1 - u * u)
+			mag *= math.min(1, 22 / math.max(d, 1)) * (1 - u * u)
 		end
 	end
-	Juice.shake(mag, dur)
+	mag *= Juice.intensity
+	if mag < 0.04 then
+		return
+	end
+	if #shakes >= MAX_SHAKES then
+		table.remove(shakes, 1)
+	end
+	table.insert(shakes, {
+		kind = "trauma",
+		mag = mag,
+		dur = math.clamp(dur, 0.35, 0.65),
+		t = 0,
+		seed = rng:NextNumber() * 1000,
+		freq = 28 + rng:NextNumber() * 6,
+		lowFreq = 7.5 + rng:NextNumber() * 2.5,
+	})
 end
 
 -- Low-frequency ground thump (heavy walker footsteps, distant subterranean rumbles): slower oscillation than gunfire shake.
@@ -137,17 +157,47 @@ function Juice.thump(mag: number, dur: number, pos: Vector3?, range: number?)
 	})
 end
 
-function Juice.kick(pitchDeg: number, yawDeg: number)
+function Juice.kick(pitchDeg: number, yawDeg: number, rollDeg: number?)
 	local i = Juice.intensity
 	if i <= 0 then
 		return
 	end
-	kickP = math.clamp(kickP + pitchDeg * i, -MAX_KICK_DEG, MAX_KICK_DEG)
-	kickY = math.clamp(kickY + yawDeg * i, -MAX_KICK_DEG, MAX_KICK_DEG)
-	-- a little velocity so the snap feels springy, plus a tiny camera pushback
-	kickPV += pitchDeg * i * 6
-	kickYV += yawDeg * i * 6
-	kickBack = math.clamp(kickBack + math.abs(pitchDeg) * 0.03 * i, 0, 0.6)
+	local p = pitchDeg
+	-- Snappier weapon recoil floor (+1.5-2.5 deg feel across standard & heavy weapons; negative landing dips untouched)
+	if p > 0.25 and p < 2.2 then
+		p = 1.35 + (p - 0.25) * 0.62
+	end
+	p *= i
+	local y = yawDeg * i
+	local r = if type(rollDeg) == "number"
+		then rollDeg * i
+		else (if rng:NextNumber() < 0.5 then -1 else 1) * rng:NextNumber(0.45, 0.68) * math.clamp(math.abs(p) / 1.6, 0.6, 1.3)
+	kickP = math.clamp(kickP + p * 0.65, -MAX_KICK_DEG, MAX_KICK_DEG)
+	kickY = math.clamp(kickY + y * 0.65, -MAX_KICK_DEG, MAX_KICK_DEG)
+	kickR = math.clamp(kickR + r * 0.7, -4.5, 4.5)
+	-- crisp upward snap velocity so the peak hits immediately and settles in 180-240 ms
+	kickPV += p * 14
+	kickYV += y * 11
+	kickRV += r * 14
+	kickBack = math.clamp(kickBack + math.abs(p) * 0.045, 0, 0.65)
+end
+
+-- Direct hit flinch kick: unmistakable 4-7 deg pitch/roll punch over 120-180 ms, capped so aim stays recoverable.
+function Juice.flinch(pitchDeg: number, yawDeg: number, rollDeg: number?)
+	local i = Juice.intensity
+	if i <= 0 then
+		return
+	end
+	local p = math.clamp(pitchDeg * i, -MAX_FLINCH_DEG, MAX_FLINCH_DEG)
+	local y = math.clamp(yawDeg * i, -MAX_FLINCH_DEG, MAX_FLINCH_DEG)
+	local r = math.clamp((rollDeg or (if yawDeg >= 0 then -1 else 1) * math.abs(pitchDeg) * 0.85) * i, -MAX_FLINCH_DEG, MAX_FLINCH_DEG)
+	flinchP = math.clamp(flinchP + p * 0.72, -MAX_FLINCH_DEG, MAX_FLINCH_DEG)
+	flinchY = math.clamp(flinchY + y * 0.65, -MAX_FLINCH_DEG, MAX_FLINCH_DEG)
+	flinchR = math.clamp(flinchR + r * 0.78, -MAX_FLINCH_DEG, MAX_FLINCH_DEG)
+	flinchPV += p * 18
+	flinchYV += y * 14
+	flinchRV += r * 18
+	kickBack = math.clamp(kickBack + 0.16 * i, 0, 0.7)
 end
 
 function Juice.hitstop(t: number)
@@ -197,7 +247,9 @@ end
 
 function Juice.reset()
 	table.clear(shakes)
-	kickP, kickPV, kickY, kickYV, kickBack, kickBackV = 0, 0, 0, 0, 0, 0
+	kickP, kickPV, kickY, kickYV, kickR, kickRV = 0, 0, 0, 0, 0, 0
+	flinchP, flinchPV, flinchY, flinchYV, flinchR, flinchRV = 0, 0, 0, 0, 0, 0
+	kickBack, kickBackV = 0, 0
 	fovOff, fovVel = 0, 0
 	holdUntil = 0
 	lastCF = CFrame.identity
@@ -210,13 +262,18 @@ function Juice.step(dt: number): CFrame
 	end
 
 	clock += dt
-	-- springs
-	kickP, kickPV = spring(kickP, kickPV, dt, 380, 26)
-	kickY, kickYV = spring(kickY, kickYV, dt, 380, 26)
-	kickBack, kickBackV = spring(kickBack, kickBackV, dt, 200, 20)
-	fovOff, fovVel = spring(fovOff, fovVel, dt, 240, 18)
+	-- weapon recoil spring (~180-240 ms crisp recovery)
+	kickP, kickPV = spring(kickP, kickPV, dt, 520, 38)
+	kickY, kickYV = spring(kickY, kickYV, dt, 520, 38)
+	kickR, kickRV = spring(kickR, kickRV, dt, 580, 40)
+	-- direct hit flinch spring (~120-180 ms punchy snap back)
+	flinchP, flinchPV = spring(flinchP, flinchPV, dt, 860, 48)
+	flinchY, flinchYV = spring(flinchY, flinchYV, dt, 860, 48)
+	flinchR, flinchRV = spring(flinchR, flinchRV, dt, 860, 48)
+	kickBack, kickBackV = spring(kickBack, kickBackV, dt, 260, 24)
+	fovOff, fovVel = spring(fovOff, fovVel, dt, 260, 19)
 
-	-- shakes (perlin noise, quadratic decay)
+	-- shakes + two-stage blast trauma (hard 100 ms initial snap + low-frequency exponential settle tail)
 	local sp, sy, sr, sx, sv = 0, 0, 0, 0, 0
 	for i = #shakes, 1, -1 do
 		local s = shakes[i]
@@ -224,6 +281,18 @@ function Juice.step(dt: number): CFrame
 		local e = 1 - s.t / s.dur
 		if e <= 0 then
 			table.remove(shakes, i)
+		elseif s.kind == "trauma" then
+			local snap = math.exp(-s.t / 0.055)
+			local tail = math.exp(-s.t / math.max(s.dur * 0.42, 0.08)) * e
+			local nh = s.t * s.freq
+			local nl = s.t * (s.lowFreq or 8.5)
+			local aH = s.mag * 0.72 * snap
+			local aL = s.mag * 0.58 * tail
+			sp += math.noise(nh, s.seed, 0.5) * 2.2 * aH + math.noise(nl, s.seed, 5.5) * 1.9 * aL
+			sy += math.noise(nh, s.seed, 1.5) * 2.0 * aH + math.noise(nl, s.seed, 6.5) * 1.7 * aL
+			sr += math.noise(nh, s.seed, 2.5) * 1.8 * aH + math.noise(nl, s.seed, 7.5) * 1.5 * aL
+			sx += (math.noise(nh, s.seed, 3.5) * aH + math.noise(nl, s.seed, 8.5) * aL) * 0.1
+			sv += (math.noise(nh, s.seed, 4.5) * aH + math.noise(nl, s.seed, 9.5) * aL) * 0.1
 		else
 			local amp = s.mag * e * e
 			local n = s.t * s.freq
@@ -238,8 +307,11 @@ function Juice.step(dt: number): CFrame
 	sy = math.clamp(sy, -MAX_SHAKE_DEG, MAX_SHAKE_DEG)
 	sr = math.clamp(sr, -MAX_SHAKE_DEG, MAX_SHAKE_DEG)
 
+	local totalP = sp + kickP + flinchP
+	local totalY = sy + kickY + flinchY
+	local totalR = sr + kickR + flinchR
 	local cf = CFrame.new(sx, sv, kickBack)
-		* CFrame.Angles(math.rad(sp + kickP), math.rad(sy + kickY), math.rad(sr))
+		* CFrame.Angles(math.rad(totalP), math.rad(totalY), math.rad(totalR))
 	lastCF = cf
 	return cf
 end
