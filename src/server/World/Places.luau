@@ -1353,25 +1353,63 @@ local function buildRefinery(root: Instance, R: Vector3, Q: Vector3, anchors: an
 end
 
 -- =============================================================================================================================
--- 6. salt pan: a wrecked COG hauler and rock clusters for cover
+-- 6. salt pan: weathered extraction LZ with perimeter beacons, tactical cover, wrecked hauler and rock clusters
 -- =============================================================================================================================
 local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, rock: Color3 })
 	local g = folder(root, "SaltPan")
-	-- candidate spots 38-55 studs out on flat ground, away from the cliffs and the side spots
-	local cands = {}
-	for deg = 0, 355, 10 do
-		for _, r in { 46, 50, 54 } do
-			local p = polar(P, math.rad(deg), r)
-			if math.max(math.abs(p.X), math.abs(p.Z)) <= 225 and not nearSide(p.X, p.Z, 28) then
-				local lo, hi = lowAt(p.X, p.Z, 7), highAt(p.X, p.Z, 7)
-				if hi - lo <= 2.2 then
-					table.insert(cands, { p = p, a = math.rad(deg) })
+
+	-- keep the center ~24-stud Skiff landing circle clear; place flush corner deck markers at r = 24.5 (non-colliding)
+	for i = 0, 3 do
+		local a = math.rad(45 + i * 90)
+		local p = polar(P, a, 24.5)
+		local y0 = lowAt(p.X, p.Z, 2)
+		local base = Vector3.new(p.X, y0 - 0.08, p.Z)
+		local fr = CFrame.lookAt(base, Vector3.new(P.X, base.Y, P.Z))
+		part(g, Vector3.new(4.2, 0.3, 1.4), fr, STEEL_D, false)
+		part(g, Vector3.new(3.6, 0.34, 0.7), fr * CFrame.new(0, 0.02, 0), HAZ, false)
+	end
+
+	-- perimeter LZ marker beacons at r = 27-28 (low bollards with amber/teal glow; 1 PointLight within LIGHT_CAP)
+	local litBeacon = false
+	for i = 0, 5 do
+		local a = math.rad(15 + i * 60)
+		local p = polar(P, a, 27.5)
+		if math.max(math.abs(p.X), math.abs(p.Z)) <= 225 and not nearSide(p.X, p.Z, 24) then
+			local lo, hi = lowAt(p.X, p.Z, 1.5), highAt(p.X, p.Z, 1.5)
+			if hi - lo <= 1.8 then
+				local base = Vector3.new(p.X, lo - 0.1, p.Z)
+				local fr = CFrame.lookAt(base, Vector3.new(P.X, base.Y, P.Z))
+				part(g, Vector3.new(2.2, 0.7, 2.2), fr * CFrame.new(0, 0.35, 0), STEEL_D, true)
+				vcyl(g, 1.1, 3.2, fr * CFrame.new(0, 2.1, 0), STEEL, true)
+				vcyl(g, 1.22, 0.55, fr * CFrame.new(0, 2.4, 0), HAZ, false)
+				local lampCol = if i % 2 == 0 then AMBER else TEAL
+				local cap = glow(g, Vector3.new(0.85, 0.7, 0.85), fr * CFrame.new(0, 3.9, 0), lampCol, true)
+				if not litBeacon and i % 2 == 0 then
+					litBeacon = true
+					light(cap, AMBER, 30, 1.4)
 				end
 			end
 		end
 	end
+
+	local function candsAt(radii: { number }, stepDeg: number, checkR: number, maxRise: number): { any }
+		local out = {}
+		for deg = 0, 355, stepDeg do
+			for _, r in radii do
+				local p = polar(P, math.rad(deg), r)
+				if math.max(math.abs(p.X), math.abs(p.Z)) <= 225 and not nearSide(p.X, p.Z, 28) then
+					local lo, hi = lowAt(p.X, p.Z, checkR), highAt(p.X, p.Z, checkR)
+					if hi - lo <= maxRise then
+						table.insert(out, { p = p, a = math.rad(deg), lo = lo })
+					end
+				end
+			end
+		end
+		return out
+	end
+
 	local picked = {}
-	local function take(minSep: number): any
+	local function takeFrom(cands: { any }, minSep: number): any
 		for _, c in cands do
 			local ok = true
 			for _, o in picked do
@@ -1387,7 +1425,12 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 		end
 		return nil
 	end
-	local hauler = take(math.rad(50))
+
+	local innerCands = candsAt({ 31, 35, 39 }, 15, 4.5, 1.8)
+	local outerCands = candsAt({ 43, 47, 51 }, 10, 7, 2.2)
+
+	-- outer anchor: wrecked COG hauler + scorched ground + detached wheel/axle + cargo crate
+	local hauler = takeFrom(outerCands, math.rad(45))
 	if hauler then
 		local c = hauler.p
 		local base = Vector3.new(c.X, lowAt(c.X, c.Z, 8) - 0.2, c.Z)
@@ -1398,13 +1441,66 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 		end
 		-- the hauler (art/blender/cog_sites.py): cab at the front (-Z), a rear wheel torn off, a crate still on the bed
 		setPiece(g, "cog_hauler_wreck", Hh(0, 0, 0) * CFrame.Angles(math.rad(3), 0, math.rad(4)))
+		scorch(base, 7)
 		local cb2 = Hh(-8.5, 2.6, 9) * CFrame.Angles(0, 0.4, math.rad(8))
 		part(g, Vector3.new(6.2, 5, 7), cb2, CRATE, true)
 		part(g, Vector3.new(6.3, 5.1, 1.1), cb2 * CFrame.new(0, 0, 1.8), HAZ, false)
+		-- detached heavy wheel + bent axle strut lying in the alkali dust
+		local wp = Hh(6.5, 0, 6.2).Position
+		local wy = gy(wp.X, wp.Z)
+		local wcf = CFrame.new(wp.X, wy + 0.75, wp.Z) * CFrame.Angles(math.rad(72), 0.6, math.rad(18))
+		vcyl(g, 4.2, 1.8, wcf, SOOT, true)
+		vcyl(g, 2.2, 1.9, wcf, STEEL_L, false)
+		pipe(g, Vector3.new(wp.X - 1.2, wy + 0.5, wp.Z - 0.6), Vector3.new(wp.X + 2.4, wy + 1.1, wp.Z + 1.8), 0.55, RUST, false)
 		smoke(emitterHost(g, Hh(0, 8.5, -3).Position), RGB(60, 56, 54), 3.4, 3, 8, 5)
 	end
+
+	-- inner tactical cover ring (r = 31-39): low field barricades & stacked supply crates facing around the LZ
+	for i = 1, 3 do
+		local c = takeFrom(innerCands, math.rad(36))
+		if c then
+			local pos = c.p
+			local base = Vector3.new(pos.X, lowAt(pos.X, pos.Z, 4) - 0.15, pos.Z)
+			local inward = dirTo(pos, P)
+			local fr = CFrame.lookAt(base, base + inward) * CFrame.Angles(0, rnd:NextNumber(-0.22, 0.22), 0)
+			-- low weathered COG blast barrier with angled brace struts
+			part(g, Vector3.new(8.6, 3.6, 1.8), fr * CFrame.new(0, 1.8, 0), jit(STEEL, 0.05), true)
+			part(g, Vector3.new(8.8, 0.75, 1.9), fr * CFrame.new(0, 2.75, 0), HAZ, false)
+			part(g, Vector3.new(8.4, 1.1, 2.1), fr * CFrame.new(0, 0.55, 0), RUST, false)
+			for _, sx in { -3.1, 3.1 } do
+				pipe(g, (fr * CFrame.new(sx, 0.2, -1.7)).Position, (fr * CFrame.new(sx, 2.9, -0.4)).Position, 0.45, STEEL_D, false)
+			end
+			if i == 1 then
+				-- small LZ relay mast beside the first barricade
+				local mp = (fr * CFrame.new(5.3, 0, -0.4)).Position
+				local my = gy(mp.X, mp.Z)
+				vcyl(g, 0.7, 9.5, CFrame.new(mp.X, my + 4.5, mp.Z), STEEL_D, true)
+				part(g, Vector3.new(1.8, 0.45, 1.2), CFrame.new(mp.X, my + 8.6, mp.Z) * CFrame.Angles(0, c.a, 0), STEEL_L, false)
+				glow(g, Vector3.new(0.7, 0.7, 0.7), CFrame.new(mp.X, my + 9.4, mp.Z), TEAL, true)
+			end
+		end
+	end
+
+	for _ = 1, 2 do
+		local c = takeFrom(innerCands, math.rad(32))
+		if c then
+			local pos = c.p
+			local y0 = lowAt(pos.X, pos.Z, 3.5)
+			local base = Vector3.new(pos.X, y0, pos.Z)
+			local yaw = c.a + rnd:NextNumber(-0.4, 0.4)
+			crate(g, base, yaw, 4.6, 3.2, 3.8, true)
+			local sideOff = Vector3.new(math.cos(yaw + 1.1) * 4.2, 0, math.sin(yaw + 1.1) * 4.2)
+			local sp = Vector3.new(base.X + sideOff.X, gy(base.X + sideOff.X, base.Z + sideOff.Z), base.Z + sideOff.Z)
+			crate(g, sp, yaw + 0.5, 3.2, 2.5, 3.2, true)
+			crate(g, base + Vector3.new(0, 3.0, 0), yaw - 0.25, 3.0, 2.2, 2.8, true)
+			local drum = base + Vector3.new(-math.cos(yaw) * 3.4, 0, -math.sin(yaw) * 3.4)
+			vcyl(g, 1.7, 2.5, CFrame.new(drum.X, gy(drum.X, drum.Z) + 1.15, drum.Z), RUST, true)
+		end
+	end
+
+	-- outer rock clusters for flanking cover
 	for _ = 1, 3 do
-		local c = take(math.rad(40))
+		local c = takeFrom(outerCands, math.rad(38))
 		if c then
 			rockCluster(g, c.p, 6, 4, look.rock)
 		end

@@ -23,7 +23,7 @@ local NS = NumberSequence.new
 local NK = NumberSequenceKeypoint.new
 
 local RAMP = 10 -- seconds to build up / die down
-local WIND_VOL = 1.3 -- Wind loop volume at full storm
+local WIND_VOL = 0.85 -- Wind loop volume at full storm
 local WIND_BASE = 0.05 -- the loop is created at this volume multiplier (no pop at start), setVolume divides it back out
 local TOUCH_RATE = 0.4 -- particle rate cap on touch devices
 
@@ -42,8 +42,8 @@ local STORM = {
 	desert = {
 		-- warm dusty orange-amber haze (never green/olive): soft distance fade that keeps dark robots readable
 		dust = RGB(228, 140, 82), atmColor = RGB(232, 134, 74), atmDecay = RGB(194, 102, 54),
-		density = 0.40, hazeAdd = 1.1, offset = 0.2,
-		tint = RGB(255, 220, 184), sat = -0.02, contrast = 0, bright = 0,
+		density = 0.29, hazeAdd = 0.55, offset = 0.16,
+		tint = RGB(255, 224, 192), sat = -0.02, contrast = 0, bright = 0,
 	},
 	ash = {
 		dust = RGB(96, 84, 80), atmColor = RGB(92, 78, 74), density = 0.75, hazeAdd = 3,
@@ -239,30 +239,35 @@ local function buildStorm(biome: string)
 	box = p
 	-- 2026-11-15 playtest ("looks like air passing by"): slower, tumbling two-tone billows instead of fast faint sheets,
 	-- grit drawn as wind-aligned streaks, and a dust front that rolls in from upwind while the storm builds (stormFront)
+	local isDesert = biome == "desert"
 	local light, darkDust = s.dust:Lerp(Color3.new(1, 1, 1), 0.12), s.dust:Lerp(Color3.new(0, 0, 0), 0.22)
 	emitter(p, {
 		Lifetime = NumberRange.new(3.6, 4.6),
 		Speed = NumberRange.new(24, 34),
 		SpreadAngle = Vector2.new(8, 5),
 		Size = NS({ NK(0, 9), NK(0.5, 18), NK(1, 28) }),
-		Transparency = NS({ NK(0, 1), NK(0.2, 0.62), NK(0.7, 0.68), NK(1, 1) }),
+		Transparency = if isDesert
+			then NS({ NK(0, 1), NK(0.2, 0.74), NK(0.7, 0.80), NK(1, 1) })
+			else NS({ NK(0, 1), NK(0.2, 0.62), NK(0.7, 0.68), NK(1, 1) }),
 		Color = ColorSequence.new(light, darkDust),
 		LightInfluence = 0.8,
 		RotSpeed = NumberRange.new(-45, 45),
 		Acceleration = Vector3.new(0, 1.5, 0),
-	}, 20)
+	}, if isDesert then 14 else 20)
 	-- low rolling dust along the ground
 	emitter(p, {
 		Lifetime = NumberRange.new(3, 4),
 		Speed = NumberRange.new(26, 36),
 		SpreadAngle = Vector2.new(4, 1),
 		Size = NS({ NK(0, 16), NK(1, 34) }),
-		Transparency = NS({ NK(0, 1), NK(0.25, 0.62), NK(0.75, 0.7), NK(1, 1) }),
+		Transparency = if isDesert
+			then NS({ NK(0, 1), NK(0.25, 0.74), NK(0.75, 0.80), NK(1, 1) })
+			else NS({ NK(0, 1), NK(0.25, 0.62), NK(0.75, 0.7), NK(1, 1) }),
 		Color = ColorSequence.new(s.dust:Lerp(Color3.new(0, 0, 0), 0.12)),
 		LightInfluence = 0.75,
 		Acceleration = Vector3.new(0, -2, 0),
 		RotSpeed = NumberRange.new(-12, 12),
-	}, 7)
+	}, if isDesert then 5 else 7)
 	-- fine grit streaking past (stretched along its flight)
 	emitter(p, {
 		Lifetime = NumberRange.new(1.4, 2),
@@ -271,11 +276,11 @@ local function buildStorm(biome: string)
 		Size = NS({ NK(0, 0.22), NK(1, 0.16) }),
 		Squash = NS({ NK(0, 2.6), NK(1, 2.6) }),
 		Orientation = Enum.ParticleOrientation.VelocityParallel,
-		Transparency = NS({ NK(0, 0.3), NK(1, 0.75) }),
+		Transparency = if isDesert then NS({ NK(0, 0.42), NK(1, 0.82) }) else NS({ NK(0, 0.3), NK(1, 0.75) }),
 		Color = ColorSequence.new(s.dust:Lerp(Color3.new(1, 1, 1), 0.25)),
 		LightInfluence = 0.6,
 		grit = true,
-	} :: any, 90)
+	} :: any, if isDesert then 68 else 90)
 	-- the storm front: huge slow billows far upwind, moved in from ~300 studs as the storm ramps up (step)
 	local f = Instance.new("Part")
 	f.Name = "ClientStormFront"
@@ -293,13 +298,15 @@ local function buildStorm(biome: string)
 		Speed = NumberRange.new(8, 12),
 		SpreadAngle = Vector2.new(6, 10),
 		Size = NS({ NK(0, 40), NK(0.5, 70), NK(1, 95) }),
-		Transparency = NS({ NK(0, 1), NK(0.25, 0.35), NK(0.75, 0.45), NK(1, 1) }),
+		Transparency = if isDesert
+			then NS({ NK(0, 1), NK(0.25, 0.52), NK(0.75, 0.62), NK(1, 1) })
+			else NS({ NK(0, 1), NK(0.25, 0.35), NK(0.75, 0.45), NK(1, 1) }),
 		Color = ColorSequence.new(s.dust, darkDust),
 		LightInfluence = 0.9,
 		RotSpeed = NumberRange.new(-10, 10),
 		Acceleration = Vector3.new(0, 2.5, 0),
 		front = true,
-	} :: any, 12)
+	} :: any, if isDesert then 9 else 12)
 end
 
 local function setRates(storm: number)

@@ -201,8 +201,8 @@ local BIOMES: { [string]: Biome } = {
 		terrain = {
 			[M.Sand] = RGB(150, 98, 66), [M.Sandstone] = RGB(128, 78, 54), [M.Rock] = RGB(92, 62, 48),
 			[M.Basalt] = RGB(60, 44, 38), [M.Ground] = RGB(110, 72, 52), [M.Slate] = RGB(78, 56, 46),
-			[M.Grass] = RGB(110, 96, 60), [M.Mud] = RGB(84, 58, 44), [M.Salt] = RGB(238, 232, 214),
-			[M.Asphalt] = RGB(58, 50, 46), [M.Cobblestone] = RGB(122, 92, 68), [M.Limestone] = RGB(194, 166, 134),
+			[M.Grass] = RGB(110, 96, 60), [M.Mud] = RGB(84, 58, 44), [M.Salt] = RGB(202, 184, 152),
+			[M.Asphalt] = RGB(58, 50, 46), [M.Cobblestone] = RGB(122, 92, 68), [M.Limestone] = RGB(178, 146, 114),
 		},
 		rocks = { RGB(118, 80, 58), RGB(98, 66, 50), RGB(134, 92, 64) },
 		rockMat = M.Sandstone,
@@ -717,18 +717,19 @@ end
 -- feathered edges (no crisp discs or hard circular seams).
 local function desertOverlayMat(x: number, z: number, slope: number): Enum.Material?
 	local n = noise(x / 14 + 3.1, z / 14 + 8.7)
-	-- Salt pan: pale salt crust fading through bleached limestone alkali into sand
+	-- Salt pan: sun-baked alkali crust mottled with limestone dust, fading into sand
 	if pan then
 		local dx, dz = x - pan.x, z - pan.z
-		local reach = pan.r + 24
+		local reach = pan.r + 22
 		if math.abs(dx) < reach and math.abs(dz) < reach then
 			local d = math.sqrt(dx * dx + dz * dz)
 			local w = noise(x / 36 + 1.4, z / 36 + 5.2) * 12 + n * 5
-			local t = 1 - smooth((d + w - (pan.r - 8)) / 24)
+			local t = 1 - smooth((d + w - (pan.r - 15)) / 24)
 			local nf = noise(x / 7.5 + 2.1, z / 7.5 + 6.4)
-			if t > 0.58 + nf * 0.38 then
+			local patch = noise(x / 15 + 9.3, z / 15 + 3.7)
+			if t > 0.64 + nf * 0.34 + patch * 0.18 then
 				return M.Salt
-			elseif slope <= 0.55 and t > 0.16 + nf * 0.42 then
+			elseif slope <= 0.55 and t > 0.18 + nf * 0.40 then
 				return M.Limestone
 			end
 		end

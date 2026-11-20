@@ -4,7 +4,7 @@
 --   Weather     "calm" | "storm"
 --   WeatherAt   server time (workspace:GetServerTimeNow) the current phase started
 --   WeatherEnd  server time it ends (0 = no cycle running: ship, or a biome without storms)
--- Cycle: calm 2-4 min, then a storm of 40-70 s. Visibility only: enemies keep their normal perception.
+-- Cycle: calm 4-6 min, then a storm of 24-38 s. Visibility only: enemies keep their normal perception.
 -- Studio: Feel_Weather "clear" (no storms) | "now" (a storm starts at once, calm phases shortened to 20 s),
 -- mirrored from the client switcher by the "studioFeel" action.
 
@@ -13,8 +13,8 @@ local RunService = game:GetService("RunService")
 local WeatherService = {}
 
 local STORM_BIOMES = { desert = true, ash = true }
-local CALM = { 120, 240 }
-local STORM = { 40, 70 }
+local CALM = { 240, 380 }
+local STORM = { 24, 38 }
 local IS_STUDIO = RunService:IsStudio()
 
 local rng = Random.new()
