@@ -2324,9 +2324,11 @@ local function industrialSet(parent: Instance)
 			fuelTank(parent, x + rng:NextNumber(-9, 9), z + rng:NextNumber(8, 14), rng:NextNumber(0, TAU))
 		end
 	end
-	for _ = 1, 12 do
-		local x, z = laneEdgeSpot(245)
-		scrapHeap(parent, x, z)
+	if biomeName ~= "desert" then
+		for _ = 1, 12 do
+			local x, z = laneEdgeSpot(245)
+			scrapHeap(parent, x, z)
+		end
 	end
 end
 
@@ -2370,7 +2372,7 @@ local function battlefield(parent: Instance, fac: string)
 			local a, d = rng:NextNumber(0, TAU), rng:NextNumber(10, 20)
 			shellCrater(parent, x + math.cos(a) * d, z + math.sin(a) * d, rng:NextNumber(4.5, 7.5))
 		end
-		if rng:NextNumber() < 0.45 then
+		if biomeName ~= "desert" and rng:NextNumber() < 0.45 then
 			local a, d = rng:NextNumber(0, TAU), rng:NextNumber(12, 22)
 			podHusk(parent, x + math.cos(a) * d, z + math.sin(a) * d)
 		end
@@ -2452,17 +2454,20 @@ local function rubbleField(parent: Instance)
 		p.CanTouch = false
 		p.CastShadow = false
 	end
-	for _ = 1, RUBBLE_CLUSTERS do
+	local clusterCount = if isDesert then 80 else RUBBLE_CLUSTERS
+	for _ = 1, clusterCount do
 		if partCount >= RUBBLE_PART_CAP then
 			break
 		end
 		local x, z
 		local roll = rng:NextNumber()
-		if roll < 0.35 and #craters > 0 then -- scorch: ring around the shell craters
+		local craterCutoff = if isDesert then 0.55 else 0.35
+		local laneCutoff = if isDesert then 0.9 else 0.65
+		if roll < craterCutoff and #craters > 0 then -- scorch: ring around the shell craters
 			local c = craters[rng:NextInteger(1, #craters)]
 			local a, d = rng:NextNumber(0, TAU), c.r * rng:NextNumber(0.6, 1.8)
 			x, z = c.x + math.cos(a) * d, c.z + math.sin(a) * d
-		elseif roll < 0.65 then -- battlefield: the edges of the lanes
+		elseif roll < laneCutoff then -- battlefield: the edges of the lanes
 			x, z = laneEdgeSpot(250)
 		else
 			x, z = randomSpot(30, 24)
@@ -2573,7 +2578,7 @@ local function natureSet(props: Instance, dressing: Instance)
 				rock(props, rx, rz, s)
 			end
 		end
-		for _ = 1, 5 do
+		for _ = 1, if biomeName == "desert" then 2 else 5 do
 			local a, d = rng:NextNumber(0, TAU), rng:NextNumber(3, 14)
 			pebble(props, x + math.cos(a) * d, z + math.sin(a) * d)
 		end
@@ -2746,7 +2751,7 @@ local function dressSite(parent: Instance, name: string, faction: string)
 					eggCluster(parent, ex, ez)
 				elseif faction == "LUMEN" then
 					crystals(parent, ex, ez, rng:NextNumber(0.9, 1.3))
-				else
+				elseif biomeName ~= "desert" then
 					scrapHeap(parent, ex, ez)
 				end
 			end
@@ -2810,25 +2815,25 @@ local function dressCog(parent: Instance)
 		end
 	end
 	-- metal debris: plates, gears, broken limbs
-	for _ = 1, 12 do
-		local x, z = wildSpot(24, 10, 245)
-		-- sit on the LOWEST ground under the piece (sunk), so tilted plates never hover over a slope
-		local p = Vector3.new(x, lowestGround(x, z, 2.5) + 0.1, z)
-		local k = rng:NextInteger(1, 3)
-		if k == 1 then
-			part(parent, Vector3.new(rng:NextNumber(2, 5), 0.5, rng:NextNumber(2, 5)), CFrame.new(p) * CFrame.Angles(math.rad(rng:NextNumber(-25, 25)), math.rad(rng:NextNumber(0, 180)), math.rad(rng:NextNumber(-25, 25))), steel, Enum.Material.DiamondPlate, { CanCollide = false })
-		elseif k == 2 then
-			local g = cyl(parent, rng:NextNumber(3, 6), 1, CFrame.new(p + Vector3.new(0, 0.9, 0)) * CFrame.Angles(math.rad(rng:NextNumber(60, 100)), math.rad(rng:NextNumber(0, 360)), 0), rust, Enum.Material.CorrodedMetal, { CanCollide = false })
-			g.CastShadow = false
-		else
-			part(parent, Vector3.new(1, 1, rng:NextNumber(4, 8)), CFrame.new(p) * CFrame.Angles(0, math.rad(rng:NextNumber(0, 180)), math.rad(rng:NextNumber(-20, 20))), steel, Enum.Material.Metal, { CanCollide = false })
-			if biomeName ~= "desert" then
+	if biomeName ~= "desert" then
+		for _ = 1, 12 do
+			local x, z = wildSpot(24, 10, 245)
+			-- sit on the LOWEST ground under the piece (sunk), so tilted plates never hover over a slope
+			local p = Vector3.new(x, lowestGround(x, z, 2.5) + 0.1, z)
+			local k = rng:NextInteger(1, 3)
+			if k == 1 then
+				part(parent, Vector3.new(rng:NextNumber(2, 5), 0.5, rng:NextNumber(2, 5)), CFrame.new(p) * CFrame.Angles(math.rad(rng:NextNumber(-25, 25)), math.rad(rng:NextNumber(0, 180)), math.rad(rng:NextNumber(-25, 25))), steel, Enum.Material.DiamondPlate, { CanCollide = false })
+			elseif k == 2 then
+				local g = cyl(parent, rng:NextNumber(3, 6), 1, CFrame.new(p + Vector3.new(0, 0.9, 0)) * CFrame.Angles(math.rad(rng:NextNumber(60, 100)), math.rad(rng:NextNumber(0, 360)), 0), rust, Enum.Material.CorrodedMetal, { CanCollide = false })
+				g.CastShadow = false
+			else
+				part(parent, Vector3.new(1, 1, rng:NextNumber(4, 8)), CFrame.new(p) * CFrame.Angles(0, math.rad(rng:NextNumber(0, 180)), math.rad(rng:NextNumber(-20, 20))), steel, Enum.Material.Metal, { CanCollide = false })
 				-- torn chunk: a rounded lump half sunk (not a cube)
 				local w = blob(parent, Vector3.new(2.4, 1.8, 2.6), CFrame.new(p + Vector3.new(rng:NextNumber(-3, 3), 0.3, rng:NextNumber(-3, 3))) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0), rust, Enum.Material.CorrodedMetal, false)
 				w.CanQuery = false
 			end
+			maybeYield()
 		end
-		maybeYield()
 	end
 	-- (the old box-built tank husks are gone: battlefield() lays half-buried robot hulks instead)
 	industrialSet(parent)
@@ -3952,7 +3957,8 @@ function MapBuilder.build(faction: string?, biome: string?): any
 		end
 	end
 	-- pebbles around the clusters and along the edges of the lanes
-	for _ = 1, 60 do -- (the rubble field below carries the dense scatter)
+	local lonePebbles = if biomeName == "desert" then 15 else 60
+	for _ = 1, lonePebbles do -- (the rubble field below carries the dense scatter)
 		local x, z = randomSpot(16, 62)
 		pebble(props, x, z)
 	end
