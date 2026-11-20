@@ -96,6 +96,10 @@ end
 local CULL_DIST = 100
 
 -- wrist position relative to what the hand holds (gun space)
+-- one-handed hip-fire (carrying 1 core cell: the left hand holds the cell, CellCarry owns the torso and left arm)
+local HIP_POCKET = Vector3.new(0.78, 0.05, -0.45) -- gun grip pivot in the (leaning) upper torso frame
+local HIP_REACH = 0.85 -- how far forward of the pivot the grip sits (arm slightly bent)
+local HIP_PITCH_MAX = 1.0 -- the gun follows the camera pitch, up to this far
 local R_WRIST = Vector3.new(0.05, 0.28, 0.12)
 local L_WRIST = Vector3.new(-0.12, -0.02, 0.16)
 
@@ -120,6 +124,7 @@ type Rig = {
 	pitch: number,
 	low: number,
 	ads: number, -- local aim-down-sights blend (0..1)
+	hip: boolean, -- true while only the right arm + gun are driven (one-handed carry), waist / neck C0 left alone
 	hand: number, -- smoothed handedness: +1 gun on the right shoulder .. -1 on the left (local: localHand, others: the replicated Hand attribute)
 	active: boolean,
 }
@@ -198,6 +203,7 @@ local function buildRig(c: Model): Rig?
 		pitch = 0,
 		low = 0,
 		ads = 0,
+		hip = false,
 		hand = if c == player.Character then localHand else remoteHand(c),
 		active = false,
 	}
@@ -267,6 +273,7 @@ end
 
 local function clearC0(r: Rig)
 	r.active = false
+	r.hip = false
 	setC0(r.waist, r.waistBase)
 	if r.neck and r.neckBase then
 		setC0(r.neck, r.neckBase)
@@ -442,9 +449,65 @@ local function handguardTarget(arm: Arm, upper: CFrame, gunCF: CFrame, wrist: Ve
 	return P0 + D * fg
 end
 
+-- Carrying 1 core cell: CellCarry (runs just before this) poses the torso and the left arm; this draws only the right arm
+-- and the gun, held out at the hip and pointed along the camera pitch (recoil / reload offset on top for the local player).
+-- Returns false when there is nothing to draw (no gun in hand), so the caller yields entirely.
+local function hipFire(r: Rig, dt: number, isLocal: boolean, cam: Camera): boolean
+	local _, handle = findGun(r.c)
+	local grip = handle and r.c:FindFirstChild("RightHand") and (r.c.RightHand :: BasePart):FindFirstChild("RightGrip")
+	if not handle or not grip or not grip:IsA("Weld") or grip.Part1 ~= handle or blocked(r, isLocal) then
+		return false
+	end
+	if not r.hip then
+		clearC0(r) -- hand the waist / neck back to CellCarry, restore the grip
+		r.hip = true
+	end
+	if r.grip ~= grip then
+		if r.grip and r.grip.Parent and r.gripBase then
+			r.grip.C0 = r.gripBase
+		end
+		r.grip, r.gripBase, r.gripHandle = grip, grip.C0, handle
+	end
+	r.active = true
+	r.low, r.ads = 0, 0
+
+	local pitch: number
+	if isLocal then
+		pitch = math.asin(clamp(cam.CFrame.LookVector.Y, -1, 1))
+	else
+		local ap = r.c:GetAttribute("AimPitch")
+		pitch = if typeof(ap) == "number" then ap else 0
+	end
+	pitch = clamp(pitch, -HIP_PITCH_MAX, HIP_PITCH_MAX)
+	r.pitch += (pitch - r.pitch) * (1 - exp(-dt * (if isLocal then 40 else 14)))
+
+	local hrpCF = r.hrp.CFrame
+	local lower = hrpCF * r.root.C0 * r.root.Transform * r.root.C1:Inverse()
+	local upper = lower * r.waist.C0 * r.waist.Transform * r.waist.C1:Inverse()
+	local look = hrpCF.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	flat = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+	local aimRot = CFrame.lookAt(Vector3.zero, flat, UP) * CFrame.Angles(r.pitch, 0, 0)
+	local gunCF = CFrame.new((upper * CFrame.new(tune("HipPocket", HIP_POCKET))).Position) * aimRot * CFrame.new(0, -0.1, -tune("HipReach", HIP_REACH))
+	if isLocal and GunFeel then
+		gunCF = gunCF * (GunFeel.offset or CF0)
+	end
+
+	local right, back, down = upper.RightVector, -upper.LookVector, -upper.UpVector
+	local rPole = down * 1 + right * 0.9 + back * 0.3
+	local rRot = gunCF.Rotation * CFrame.Angles(-0.35, 0, 0)
+	local rHand = solveArm(r.R, upper, (gunCF * CFrame.new(R_WRIST)).Position, rPole, rRot)
+	grip.C0 = rHand:Inverse() * gunCF * grip.C1
+	return true
+end
+
 local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
-	-- haul objective: CellCarry owns the pose while carrying; restore C0s without clobbering CellCarry's Transforms
+	-- haul objective: CellCarry owns the pose while carrying. 1 cell: it keeps the gun in the right hand (hipFire above);
+	-- otherwise restore C0s without clobbering CellCarry's Transforms
 	if CellCarry.ownsPose(r.c) then
+		if CellCarry.holdsGun(r.c) and hipFire(r, dt, isLocal, cam) then
+			return
+		end
 		if r.active then
 			clearC0(r)
 		end
@@ -452,6 +515,7 @@ local function step(r: Rig, dt: number, isLocal: boolean, cam: Camera)
 		r.low, r.ads = 0, 0
 		return
 	end
+	r.hip = false
 	local _, handle = findGun(r.c)
 	local grip = handle and r.c:FindFirstChild("RightHand") and (r.c.RightHand :: BasePart):FindFirstChild("RightGrip")
 	if not handle or not grip or not grip:IsA("Weld") or grip.Part1 ~= handle or blocked(r, isLocal) then

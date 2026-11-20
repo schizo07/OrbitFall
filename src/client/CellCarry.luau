@@ -1,11 +1,11 @@
 -- Haul objective ("Recover Core Cells"), client side of carrying a core cell.
 -- Server: server/Objectives/HaulCells.luau (pickup prompt, weld, drop, delivery). Rules: shared/Carry.luau.
---   * Input gates while the local trooper carries (Player attribute `CarryCell`): Fire and Aim read as released
---     (STRICT; SIDEARM rule lets slot 2 through), Grenade throws are skipped (WeaponController checks Input.isGated).
+--   * Input gates while the local trooper carries (Player attribute `CarryCell`): Aim always reads as released, Fire
+--     reads as released at 2 cells (1 cell hip-fires the equipped weapon), Grenade throws are skipped
+--     (WeaponController checks Input.isGated).
 --   * Interact (E) or Grenade (G / R1 / the touch GRENADE button) drops the cell: Action "cellDrop".
---   * Sidearm rule: picking a cell up switches to the secondary.
---   * Studio A/B "CARRY RULES" (client/Variants.luau, workspace attribute CarryTune_Rule) is forwarded to the server,
---     which owns the rule (workspace attribute HaulCarryRule).
+--   * Pose: 2 cells = both arms hold the stack, gun hidden. 1 cell = left arm holds the cell at the hip, the gun stays
+--     in the right hand and CombatPose drives that arm (hipFire pose, runs after this module each frame).
 -- Carry speed (walk and sprint, shared/Carry.speedMult) and animation cadence live in client/Movement.luau.
 -- Carry pose + heavier movement live here on PreSimulation (every client, every carrier; CombatPose yields via ownsPose).
 local Players = game:GetService("Players")
@@ -277,16 +277,12 @@ function CellCarry.ownsPose(c: Model?): boolean
 			return false
 		end
 	end
-	if Carry.rule() == "SIDEARM" and Carry.count(c) < Carry.MAX_CELLS then
-		local gun = c:FindFirstChild("Gun")
-		local handle = gun and gun:FindFirstChild("Handle")
-		local muzzle = handle and handle:FindFirstChild("Muzzle")
-		local reach = if muzzle and muzzle:IsA("Attachment") then -muzzle.Position.Z else 2
-		if reach < 1.25 then
-			return false
-		end
-	end
 	return true
+end
+
+-- True while this character carries one cell and keeps the weapon in the right hand (CombatPose draws that arm + gun).
+function CellCarry.holdsGun(c: Model?): boolean
+	return Carry.holdsGun(c) and CellCarry.ownsPose(c)
 end
 
 function CellCarry.cameraBob(grounded: boolean): (number, number, number)
@@ -380,7 +376,7 @@ local function stepRig(r: Rig, dt: number, isLocal: boolean)
 		r.neck.Transform = CF0:Lerp(r.neck.Transform, 0.35) * CFrame.Angles(-(r.lean + stepPitch) * 0.65, 0, -roll * 0.55)
 	end
 
-	-- Arms: 2 cells = two-handed chest carry; 1 cell = left hand at the hip, right arm free-ish
+	-- Arms: 2 cells = two-handed chest carry; 1 cell = left hand at the hip, the right arm belongs to CombatPose (hip-fire)
 	local hrpCF = r.hrp.CFrame
 	local lower = hrpCF * c0Of(r.root) * r.root.Transform * c1Of(r.root):Inverse()
 	local upper = lower * c0Of(r.waist) * r.waist.Transform * c1Of(r.waist):Inverse()
@@ -401,7 +397,7 @@ local function stepRig(r: Rig, dt: number, isLocal: boolean)
 		local lRot = upper.Rotation * CFrame.Angles(-0.15, 0, 0.15)
 		solveArm(r.L, upper, gripPos, lPole, lRot)
 	end
-	showGun(r, false)
+	showGun(r, not twoHands)
 end
 
 local function frame(dt: number)
@@ -492,29 +488,13 @@ function CellCarry.init()
 			if cnt >= Carry.MAX_CELLS then
 				Store.set("toast", "Carrying 2 core cells (heavy, no sprint). Load at the cargo lifter. [" .. dropKeyText() .. "] drop one")
 			else
-				Store.set("toast", "Core cell in hand (1/2). Grab another or load at the cargo lifter. [" .. dropKeyText() .. "] drop")
-				if Carry.rule() == "SIDEARM" then
-					local m = Store.get("me")
-					if type(m) == "table" and m.weapons and m.weapons[2] and m.weapon ~= 2 and actionEv then
-						actionEv:FireServer("swap", 2)
-					end
-				end
+				Store.set("toast", "Core cell in hand (1/2): hip-fire only. Grab another or load at the cargo lifter. [" .. dropKeyText() .. "] drop")
 			end
 		end
 		lastCount = cnt
 	end
 	player:GetAttributeChangedSignal(Carry.COUNT_ATTR):Connect(onCarryChange)
 	player:GetAttributeChangedSignal(Carry.ATTR):Connect(onCarryChange)
-
-	if RunService:IsStudio() then
-		local function send()
-			if actionEv then
-				actionEv:FireServer("carryRule", workspace:GetAttribute("CarryTune_Rule"))
-			end
-		end
-		workspace:GetAttributeChangedSignal("CarryTune_Rule"):Connect(send)
-		send()
-	end
 	RunService.PreSimulation:Connect(frame)
 end
 

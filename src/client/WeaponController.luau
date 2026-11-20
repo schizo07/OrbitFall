@@ -8,6 +8,7 @@ local Weapons = require(Shared.Data.Weapons)
 local Enemies = require(Shared.Data.Enemies)
 local Damage = require(Shared.Damage)
 local Aim = require(Shared.Aim)
+local Carry = require(Shared.Carry)
 
 local Store = require(script.Parent.Store)
 local Input = require(script.Parent.Input)
@@ -92,6 +93,10 @@ local function blocked(): boolean
 	end
 	local m = me()
 	if not m or not m.alive or m.dropping then
+		return true
+	end
+	-- haul: two carried cells use both hands (one cell still hip-fires, reloads and swaps normally)
+	if Carry.blocks(player, "fire") then
 		return true
 	end
 	return isHolding()
