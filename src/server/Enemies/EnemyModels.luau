@@ -34,7 +34,6 @@ local GUNMETAL = Color3.fromRGB(92, 99, 114)
 local DARKMETAL = Color3.fromRGB(58, 62, 74)
 local STEEL = Color3.fromRGB(132, 140, 156)
 local PLATE_LIGHT = Color3.fromRGB(174, 182, 196)
-local COG_TRIM = Color3.fromRGB(206, 194, 168) -- warm stone trim so dark COG silhouettes read against dark terrain
 local RUST = Color3.fromRGB(214, 120, 48)
 local EYE_RED = COG_ACCENT
 local CELL_ORANGE = Color3.fromRGB(255, 160, 50)
@@ -170,13 +169,6 @@ local NEON = Enum.Material.Neon
 local PLASTIC = Enum.Material.SmoothPlastic
 local SLATE = Enum.Material.Slate
 
-local function addTrim(c: Ctx, size: Vector3, cf: CFrame): BasePart
-	local p = c.add("Trim", size, cf, COG_TRIM, PLASTIC)
-	p.CanQuery = false
-	p.CastShadow = false
-	return p
-end
-
 -- COGWORK LEGION ---------------------------------------------------------------------
 local function buildTinker(c: Ctx)
 	local legL = c.add("LegL", V(0.7, 2, 0.7), at(-0.6, 1.0, 0), DARKMETAL)
@@ -184,7 +176,6 @@ local function buildTinker(c: Ctx)
 	c.leg(legL, V(-0.6, 2, 0), 0.7, 0)
 	c.leg(legR, V(0.6, 2, 0), 0.7, math.pi)
 	c.add("Torso", V(2.2, 2.2, 1.6), at(0, 3.1, 0), GUNMETAL)
-	addTrim(c, V(2.28, 0.24, 1.66), at(0, 3.35, 0))
 	c.add("Head", V(1.7, 1.3, 1.5), at(0, 4.9, -0.1), DARKMETAL)
 	c.add("Eye", V(1.0, 0.45, 0.2), at(0, 4.95, -0.9), EYE_RED, NEON, "eye")
 	c.add("Gun", V(0.5, 0.5, 1.8), at(1.45, 3.4, -0.9), RUST)
@@ -197,7 +188,6 @@ local function buildRivet(c: Ctx)
 	c.leg(legL, V(-0.8, 2.4, 0), 0.6, 0)
 	c.leg(legR, V(0.8, 2.4, 0), 0.6, math.pi)
 	c.add("Torso", V(2.8, 2.8, 1.9), at(0, 3.8, 0), GUNMETAL)
-	addTrim(c, V(2.88, 0.26, 1.96), at(0, 3.95, 0))
 	c.add("Head", V(1.9, 1.5, 1.7), at(0, 5.9, -0.1), DARKMETAL)
 	c.add("Eye", V(1.3, 0.5, 0.2), at(0, 5.95, -1.0), EYE_RED, NEON, "eye")
 	c.add("Crest", V(0.4, 0.5, 1.7), at(0, 6.85, 0), RUST)
@@ -219,7 +209,6 @@ local function buildBulwark(c: Ctx)
 	c.add("Eye", V(2.4, 1.6, 0.4), at(0, 6.9, -3.05), EYE_RED, NEON, "eye")
 	c.add("Vent", V(3, 1.8, 0.5), at(0, 5.4, 4.55), CELL_ORANGE, NEON, "vent")
 	c.add("ShieldArm", V(4.4, 4.6, 1.0), at(-2.2, 4.6, -5.0), PLATE_LIGHT, Enum.Material.Metal, "arm")
-	addTrim(c, V(4.48, 0.34, 1.08), at(-2.2, 4.6, -5.0))
 	c.add("CannonA", V(0.9, 0.9, 4.4), at(3.1, 7.3, -4.4), RUST)
 	c.add("CannonB", V(0.9, 0.9, 4.4), at(3.1, 6.1, -4.4), RUST)
 	c.add("PipeL", V(0.7, 2, 0.7), at(-2.2, 6.7, 3), STEEL)
@@ -230,7 +219,6 @@ end
 local function buildColossus(c: Ctx)
 	c.rig.bob = 0.35
 	c.add("Body", V(14, 7, 18), at(0, 24.5, 0), GUNMETAL)
-	addTrim(c, V(14.2, 0.75, 18.1), at(0, 24.5, 0))
 	c.add("Deck", V(15.5, 1.6, 11), at(0, 28.6, 2), PLATE_LIGHT)
 	c.add("Cockpit", V(7, 5, 7), at(0, 28.5, -7), DARKMETAL, Enum.Material.Metal, "body", true)
 	c.add("Eye", V(4.6, 2.6, 0.5), at(0, 28.6, -10.3), EYE_RED, NEON, "eye")
@@ -301,7 +289,6 @@ local function buildBastion(c: Ctx)
 	-- turret (front = -Z): everything below is welded to the Turret part, which yaws on its Motor6D
 	local turret = c.add("Turret", V(7.4, 1.2, 7), at(0, 7.6, 0.6), DARKMETAL)
 	local hung = {
-		addTrim(c, V(7.52, 0.34, 7.12), at(0, 7.6, 0.6)),
 		c.add("Glacis", V(9, 4.6, 1.2), CFrame.new(0, 4.6, -4.2) * CFrame.Angles(math.rad(22), 0, 0), STEEL),
 		c.add("Stripe", V(7.6, 0.5, 2), at(0, 7.0, 1.6), RUST),
 		c.add("EyePlate", V(6.4, 2.6, 1), at(0, 5.7, -5.1), GUNMETAL),
@@ -439,7 +426,7 @@ local function buildLootCog(c: Ctx)
 	caster.Shape = Enum.PartType.Cylinder
 	c.add("Prow", V(1.4, 0.7, 0.8), at(0, 1.9, -1.7), RUST)
 	c.add("Crate", V(1.9, 1.7, 1.9), at(0, 2.65, 0.5), LOOT_GOLD, NEON, "crate")
-	c.add("Frame", V(2.3, 0.3, 2.3), at(0, 1.9, 0.5), COG_TRIM, PLASTIC)
+	c.add("Frame", V(2.3, 0.3, 2.3), at(0, 1.9, 0.5), STEEL)
 end
 
 -- "Gilded Grub": fat shiny beetle with a glowing sac (front = -Z)
@@ -595,61 +582,6 @@ local KIT_ZONE: { [string]: { [string]: string } } = {
 local KIT_SKIP_GLOW_FIX: { [string]: { [string]: boolean } } = { LOOT_COG = { Crate = true } } -- the loot stays gold
 local KIT_LEG_PHASE = { Leg_FL = 0, Leg_RR = 0, Leg_FR = math.pi, Leg_RL = math.pi } -- diagonal pairs swing together
 
--- Warm stone side ribs / flank bands welded to a major silhouette part on each COG mesh robot (kept off top faces).
-type TrimSpec = { part: string, offsetFrac: Vector3, sizeScale: Vector3, minSize: Vector3, mirrorX: boolean? }
-local COG_MESH_TRIM: { [string]: TrimSpec } = {
-	TINKER = { part = "Body", offsetFrac = Vector3.new(0.46, 0, 0), sizeScale = Vector3.new(0.09, 0.62, 0.42), minSize = Vector3.new(0.18, 0.55, 0.4), mirrorX = true },
-	RIVET = { part = "Body", offsetFrac = Vector3.new(0.46, 0.04, 0), sizeScale = Vector3.new(0.08, 0.56, 0.46), minSize = Vector3.new(0.22, 0.75, 0.5), mirrorX = true },
-	BULWARK = { part = "Shield", offsetFrac = Vector3.new(0.44, -0.02, 0), sizeScale = Vector3.new(0.07, 0.66, 0.52), minSize = Vector3.new(0.25, 1.1, 0.35), mirrorX = true },
-	COLOSSUS = { part = "Body", offsetFrac = Vector3.new(0.48, -0.04, 0), sizeScale = Vector3.new(0.05, 0.36, 0.68), minSize = Vector3.new(0.55, 1.2, 3.0), mirrorX = true },
-	BASTION = { part = "Turret", offsetFrac = Vector3.new(0.47, 0.02, 0), sizeScale = Vector3.new(0.06, 0.34, 0.64), minSize = Vector3.new(0.32, 0.55, 1.5), mirrorX = true },
-	LOOT_COG = { part = "Body", offsetFrac = Vector3.new(0.47, -0.04, 0), sizeScale = Vector3.new(0.08, 0.32, 0.68), minSize = Vector3.new(0.18, 0.25, 0.6), mirrorX = true },
-}
-
-local function attachCogTrim(kindId: string, byName: { [string]: BasePart }, model: Model, c: Ctx)
-	local spec = COG_MESH_TRIM[kindId]
-	if not spec then
-		return
-	end
-	local target = byName[spec.part] or byName.Body
-	if not target then
-		return
-	end
-	local sz = target.Size
-	local trimSize = Vector3.new(
-		math.max(spec.minSize.X, sz.X * spec.sizeScale.X),
-		math.max(spec.minSize.Y, sz.Y * spec.sizeScale.Y),
-		math.max(spec.minSize.Z, sz.Z * spec.sizeScale.Z)
-	)
-	local sides = if spec.mirrorX then { -1, 1 } else { 1 }
-	for _, sx in sides do
-		local offset = CFrame.new(sz.X * spec.offsetFrac.X * sx, sz.Y * spec.offsetFrac.Y, sz.Z * spec.offsetFrac.Z)
-		local trim = Instance.new("Part")
-		trim.Name = "Trim"
-		trim.Size = trimSize
-		trim.CFrame = target.CFrame * offset
-		trim.Color = COG_TRIM
-		trim.Material = PLASTIC
-		trim.Anchored = false
-		trim.CanCollide = false
-		trim.CanTouch = false
-		trim.CanQuery = false
-		trim.Massless = true
-		trim.CastShadow = false
-		trim:SetAttribute("EnemyId", model:GetAttribute("EnemyId"))
-		trim:SetAttribute("Zone", "body")
-		local w = Instance.new("Weld")
-		w.Name = "W_Trim"
-		w.Part0 = target
-		w.Part1 = trim
-		w.C0 = offset
-		w.C1 = CFrame.new()
-		trim.Parent = model
-		w.Parent = trim
-		c.count += 1
-	end
-end
-
 local function buildKit(kindId: string, enemyId: number, tpl: Model, key: string, c: Ctx): (Model, Rig)
 	local def = EnemyData.get(kindId)
 	assert(def, "unknown enemy kind " .. kindId)
@@ -701,7 +633,6 @@ local function buildKit(kindId: string, enemyId: number, tpl: Model, key: string
 	if #motors > 0 then
 		c.rig.motors = motors
 	end
-	attachCogTrim(kindId, byName, model, c)
 	tpl:Destroy()
 	return model, c.rig
 end
@@ -716,15 +647,10 @@ local function buildFromMesh(kindId: string, enemyId: number, tpl: Model): (Mode
 	c.rig.mesh = true
 	c.rig.bob = 0 -- bobbing is done by the client on the body welds (EnemyAnim), not by hopping the whole model
 
-	local byName: { [string]: BasePart } = {}
 	for _, mp in tpl:GetChildren() do
 		if mp:IsA("MeshPart") then
 			tuneGlow(kindId, def, mp)
-			if def.faction == "COG" and mp.Name == "Trim" then
-				mp.Color = COG_TRIM
-			end
 			prepPart(mp, enemyId, zoneFor(kindId, mp.Name, roleOf(mp), def))
-			byName[mp.Name] = mp
 			-- template coordinates: feet on y = 0, centred on x/z, front = -Z; the root sits at the model origin
 			local w = Instance.new("Weld")
 			w.Name = "W_" .. mp.Name
@@ -737,9 +663,6 @@ local function buildFromMesh(kindId: string, enemyId: number, tpl: Model): (Mode
 			w.Parent = mp
 			c.count += 1
 		end
-	end
-	if not byName.Trim then
-		attachCogTrim(kindId, byName, model, c)
 	end
 	local size = Assets.size(kindId:lower())
 	if size then
@@ -824,7 +747,6 @@ local function buildRigged(kindId: string, enemyId: number, tpl: Model, info: an
 	if size then
 		applyMeshOffsets(kindId, size)
 	end
-	attachCogTrim(kindId, byName, model, c)
 	tpl:Destroy()
 	return model, c.rig
 end

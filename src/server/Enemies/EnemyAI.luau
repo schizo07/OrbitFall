@@ -2056,9 +2056,59 @@ local SNAP_RATE = 26 -- 1/s: smoothing speed, applied to the real time since the
 local SNAP_HOVER = 0.5 -- studs above the terrain
 local SNAP_SINK = 0.1 -- studs below the terrain
 
+-- Prevent horizontal movement from entering steep mountain/cliff terrain; slide along the cliff face instead.
+local function moveStep(e: any, delta: Vector3): Vector3
+	local hStep = flat(delta)
+	local stepLen = hStep.Magnitude
+	if stepLen < 1e-4 then
+		return e.pos
+	end
+	if e.close == false and e.skipMove then
+		local wn = e.wallNormal
+		if wn then
+			local into = hStep:Dot(wn)
+			if into < 0 then
+				hStep -= wn * into
+			end
+		end
+		return clampMap(e.pos + Vector3.new(hStep.X, delta.Y, hStep.Z))
+	end
+
+	local radius = math.max(e.def.size * 0.5, 0.8)
+	local look = stepLen + radius + (if e.close == false then 1.5 else 0)
+	local origin = e.pos + Vector3.new(0, math.clamp(e.def.size * 0.45, 1.8, 3.5), 0)
+	local r = workspace:Raycast(origin, (hStep / stepLen) * look, groundParams)
+	if r and r.Normal.Y < 0.55 then
+		local n = flat(r.Normal)
+		if n.Magnitude > 0.01 then
+			n = n.Unit
+			e.wallNormal = n
+			local into = hStep:Dot(n)
+			if into < 0 then
+				local slid = hStep - n * into
+				local slidLen = slid.Magnitude
+				if slidLen < 1e-4 then
+					return e.pos
+				end
+				local r2 = workspace:Raycast(origin, (slid / slidLen) * (slidLen + radius), groundParams)
+				if r2 and r2.Normal.Y < 0.55 then
+					return e.pos
+				end
+				hStep = slid
+			end
+		else
+			e.wallNormal = nil
+		end
+	else
+		e.wallNormal = nil
+	end
+	return clampMap(e.pos + Vector3.new(hStep.X, delta.Y, hStep.Z))
+end
+
 -- exact: the model is written on this frame at the throttled rate (far from every player), so put it right on the surface
 local function snapGround(e: any, dt: number, force: boolean, exact: boolean)
-	local moved = flat(e.pos - e.lastSnap).Magnitude
+	local prevSnap = e.lastSnap
+	local moved = flat(e.pos - prevSnap).Magnitude
 	local coarse = e.fodder or perfOn -- PERF A/B: non-fodder snap as rarely as PERF_SNAP and close the gap like fodder
 	local acc = (e.snapAcc or 0) + dt
 	e.snapAcc = acc
@@ -2066,12 +2116,16 @@ local function snapGround(e: any, dt: number, force: boolean, exact: boolean)
 		return
 	end
 	e.snapAcc = 0
-	e.lastSnap = e.pos
 	local origin = Vector3.new(e.pos.X, e.pos.Y + 8 + e.def.size * 0.5, e.pos.Z)
 	local r = workspace:Raycast(origin, Vector3.new(0, -70, 0), groundParams)
 	if r then
 		local gy = r.Position.Y
-		if force or exact or math.abs(gy - e.pos.Y) > 6 then
+		if not force and gy - e.pos.Y > 4.5 and e.air <= 0 then
+			e.pos = Vector3.new(prevSnap.X, e.pos.Y, prevSnap.Z)
+			e.lastSnap = e.pos
+			return
+		end
+		if force or exact or (e.pos.Y - gy) > 6 then
 			e.pos = Vector3.new(e.pos.X, gy, e.pos.Z)
 		else
 			-- fodder snaps less often, so each snap closes more of the gap
@@ -2080,6 +2134,7 @@ local function snapGround(e: any, dt: number, force: boolean, exact: boolean)
 			e.pos = Vector3.new(e.pos.X, math.clamp(y, gy - SNAP_SINK, gy + SNAP_HOVER), e.pos.Z)
 		end
 	end
+	e.lastSnap = e.pos
 end
 
 local function update(e: any, dt: number, now: number)
@@ -2111,7 +2166,7 @@ local function update(e: any, dt: number, now: number)
 		if push.untilT <= now then
 			e.push = nil
 		elseif not (a and a.kind == "fling") then
-			e.pos = clampMap(e.pos + push.v * dt) -- snapGround follows it like normal walking
+			e.pos = moveStep(e, push.v * dt) -- snapGround follows it like normal walking
 		end
 	end
 
@@ -2135,7 +2190,7 @@ local function update(e: any, dt: number, now: number)
 		end
 		e.vel = e.vel:Lerp(target, math.min(1, dt * (if noMove then 10 else 6)))
 		if e.vel.Magnitude > 0.05 then
-			e.pos = clampMap(e.pos + e.vel * dt)
+			e.pos = moveStep(e, e.vel * dt)
 		end
 	end
 
