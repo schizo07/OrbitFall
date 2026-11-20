@@ -59,7 +59,7 @@ MapPlan.haul = {
 	carryAttractRadius = 85,
 	carryAttractMax = 3,
 	encounterPool = { "courier", "cradle", "guardian", "buried" },
-	fixedEncounters = { quarry = "conveyor" },
+	fixedEncounters = { quarry = "pylons" },
 }
 
 -- Ground features (terrain only; World/Places adds the props along them).

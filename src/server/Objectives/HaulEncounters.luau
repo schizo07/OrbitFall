@@ -2,7 +2,7 @@
 -- Each cell site gets a distinct encounter, never repeated in the same mission:
 --   courier  : a COG courier robot (LOOT_COG) carries the cell and flees when it notices a trooper; kill it to drop the cell
 --   cradle   : cell locked in a powered clamp; hold E to release, then defend ~20 s against a small wave while it unclamps
---   conveyor : (quarry) cells ride the pit conveyor belt toward a crusher; grab before destroyed or it respawns on the far rim
+--   pylons   : (quarry) cells locked inside an energy field powered by 3 terrace pylons; destroy all 3 to unlock
 --   guardian : a heavy enemy (Bulwark or Bastion) sits dormant next to the cell and wakes when the cell is lifted (or shot)
 --   buried   : cell buried under sand and rubble; shoot or blast the rubble to free it (with a slow dig fallback if dry)
 --
@@ -25,7 +25,7 @@ local HaulEncounters = {}
 HaulEncounters.LABELS = {
 	courier = "Courier",
 	cradle = "Cradle",
-	conveyor = "Conveyor",
+	pylons = "Pylons",
 	guardian = "Guardian",
 	buried = "Buried",
 }
@@ -33,15 +33,15 @@ HaulEncounters.LABELS = {
 local DORMANT_OFF = 1e15
 local DARK = Color3.fromRGB(40, 44, 52)
 local STEEL = Color3.fromRGB(104, 112, 124)
-local HAZARD = Color3.fromRGB(238, 184, 42)
 local SAND_ROCK = Color3.fromRGB(168, 122, 86)
 local RUBBLE_ROCK = Color3.fromRGB(124, 92, 70)
-local DANGER_RED = Color3.fromRGB(255, 76, 60)
 local AMBER = Color3.fromRGB(255, 186, 62)
+local FIELD_CYAN = Color3.fromRGB(70, 220, 255)
 local CALLOUT = Color3.fromRGB(244, 246, 250)
 
-local BELT_ACTIVATE_R = 115
-local BELT_SPEED = 0.95
+local PYLON_COUNT = 3
+local PYLON_HP = 160
+local PYLON_ALERT_R = 95
 local COURIER_NOTICE_R = 65
 local COURIER_CLOSE_R = 38
 local CRADLE_DEFEND_R = 55
@@ -104,11 +104,11 @@ end
 -- Assign a distinct encounter kind to each cache (never repeated in the same mission).
 function HaulEncounters.assign(caches: { any }, rng: Random)
 	local haulCfg = MapPlan.haul or {}
-	local fixed: { [string]: string } = haulCfg.fixedEncounters or { quarry = "conveyor" }
+	local fixed: { [string]: string } = haulCfg.fixedEncounters or { quarry = "pylons" }
 	local poolSrc: { string } = haulCfg.encounterPool or { "courier", "cradle", "guardian", "buried" }
 	local used: { [string]: boolean } = {}
 
-	-- First pass: fixed site assignments (quarry -> conveyor)
+	-- First pass: fixed site assignments (quarry -> pylons)
 	for _, cache in caches do
 		local fx = fixed[cache.name]
 		if fx and not used[fx] then
@@ -162,9 +162,10 @@ function HaulEncounters.new(ctx: any, opts: any): any
 
 	local states: { [any]: any } = {}
 	local rubbleById: { [number]: any } = {}
-	local rubbleParts: { BasePart } = {}
+	local pylonById: { [number]: any } = {}
+	local shootParts: { BasePart } = {}
 	local nextRubbleId = 0
-	local usedTerraces: { [number]: boolean } = {}
+	local nextPylonId = 0
 	local seq = 0
 
 	local function say(line: string, who: Player?)
@@ -516,174 +517,301 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		states[cache] = st
 	end
 
-	-- ------------------------------------------------------------------ 3. CONVEYOR (QUARRY)
-	local function worseQuarrySpot(): CFrame
-		local terr: { CFrame } = {}
+	-- ------------------------------------------------------------------ 3. PYLON LOCKDOWN (QUARRY)
+	local rebuildShootList: () -> ()
+
+	local function pickPylonPositions(center: Vector3): { Vector3 }
+		local terr: { Vector3 } = {}
 		for _, cf in anchors.terraces or {} do
 			if typeof(cf) == "CFrame" then
-				table.insert(terr, cf)
+				table.insert(terr, cf.Position)
 			end
 		end
-		-- Pick the unused terrace farthest from the refinery (worse haul back!)
-		local bestIdx: number? = nil
-		local bestDist = -1
-		for i, cf in terr do
-			if not usedTerraces[i] then
-				local d = flat(cf.Position, liftPos)
-				if d > bestDist then
-					bestDist = d
-					bestIdx = i
+
+		local chosen: { Vector3 } = {}
+		if #terr >= PYLON_COUNT then
+			local bestMin = -1
+			local bestSum = -1
+			local bestIdx = { 1, 2, 3 }
+			for i = 1, #terr - 2 do
+				for j = i + 1, #terr - 1 do
+					local dij = flat(terr[i], terr[j])
+					for k = j + 1, #terr do
+						local dik = flat(terr[i], terr[k])
+						local djk = flat(terr[j], terr[k])
+						local minD = math.min(dij, dik, djk)
+						local sumD = dij + dik + djk
+						if minD > bestMin + 0.5 or (math.abs(minD - bestMin) <= 0.5 and sumD > bestSum) then
+							bestMin = minD
+							bestSum = sumD
+							bestIdx = { i, j, k }
+						end
+					end
 				end
 			end
-		end
-		if bestIdx then
-			usedTerraces[bestIdx] = true
-			return terr[bestIdx]
-		end
-		-- Fallback: far rim of the quarry pit away from the refinery
-		local qPos = map.places and map.places.quarry or Vector3.new(165, 0, -168)
-		local away = flatUnit(qPos - liftPos, Vector3.new(1, 0, -1))
-		local ang = rng:NextNumber(-0.45, 0.45)
-		local dir = CFrame.Angles(0, ang, 0) * away
-		local p = opts.groundAtXZ(qPos.X + dir.X * 42, qPos.Z + dir.Z * 42)
-		return CFrame.new(p)
-	end
-
-	local function setupConveyor(cache: any)
-		local spots: { CFrame } = cache.spots
-		if #spots == 0 then
-			return
-		end
-		local beltDir: Vector3
-		if #spots >= 2 then
-			beltDir = flatUnit(spots[#spots].Position - spots[1].Position, Vector3.new(1, 0, 0))
-		else
-			local toRef = flatUnit(liftPos - cache.pos, Vector3.new(-1, 0, 1))
-			beltDir = Vector3.new(-toRef.Z, 0, toRef.X)
+			for _, idx in bestIdx do
+				local p = terr[idx]
+				table.insert(chosen, opts.groundAtXZ(p.X, p.Z))
+			end
+			return chosen
 		end
 
-		local firstPos = spots[1].Position
-		local lastPos = spots[#spots].Position
-		local beltLen = math.max(flat(firstPos, lastPos), 8)
-		local beltY = firstPos.Y
-		local crusherPos = Vector3.new(lastPos.X, beltY, lastPos.Z) + beltDir * 7.5
-		local crusherCF = CFrame.lookAt(crusherPos, crusherPos + beltDir)
-
-		-- Shift resting cells toward the upstream end so players get ~18-26 s before the first reaches the crusher
-		for i, cell in cache.cells do
-			local backDist = beltLen + 4.5 - (i - 1) * 3.8
-			local p = crusherPos - beltDir * math.max(backDist, 14)
-			local cellY = beltY + 0.2 + Carry.SIZE.Y / 2 + 0.02
-			local cf = CFrame.new(p.X, cellY, p.Z) * CFrame.Angles(0, math.atan2(beltDir.X, beltDir.Z), 0)
-			cell.home = cf
-			cell.case.CFrame = cf
-			cell.onBelt = true
+		for _, p in terr do
+			table.insert(chosen, opts.groundAtXZ(p.X, p.Z))
 		end
 
-		-- Build chunky Crusher gate at the downstream end of the belt (low part count: 7 parts)
-		local model = Instance.new("Model")
-		model.Name = "QuarryCrusher"
-		model.Parent = encFolder
-		for _, sx in { -2.7, 2.7 } do
-			ctx.part(model, Vector3.new(0.9, 6.2, 1.4), crusherCF * CFrame.new(sx, 3.1, 0), DARK, Enum.Material.Metal)
-		end
-		local header = ctx.part(model, Vector3.new(6.4, 1.3, 1.8), crusherCF * CFrame.new(0, 6.0, 0), DARK, Enum.Material.Metal, { Name = "CrusherHead" })
-		ctx.glow(model, Vector3.new(5.2, 0.45, 0.45), crusherCF * CFrame.new(0, 6.1, 0.95), DANGER_RED, { Name = "CrusherLight" })
-		local jawBaseCF = crusherCF * CFrame.new(0, 3.4, 0)
-		local jaw = ctx.part(model, Vector3.new(4.4, 1.6, 1.4), jawBaseCF, HAZARD, Enum.Material.DiamondPlate, { CanCollide = false })
-		local bb, lbl = makeBanner(header, "CrusherTag", "CRUSHER", DANGER_RED, Vector3.new(0, 2.4, 0), 170, false)
-		bb.Enabled = false
-
-		states[cache] = {
-			kind = "conveyor",
-			beltDir = beltDir,
-			crusherPos = crusherPos,
-			jaw = jaw,
-			jawBaseCF = jawBaseCF,
-			bb = bb,
-			lbl = lbl,
-			active = false,
-			phase = 0,
-		}
-	end
-
-	local function stepConveyor(cache: any, st: any, dt: number)
-		local anyOnBelt = false
-		for _, cell in cache.cells do
-			if cell.state == "cache" and cell.onBelt then
-				anyOnBelt = true
+		local qCenter = (map.places and map.places.quarry) or center
+		local baseAng = rng:NextNumber(0, math.pi * 2)
+		for i = 1, PYLON_COUNT do
+			if #chosen >= PYLON_COUNT then
 				break
 			end
-		end
-		if not anyOnBelt then
-			if st.bb and st.bb.Enabled then
-				st.bb.Enabled = false
+			local rad = rng:NextNumber(24, 32)
+			local ang = baseAng + (i - 1) * (math.pi * 2 / PYLON_COUNT)
+			for _ = 1, 6 do
+				local cand = opts.groundAtXZ(qCenter.X + math.cos(ang) * rad, qCenter.Z + math.sin(ang) * rad)
+				local ok = true
+				for _, prev in chosen do
+					if flat(cand, prev) < 16 then
+						ok = false
+						break
+					end
+				end
+				if ok then
+					table.insert(chosen, cand)
+					break
+				end
+				ang += math.pi / 4
 			end
+		end
+		return chosen
+	end
+
+	local function unlockPylonField(cache: any, st: any, silent: boolean?)
+		if st.done then
 			return
 		end
-		if not st.active then
-			if #ctx.playersNear(cache.pos, BELT_ACTIVATE_R) > 0 then
-				st.active = true
-				if st.bb then
-					st.bb.Enabled = true
-				end
-				ctx.sound("Generator", st.crusherPos)
-				say("Quarry conveyor's running! Grab the cells before the crusher!", nil)
-				ctx.notify("Quarry belt active! Grab core cells before they hit the crusher!", Config.Colors.Danger)
-			else
-				return
-			end
+		st.done = true
+		if st.fieldModel and st.fieldModel.Parent then
+			st.fieldModel:Destroy()
 		end
-
-		st.phase += dt * 4.5
-		if st.jaw and st.jaw.Parent then
-			local bob = math.sin(st.phase) * 0.95
-			st.jaw.CFrame = st.jawBaseCF * CFrame.new(0, bob, 0)
-		end
-
-		local stepVec = st.beltDir * (BELT_SPEED * dt)
 		for _, cell in cache.cells do
-			if cell.state == "cache" and cell.onBelt then
-				local nextCF = cell.case.CFrame + stepVec
-				cell.case.CFrame = nextCF
-				local toCrush = st.crusherPos - nextCF.Position
-				local remain = Vector3.new(toCrush.X, 0, toCrush.Z):Dot(st.beltDir)
-				if remain <= 1.6 then
-					-- Crushed! Respawn at a worse guarded spot on the far quarry rim
-					cell.onBelt = false
-					ctx.fx("Debris", { p = st.crusherPos + Vector3.new(0, 1.5, 0), n = 14, c = Carry.COLOR, style = "scrap" })
-					ctx.sound("HitMetal", st.crusherPos)
-					ctx.sound("Alarm", st.crusherPos)
-
-					local worse = worseQuarrySpot()
-					local floor = worse.Position
-					local gY = opts.groundAtXZ(floor.X, floor.Z).Y
-					local padCF = CFrame.new(floor.X, gY, floor.Z)
-					ctx.cyl(encFolder, 3.2, 0.2, padCF * CFrame.new(0, 0.1, 0), DARK, Enum.Material.SmoothPlastic, { CanCollide = false, CanQuery = false, CastShadow = false })
-					local newCF = padCF * CFrame.new(0, 0.2 + Carry.SIZE.Y / 2 + 0.02, 0)
-					cell.home = newCF
-					cell.case.CFrame = newCF
-					cell.state = "cache"
-					cell.prompt.Enabled = true
-					if opts.setDroppedMarker then
-						opts.setDroppedMarker(cell, true)
-					end
-					-- Guard the worse spot with 2 COG troopers
-					seq += 1
-					local sq = "haul_crush_" .. seq
-					for g = 1, 2 do
-						local ang = (g == 1 and 1.1 or -1.1)
-						local gp = opts.groundAtXZ(floor.X + math.cos(ang) * 5.5, floor.Z + math.sin(ang) * 5.5)
-						local kind = if g == 1 then roster.medium else roster.regular
-						spawnEnemy(kind, gp, liftPos, { posture = "guard", squad = sq, home = gp, aggro = false, patrol = false }, true)
-					end
-					ctx.notify("Core cell crushed! Backup cell dropped on the far quarry rim!", Config.Colors.Danger)
-					if opts.onSiteUpdated then
-						opts.onSiteUpdated(cache)
-					end
-				end
+			if cell.state == "locked" then
+				cell.state = "cache"
+				cell.prompt.Enabled = true
 			end
 		end
+		if not silent then
+			ctx.fx("Shockwave", { p = st.fieldCenter, r = 22 })
+			ctx.fx("Debris", { p = st.fieldCenter + Vector3.new(0, 2, 0), n = 18, c = FIELD_CYAN, style = "scrap" })
+			ctx.sound("ObjectiveDone", st.fieldCenter)
+			ctx.sound("CrateOpen", st.fieldCenter)
+			ctx.notify("Quarry lockdown broken — grab the core cells!", Config.Colors.Friendly)
+		end
+		if opts.onSiteUpdated then
+			opts.onSiteUpdated(cache)
+		end
+	end
+
+	local function wakeQuarryGuards(originPos: Vector3, fieldCenter: Vector3, shooter: Player?)
+		if not (S and S.Enemies and S.Enemies.getInRadius) then
+			return
+		end
+		local ok, list = pcall(S.Enemies.getInRadius, fieldCenter, PYLON_ALERT_R)
+		if not ok or type(list) ~= "table" then
+			return
+		end
+		for _, e in list do
+			if e and e.alive and opts.wakeAlert then
+				opts.wakeAlert(e, shooter, originPos)
+			end
+		end
+	end
+
+	local function destroyPylon(py: any, byBlast: boolean, shooter: Player?)
+		if py.broken then
+			return
+		end
+		py.broken = true
+		pylonById[py.id] = nil
+		rebuildShootList()
+
+		ctx.fx("Explosion", { p = py.corePos, r = 12, size = "M", style = "fire" })
+		ctx.fx("Debris", { p = py.corePos, n = if byBlast then 20 else 14, c = STEEL, style = "scrap" })
+		ctx.fx("Shake", { p = py.corePos, mag = 0.85, r = 110 })
+		ctx.sound("PodImpact", py.corePos)
+		ctx.sound("HitMetal", py.corePos)
+		ctx.sound("Alarm", py.corePos)
+
+		if py.beam and py.beam.Parent then
+			py.beam:Destroy()
+		end
+		if py.bb and py.bb.Parent then
+			py.bb:Destroy()
+		end
+		if py.core and py.core.Parent then
+			py.core:Destroy()
+		end
+		if py.cap and py.cap.Parent then
+			py.cap:Destroy()
+		end
+		if py.shaft and py.shaft.Parent then
+			py.shaft.Color = DARK
+		end
+
+		local st = py.state
+		st.destroyed += 1
+		wakeQuarryGuards(py.pos, st.fieldCenter, shooter)
+		ctx.notify(string.format("Quarry lockdown pylon destroyed (%d/%d)", st.destroyed, st.total), Config.Colors.Friendly)
+
+		if st.fieldLabel and st.fieldLabel.Parent then
+			local rem = math.max(0, st.total - st.destroyed)
+			st.fieldLabel.Text = string.format("LOCKDOWN FIELD — %d PYLON%s LEFT", rem, if rem == 1 then "" else "S")
+		end
+
+		if st.destroyed >= st.total then
+			unlockPylonField(py.cache, st, false)
+		end
+	end
+
+	local function damagePylon(py: any, amount: number, hitPos: Vector3?, shooter: Player?, byBlast: boolean)
+		if py.broken or amount <= 0 then
+			return
+		end
+		py.hp = math.max(0, py.hp - amount)
+		local broke = py.hp <= 0
+		if shooter and shooter.Parent then
+			hitConfirmEv:FireClient(shooter, "pen", hitPos or py.corePos, broke, false, 0)
+		end
+		if broke then
+			destroyPylon(py, byBlast, shooter)
+			return
+		end
+		local frac = py.hp / py.maxHp
+		if py.fill and py.fill.Parent then
+			py.fill.Size = UDim2.fromScale(frac, 1)
+		end
+		ctx.fx("Debris", { p = hitPos or py.corePos, n = 4, c = AMBER, style = "scrap" })
+		ctx.sound("HitMetal", hitPos or py.corePos)
+	end
+
+	local function setupPylons(cache: any)
+		if #cache.cells == 0 then
+			return
+		end
+
+		local sum = Vector3.zero
+		for _, cell in cache.cells do
+			cell.state = "locked"
+			cell.prompt.Enabled = false
+			sum += cell.home.Position
+		end
+		local avg = sum / #cache.cells
+		local groundCenter = opts.groundAtXZ(avg.X, avg.Z)
+		local fieldCenter = Vector3.new(avg.X, math.min(avg.Y, groundCenter.Y), avg.Z)
+
+		local maxR = 0
+		for _, cell in cache.cells do
+			local d = flat(cell.home.Position, fieldCenter)
+			if d > maxR then
+				maxR = d
+			end
+		end
+		local fieldR = math.clamp(maxR + 4.5, 7, 16)
+
+		local fieldModel = Instance.new("Model")
+		fieldModel.Name = "QuarryContainmentField"
+		fieldModel.Parent = encFolder
+		ctx.cyl(fieldModel, fieldR * 2, 7.5, CFrame.new(fieldCenter + Vector3.new(0, 3.2, 0)), FIELD_CYAN, Enum.Material.ForceField, {
+			Name = "ContainmentField",
+			Transparency = 0.45,
+			CanCollide = false,
+			CanQuery = false,
+			CastShadow = false,
+		})
+		local fieldRing = ctx.cyl(fieldModel, fieldR * 2 + 0.6, 0.24, CFrame.new(fieldCenter + Vector3.new(0, 0.12, 0)), FIELD_CYAN, Enum.Material.Neon, {
+			Name = "FieldRing",
+			Transparency = 0.25,
+			CanCollide = false,
+			CanQuery = false,
+			CastShadow = false,
+		})
+
+		local spots = pickPylonPositions(fieldCenter)
+		local _, fieldLabel = makeBanner(fieldRing, "FieldTag", string.format("LOCKDOWN FIELD — %d PYLONS LEFT", #spots), FIELD_CYAN, Vector3.new(0, 4.6, 0), 170, false)
+
+		local st: any = {
+			kind = "pylons",
+			fieldCenter = fieldCenter,
+			fieldModel = fieldModel,
+			fieldLabel = fieldLabel,
+			pylons = {},
+			destroyed = 0,
+			total = #spots,
+			done = false,
+		}
+
+		local fieldTarget = fieldCenter + Vector3.new(0, 2.8, 0)
+		for _, pos in spots do
+			nextPylonId += 1
+			local pid = nextPylonId
+			local model = Instance.new("Model")
+			model.Name = "QuarryPylon_" .. pid
+			model.Parent = encFolder
+
+			local pylonCF = CFrame.lookAt(pos, Vector3.new(fieldCenter.X, pos.Y, fieldCenter.Z))
+			local parts: { BasePart } = {}
+
+			local function tagPart(p: BasePart): BasePart
+				p:SetAttribute("HaulPylon", pid)
+				table.insert(parts, p)
+				return p
+			end
+
+			tagPart(ctx.part(model, Vector3.new(3.6, 1.4, 3.6), pylonCF * CFrame.new(0, 0.7, 0), DARK, Enum.Material.Metal, { Name = "PylonBase" }))
+			local shaft = tagPart(ctx.part(model, Vector3.new(2.2, 5.8, 2.2), pylonCF * CFrame.new(0, 4.3, 0), STEEL, Enum.Material.DiamondPlate, { Name = "PylonShaft" }))
+			local cap = tagPart(ctx.part(model, Vector3.new(3.1, 1.0, 3.1), pylonCF * CFrame.new(0, 7.7, 0), DARK, Enum.Material.Metal, { Name = "PylonCap" }))
+			local core = tagPart(ctx.glow(model, Vector3.new(2.6, 2.1, 2.6), pylonCF * CFrame.new(0, 5.0, 0), AMBER, { Name = "PylonCore", CanCollide = true, CanQuery = true }))
+
+			local corePos = core.Position
+			local beamVec = fieldTarget - corePos
+			local beamLen = math.max(beamVec.Magnitude, 0.5)
+			local beamCF = CFrame.lookAt(corePos, fieldTarget) * CFrame.new(0, 0, -beamLen * 0.5)
+			local beam = ctx.part(model, Vector3.new(0.28, 0.28, beamLen), beamCF, FIELD_CYAN, Enum.Material.Neon, {
+				Name = "ConduitBeam",
+				Transparency = 0.35,
+				CanCollide = false,
+				CanQuery = false,
+				CastShadow = false,
+			})
+
+			local bb, lbl, fill = makeBanner(cap, "PylonTag", "COG PYLON — SHOOT / BLAST", AMBER, Vector3.new(0, 2.2, 0), 170, true)
+
+			local py = {
+				id = pid,
+				cache = cache,
+				state = st,
+				pos = pos,
+				corePos = corePos,
+				model = model,
+				parts = parts,
+				shaft = shaft,
+				cap = cap,
+				core = core,
+				beam = beam,
+				bb = bb,
+				lbl = lbl,
+				fill = fill,
+				hp = PYLON_HP,
+				maxHp = PYLON_HP,
+				broken = false,
+			}
+			pylonById[pid] = py
+			table.insert(st.pylons, py)
+		end
+
+		rebuildShootList()
+		states[cache] = st
 	end
 
 	-- ------------------------------------------------------------------ 4. SLEEPING GUARDIAN
@@ -770,13 +898,22 @@ function HaulEncounters.new(ctx: any, opts: any): any
 	end
 
 	-- ------------------------------------------------------------------ 5. BURIED (RUBBLE)
-	local function rebuildRubbleList()
-		table.clear(rubbleParts)
+	rebuildShootList = function()
+		table.clear(shootParts)
 		for _, m in rubbleById do
 			if not m.broken then
 				for _, p in m.parts do
 					if p.Parent then
-						table.insert(rubbleParts, p)
+						table.insert(shootParts, p)
+					end
+				end
+			end
+		end
+		for _, py in pylonById do
+			if not py.broken then
+				for _, p in py.parts do
+					if p.Parent then
+						table.insert(shootParts, p)
 					end
 				end
 			end
@@ -789,7 +926,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		end
 		m.broken = true
 		rubbleById[m.id] = nil
-		rebuildRubbleList()
+		rebuildShootList()
 
 		local pos = m.pos
 		ctx.fx("Debris", { p = pos + Vector3.new(0, 1.2, 0), n = if byBlast then 18 else 12, c = SAND_ROCK, style = "rock" })
@@ -833,14 +970,14 @@ function HaulEncounters.new(ctx: any, opts: any): any
 			local p = m.chunks[1]
 			if p and p.Parent then
 				p:Destroy()
-				rebuildRubbleList()
+				rebuildShootList()
 			end
 		elseif frac <= 0.33 and m.stage <= 1 then
 			m.stage = 2
 			local p = m.chunks[2]
 			if p and p.Parent then
 				p:Destroy()
-				rebuildRubbleList()
+				rebuildShootList()
 			end
 		end
 	end
@@ -912,13 +1049,13 @@ function HaulEncounters.new(ctx: any, opts: any): any
 			rubbleById[mid] = m
 			table.insert(mounds, m)
 		end
-		rebuildRubbleList()
+		rebuildShootList()
 		states[cache] = { kind = "buried", mounds = mounds }
 	end
 
-	-- Listen to gunfire so shooting buried rubble deals weapon damage with crisp hitmarkers
+	-- Listen to gunfire so shooting buried rubble or quarry pylons deals weapon damage with crisp hitmarkers
 	fireConn = Net.event("Fire").OnServerEvent:Connect(function(p: Player, slot: any, aimPoint: any)
-		if not alive or #rubbleParts == 0 or typeof(aimPoint) ~= "Vector3" or typeof(slot) ~= "number" then
+		if not alive or #shootParts == 0 or typeof(aimPoint) ~= "Vector3" or typeof(slot) ~= "number" then
 			return
 		end
 		if not ctx.isAlive(p) or Carry.isCarrying(p) then
@@ -951,17 +1088,19 @@ function HaulEncounters.new(ctx: any, opts: any): any
 
 		local inc = RaycastParams.new()
 		inc.FilterType = Enum.RaycastFilterType.Include
-		inc.FilterDescendantsInstances = rubbleParts
+		inc.FilterDescendantsInstances = shootParts
 		local hit = Workspace:Raycast(origin, dir * range, inc)
 		if not hit or not hit.Instance then
 			return
 		end
+		local pid = hit.Instance:GetAttribute("HaulPylon")
+		local py = pid and pylonById[pid]
 		local mid = hit.Instance:GetAttribute("HaulRubble")
 		local m = mid and rubbleById[mid]
-		if not m or m.broken then
+		if (not py or py.broken) and (not m or m.broken) then
 			return
 		end
-		-- Ensure no solid wall or hill blocks the shot before reaching the rubble
+		-- Ensure no solid wall or hill blocks the shot before reaching the target
 		local excl: { Instance } = { encFolder }
 		if ch then
 			table.insert(excl, ch)
@@ -982,7 +1121,11 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		end
 
 		local dmg = (w.damage or 25) * math.max(1, (w.pellets or 1) * 0.65)
-		damageMound(m, dmg, hit.Position, p, false)
+		if py and not py.broken then
+			damagePylon(py, dmg, hit.Position, p, false)
+		elseif m and not m.broken then
+			damageMound(m, dmg, hit.Position, p, false)
+		end
 	end)
 
 	-- ------------------------------------------------------------------ Public controller
@@ -994,8 +1137,8 @@ function HaulEncounters.new(ctx: any, opts: any): any
 			setupCourier(cache)
 		elseif kind == "cradle" then
 			setupCradle(cache)
-		elseif kind == "conveyor" then
-			setupConveyor(cache)
+		elseif kind == "pylons" then
+			setupPylons(cache)
 		elseif kind == "guardian" then
 			setupGuardian(cache)
 		elseif kind == "buried" then
@@ -1015,10 +1158,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		end
 	end
 
-	function mgr.onCellLift(cache: any, cell: any, player: Player?)
-		if cell and cell.onBelt then
-			cell.onBelt = false
-		end
+	function mgr.onCellLift(cache: any, _cell: any, player: Player?)
 		local st = states[cache]
 		if not st then
 			return
@@ -1033,14 +1173,23 @@ function HaulEncounters.new(ctx: any, opts: any): any
 			return
 		end
 		local r = (radius or 8) + 5.5
-		local hitList: { any } = {}
+		local hitMounds: { any } = {}
 		for _, m in rubbleById do
 			if not m.broken and (m.pos - pos).Magnitude <= r then
-				table.insert(hitList, m)
+				table.insert(hitMounds, m)
 			end
 		end
-		for _, m in hitList do
+		for _, m in hitMounds do
 			damageMound(m, 999, m.pos, nil, true)
+		end
+		local hitPylons: { any } = {}
+		for _, py in pylonById do
+			if not py.broken and ((py.pos - pos).Magnitude <= r + 1.5 or (py.corePos - pos).Magnitude <= r + 1.5) then
+				table.insert(hitPylons, py)
+			end
+		end
+		for _, py in hitPylons do
+			damagePylon(py, 999, py.corePos, nil, true)
 		end
 	end
 
@@ -1065,6 +1214,18 @@ function HaulEncounters.new(ctx: any, opts: any): any
 				st.bb:Destroy()
 			end
 			cell.state = "cache"
+		elseif st.kind == "pylons" then
+			for _, py in st.pylons do
+				if not py.broken then
+					py.broken = true
+					pylonById[py.id] = nil
+					if py.model and py.model.Parent then
+						py.model:Destroy()
+					end
+				end
+			end
+			rebuildShootList()
+			unlockPylonField(cache, st, true)
 		elseif st.kind == "buried" then
 			for _, m in st.mounds do
 				if m.cell == cell and not m.broken then
@@ -1074,15 +1235,13 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		end
 	end
 
-	function mgr.step(dt: number)
+	function mgr.step(_dt: number)
 		if not alive then
 			return
 		end
 		for cache, st in states do
 			if st.kind == "courier" then
 				stepCourier(cache, st)
-			elseif st.kind == "conveyor" then
-				stepConveyor(cache, st, dt)
 			elseif st.kind == "guardian" then
 				stepGuardian(cache, st)
 			end
@@ -1104,8 +1263,12 @@ function HaulEncounters.new(ctx: any, opts: any): any
 				st.weld = nil
 			end
 		end
+		if encFolder and encFolder.Parent then
+			encFolder:Destroy()
+		end
 		table.clear(rubbleById)
-		table.clear(rubbleParts)
+		table.clear(pylonById)
+		table.clear(shootParts)
 		table.clear(states)
 	end
 
