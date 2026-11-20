@@ -133,10 +133,6 @@ local prevMoveDir = Vector3.zero
 local turnDrag = 0 -- 0..1 speed scrub during sharp sprint turns
 local proneRest: number? = nil -- HipHeight at which the lying torso just rests on the floor (last settled measurement)
 
--- Studio A/B "MOVE WEIGHT" (Feel_MoveWeight): default "Weighted" (nil), "Snappy" disables accel/turn/backpedal weight
-local function isWeighted(): boolean
-	return workspace:GetAttribute("Feel_MoveWeight") ~= "Snappy"
-end
 local poseSettled: (Model) -> boolean = function(_)
 	return true
 end -- replaced below, once the pose rigs exist
@@ -615,7 +611,7 @@ end
 -- crawl until you stop and walk again", 2026-11-16). Re-apply Animate's own formula every frame with the current
 -- HipHeight (same numbers it would pick, just not stale).
 local animDamp: NumberValue? = nil
-local function syncRunAnim(hum: Humanoid, root: BasePart, base: number, heavyCarry: boolean)
+local function syncRunAnim(hum: Humanoid, root: BasePart, base: number, carryCount: number)
 	local animator = hum:FindFirstChildOfClass("Animator")
 	if not animator or base <= 0 then
 		return
@@ -637,8 +633,10 @@ local function syncRunAnim(hum: Humanoid, root: BasePart, base: number, heavyCar
 	end
 	local runSpeed = speed / 16 * 1.25 / scale -- onRunning: setAnimationSpeed(speed / 16) -> setRunSpeed -> x1.25 / scale
 	local timeWarp = if runSpeed <= 0.5 then runSpeed / 0.5 elseif runSpeed < 1 then 1 else runSpeed
-	if heavyCarry then
+	if carryCount >= Carry.MAX_CELLS then
 		timeWarp *= Carry.ANIM_MULT
+	elseif carryCount > 0 then
+		timeWarp *= Carry.ANIM_MULT_ONE
 	end
 	for _, tr in animator:GetPlayingAnimationTracks() do
 		local n = tr.Name
@@ -720,15 +718,12 @@ local function step(dt: number)
 			setStance("prone")
 			setMode("recover")
 			recoverFor = M.DiveRecover
-			local weighted = isWeighted()
-			landVel -= if weighted then 8.5 else 4
-			if weighted then
-				if Audio and Audio.play then
-					Audio.play("Land", root.Position, { volume = 0.95, pitch = 0.82 })
-				end
-				if Juice and Juice.shake then
-					Juice.shake(0.55, 0.22)
-				end
+			landVel -= 8.5
+			if Audio and Audio.play then
+				Audio.play("Land", root.Position, { volume = 0.95, pitch = 0.82 })
+			end
+			if Juice and Juice.shake then
+				Juice.shake(0.55, 0.22)
 			end
 		end
 	elseif mode == "mantle" then
@@ -805,12 +800,12 @@ local function step(dt: number)
 	-- (body facing / twist: twistStep, which runs earlier in the frame than this handler)
 
 	-- haul objective: a core-cell carrier walks and sprints slower, cannot go prone, and 2 cells block sprint (shared/Carry.luau)
-	local carrying = Carry.isCarrying(player)
+	local carryCnt = Carry.count(player)
+	local carrying = carryCnt > 0
 	if carrying and stance == "prone" and not isDowned() and mode == "none" then
 		standUp()
 	end
 
-	local weighted = isWeighted()
 	local mdFlat = flat(hum.MoveDirection)
 	local mdLen = mdFlat.Magnitude
 	local mdUnit = if mdLen > 0.05 then mdFlat / mdLen else Vector3.zero
@@ -819,8 +814,8 @@ local function step(dt: number)
 	local fwdDot = if mdLen > 0.05 then mdUnit:Dot(lookUnit) else 1
 
 	-- stamina (prediction; server reconciles through `me`) ---------------------------------------------------
-	-- In Weighted mode you cannot sprint backwards: turning and sprinting to cover is a deliberate tactical choice.
-	local canSprintDir = not weighted or fwdDot >= 0.25
+	-- Cannot sprint backwards: turning and sprinting to cover is a deliberate tactical choice.
+	local canSprintDir = fwdDot >= 0.25
 	sprintApplied = mode == "none"
 		and stance == "stand"
 		and Input.isDown("Sprint")
@@ -868,7 +863,7 @@ local function step(dt: number)
 		speed = Config.WalkSpeed
 	end
 	if exhausted and stance == "stand" then
-		local limpCap = if weighted then M.LimpSpeed * 0.78 else M.LimpSpeed
+		local limpCap = M.LimpSpeed * 0.78
 		speed = math.min(speed, limpCap)
 	end
 	if carrying then
@@ -880,8 +875,7 @@ local function step(dt: number)
 
 	-- Grounded physical movement weight: accel/decel ramp, sprint ramp-up, sprint turn drag, backpedal & ADS penalties
 	local finalSpeed = speed
-	if weighted and mode == "none" and not isDowned() then
-		local carryCnt = Carry.count(player)
+	if mode == "none" and not isDowned() then
 		-- Sprint ramp-up + subtle turn drag while sprinting
 		if sprintApplied and grounded then
 			if prevMoveDir.Magnitude > 0.1 and mdLen > 0.1 then
@@ -919,7 +913,7 @@ local function step(dt: number)
 		end
 
 		-- Smooth acceleration / deceleration ramp (responsive floor on start so taps never feel frozen)
-		local heavyMul = if carryCnt >= Carry.MAX_CELLS then 0.78 else 1
+		local heavyMul = if carryCnt >= Carry.MAX_CELLS then 0.72 elseif carryCnt > 0 then 0.88 else 1
 		if not moving then
 			curSpeed += (0 - curSpeed) * (1 - math.exp(-dt * 12))
 			if curSpeed < 0.2 then
@@ -958,7 +952,7 @@ local function step(dt: number)
 			hipCur = cur
 		end
 	end
-	syncRunAnim(hum, root, base, Carry.count(player) >= Carry.MAX_CELLS)
+	syncRunAnim(hum, root, base, carryCnt)
 	CellCarry.setLocal(sprintApplied, grounded, stance, mode ~= "none" and mode ~= "recover")
 	if jumpLock and not Input.isDown("Jump") then
 		jumpLock = false
@@ -972,24 +966,19 @@ local function step(dt: number)
 	elseif not grounded then
 		minVy = math.min(minVy, vy)
 	else
-		local thresh = if weighted then -14 else -28
-		if minVy < thresh then
-			local carryWeight = if Carry.count(player) >= Carry.MAX_CELLS then 1.25 elseif carrying then 1.08 else 1
-			if weighted then
-				local impact = math.clamp((-minVy - 11) / 48, 0.14, 1.35) * carryWeight
-				landVel -= impact * 13.5
-				if Audio and Audio.play then
-					Audio.play("Land", root.Position, {
-						volume = math.clamp(0.45 + impact * 0.85, 0.45, 1.35),
-						pitch = math.clamp(1.06 - impact * 0.26, 0.72, 1.08),
-					})
-				end
-				if Juice and impact >= 0.35 then
-					Juice.shake(impact * 0.42, 0.14 + impact * 0.09)
-					Juice.kick(-impact * 1.05, 0)
-				end
-			else
-				landVel -= math.clamp((-minVy - 22) / 45, 0.15, 1) * 9
+		if minVy < -14 then
+			local carryWeight = if carryCnt >= Carry.MAX_CELLS then 1.30 elseif carryCnt > 0 then 1.12 else 1
+			local impact = math.clamp((-minVy - 11) / 48, 0.14, 1.35) * carryWeight
+			landVel -= impact * 13.5
+			if Audio and Audio.play then
+				Audio.play("Land", root.Position, {
+					volume = math.clamp(0.45 + impact * 0.85, 0.45, 1.35),
+					pitch = math.clamp(1.06 - impact * 0.26, 0.72, 1.08),
+				})
+			end
+			if Juice and impact >= 0.35 then
+				Juice.shake(impact * 0.42, 0.14 + impact * 0.09)
+				Juice.kick(-impact * 1.05, 0)
 			end
 		end
 		minVy = 0
@@ -1467,25 +1456,24 @@ function Movement.cameraStep(dt: number, rawFocusY: number): (number, CFrame, nu
 	local s = serverStance()
 	local dropT = if s == "prone" or s == "dive" then -0.9 elseif s == "crouch" then -0.35 else 0
 	camDrop += (dropT - camDrop) * (1 - math.exp(-dt * 8))
-	-- landing spring (heavier settle in Weighted mode)
-	local weighted = isWeighted()
-	local springK = if weighted then 128 else 150
-	local springC = if weighted then 15 else 17
+	-- landing spring
+	local springK = 128
+	local springC = 15
 	landVel += (-landDip * springK - landVel * springC) * dt
 	landDip = math.clamp(landDip + landVel * dt, -2.4, 1)
 	-- sprint feel
 	local speed = if root then flat(root.AssemblyLinearVelocity).Magnitude else 0
 	local grounded = hum ~= nil and hum.FloorMaterial ~= Enum.Material.Air and mode == "none"
 	local carrying = CellCarry.isCarrying() and stance == "stand" and mode == "none"
-	local sT = if sprintApplied and grounded and (speed > Config.WalkSpeed + 1.5 or (carrying and speed > 8)) then (if weighted then math.max(0.35, sprintRamp) else 1) else 0
+	local sT = if sprintApplied and grounded and (speed > Config.WalkSpeed + 1.5 or (carrying and speed > 8)) then math.max(0.35, sprintRamp) else 0
 	sprintBlend += (sT - sprintBlend) * (1 - math.exp(-dt * 5))
 	local lT = if exhausted and grounded and speed > 3 and stance == "stand" then 1 else 0
 	limpAmp += (lT - limpAmp) * (1 - math.exp(-dt * 5))
 	local mT = if grounded then math.clamp(speed / Config.SprintSpeed, 0, 1) else 0
 	bobAmp += (mT - bobAmp) * (1 - math.exp(-dt * 6))
 	bobPhase = (bobPhase + dt * speed * 0.75) % (math.pi * 2)
-	local fatigueBoost = if weighted and not boosted and stamina < 0.25 and sprintApplied then 1.25 else 1
-	local limpWeight = if weighted then 0.095 else 0.06
+	local fatigueBoost = if not boosted and stamina < 0.25 and sprintApplied then 1.25 else 1
+	local limpWeight = 0.095
 	local a = 0.11 * sprintBlend * bobAmp * fatigueBoost + limpWeight * limpAmp
 	local bx = math.sin(bobPhase) * a * 0.8
 	local by = -math.abs(math.sin(bobPhase)) * a * 1.1 - limpAmp * limpWeight * math.max(0, math.sin(bobPhase))
