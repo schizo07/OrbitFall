@@ -32,7 +32,6 @@ local CF0 = CFrame.identity
 local IS_STUDIO = RunService:IsStudio()
 local CULL_DIST = 220
 
-local localSprinting = false
 local localGrounded = true
 local localStance = "stand"
 local localBusy = false
@@ -50,8 +49,7 @@ function CellCarry.carryCount(who: Instance?): number
 	return Carry.count(who or player)
 end
 
-function CellCarry.setLocal(sprinting: boolean, grounded: boolean, stance: string, busy: boolean)
-	localSprinting = sprinting
+function CellCarry.setLocal(_sprinting: boolean, grounded: boolean, stance: string, busy: boolean)
 	localGrounded = grounded
 	localStance = stance
 	localBusy = busy
@@ -288,7 +286,7 @@ end
 function CellCarry.cameraBob(grounded: boolean): (number, number, number)
 	local c = player.Character
 	local r = if c then rigs[c] else nil
-	if not r or not r.active or not grounded or r.walkW < 0.01 then
+	if not r or not r.active or not grounded or r.walkW < 0.01 or Carry.count(c) < Carry.MAX_CELLS then
 		return 0, 0, 0
 	end
 	local sw = math.sin(r.ph) * r.walkW
@@ -301,79 +299,75 @@ local function stepRig(r: Rig, dt: number, isLocal: boolean)
 	r.active = true
 	local count = Carry.count(r.c)
 	local twoHands = count >= Carry.MAX_CELLS
-	local weight = if twoHands then 1 else 0.58
-	local v = r.hrp.AssemblyLinearVelocity
-	local speed = Vector3.new(v.X, 0, v.Z).Magnitude
-	local grounded = if isLocal then localGrounded else (r.hum.FloorMaterial ~= Enum.Material.Air)
-	local crouching = if isLocal then (localStance == "crouch") else (r.c:GetAttribute("Stance") == "crouch")
-	local sprinting: boolean
+
 	if twoHands then
-		sprinting = false
-	elseif isLocal then
-		sprinting = localSprinting and speed > 2
-	else
-		local sAttr = r.c:GetAttribute("Sprinting")
-		sprinting = if sAttr ~= nil then (sAttr == true and speed > 2) else (speed > 13.6)
-	end
+		local v = r.hrp.AssemblyLinearVelocity
+		local speed = Vector3.new(v.X, 0, v.Z).Magnitude
+		local grounded = if isLocal then localGrounded else (r.hum.FloorMaterial ~= Enum.Material.Air)
+		local crouching = if isLocal then (localStance == "crouch") else (r.c:GetAttribute("Stance") == "crouch")
 
-	local walkT = if grounded and speed > 0.6 then clamp(speed / 10, 0, 1) * (if crouching then 0.35 else 1) else 0
-	local sprintT = if sprinting and grounded and not crouching then 1 else 0
-	r.walkW += (walkT - r.walkW) * (1 - exp(-dt * 8))
-	r.sprintW += (sprintT - r.sprintW) * (1 - exp(-dt * 7))
+		local walkT = if grounded and speed > 0.6 then clamp(speed / 10, 0, 1) * (if crouching then 0.35 else 1) else 0
+		r.walkW += (walkT - r.walkW) * (1 - exp(-dt * 8))
+		r.sprintW += (0 - r.sprintW) * (1 - exp(-dt * 7))
 
-	local stepRate = STEP_RATE_WALK + (STEP_RATE_SPRINT - STEP_RATE_WALK) * r.sprintW
-	if grounded and speed > 0.6 then
-		r.ph = (r.ph + dt * speed * stepRate) % (2 * math.pi)
-	end
+		local stepRate = STEP_RATE_WALK + (STEP_RATE_SPRINT - STEP_RATE_WALK) * r.sprintW
+		if grounded and speed > 0.6 then
+			r.ph = (r.ph + dt * speed * stepRate) % (2 * math.pi)
+		end
 
-	local sw = math.sin(r.ph) * r.walkW
-	local bounce = 0.5 * (1 - math.cos(2 * r.ph))
-	local leanT = (CARRY_LEAN_BACK + (CARRY_LEAN_SPRINT - CARRY_LEAN_BACK) * r.sprintW) * weight
-	if crouching then
-		leanT = CARRY_LEAN_BACK * 0.5 * weight
-	end
-	r.lean += (leanT - r.lean) * (1 - exp(-dt * 7))
+		local sw = math.sin(r.ph) * r.walkW
+		local bounce = 0.5 * (1 - math.cos(2 * r.ph))
+		local leanT = CARRY_LEAN_BACK + (CARRY_LEAN_SPRINT - CARRY_LEAN_BACK) * r.sprintW
+		if crouching then
+			leanT = CARRY_LEAN_BACK * 0.5
+		end
+		r.lean += (leanT - r.lean) * (1 - exp(-dt * 7))
 
-	-- Pelvis: slower, bouncier walk bob + lateral weight shift + sprint tilt
-	local rawRoot = r.root.Transform
-	if not crouching then
-		local bobAmp = (CARRY_BOB_WALK + (CARRY_BOB_SPRINT - CARRY_BOB_WALK) * r.sprintW) * weight
-		local bobY = (0.35 - bounce) * bobAmp * r.walkW
-		local swayX = sw * (CARRY_SWAY_LAT + 0.03 * r.sprintW) * weight
-		local pelvisPitch = -0.07 * r.sprintW * weight
-		local pelvisRoll = -sw * 0.045 * weight
-		r.root.Transform = CFrame.new(swayX, bobY, 0) * CFrame.Angles(pelvisPitch, 0, pelvisRoll) * CF0:Lerp(rawRoot, 0.75)
+		-- Pelvis: slower, bouncier walk bob + lateral weight shift + sprint tilt
+		local rawRoot = r.root.Transform
+		if not crouching then
+			local bobAmp = CARRY_BOB_WALK + (CARRY_BOB_SPRINT - CARRY_BOB_WALK) * r.sprintW
+			local bobY = (0.35 - bounce) * bobAmp * r.walkW
+			local swayX = sw * (CARRY_SWAY_LAT + 0.03 * r.sprintW)
+			local pelvisPitch = -0.07 * r.sprintW
+			local pelvisRoll = -sw * 0.045
+			r.root.Transform = CFrame.new(swayX, bobY, 0) * CFrame.Angles(pelvisPitch, 0, pelvisRoll) * CF0:Lerp(rawRoot, 0.75)
 
-		-- Heavier step: extra hip/knee compression on each footstrike (especially while sprinting)
-		if r.walkW > 0.01 then
-			local hipExtra = (0.08 + 0.12 * r.sprintW) * bounce * r.walkW * weight
-			local kneeExtra = -(0.14 + 0.22 * r.sprintW) * bounce * r.walkW * weight
-			local stanceOut = 0.05 * r.walkW * weight
-			if r.lHip then
-				r.lHip.Transform = r.lHip.Transform * CFrame.Angles(hipExtra, 0, -stanceOut)
-			end
-			if r.rHip then
-				r.rHip.Transform = r.rHip.Transform * CFrame.Angles(hipExtra, 0, stanceOut)
-			end
-			if r.lKnee then
-				r.lKnee.Transform = r.lKnee.Transform * CFrame.Angles(kneeExtra, 0, 0)
-			end
-			if r.rKnee then
-				r.rKnee.Transform = r.rKnee.Transform * CFrame.Angles(kneeExtra, 0, 0)
+			-- Heavier step: extra hip/knee compression on each footstrike (especially while sprinting)
+			if r.walkW > 0.01 then
+				local hipExtra = (0.08 + 0.12 * r.sprintW) * bounce * r.walkW
+				local kneeExtra = -(0.14 + 0.22 * r.sprintW) * bounce * r.walkW
+				local stanceOut = 0.05 * r.walkW
+				if r.lHip then
+					r.lHip.Transform = r.lHip.Transform * CFrame.Angles(hipExtra, 0, -stanceOut)
+				end
+				if r.rHip then
+					r.rHip.Transform = r.rHip.Transform * CFrame.Angles(hipExtra, 0, stanceOut)
+				end
+				if r.lKnee then
+					r.lKnee.Transform = r.lKnee.Transform * CFrame.Angles(kneeExtra, 0, 0)
+				end
+				if r.rKnee then
+					r.rKnee.Transform = r.rKnee.Transform * CFrame.Angles(kneeExtra, 0, 0)
+				end
 			end
 		end
-	end
 
-	-- Upper body: slight lean back at walk/idle, forward lean when sprinting, side-to-side sway & heavy step nod
-	local stepPitch = -(0.03 + 0.06 * r.sprintW) * bounce * r.walkW * weight
-	local roll = sw * (CARRY_ROLL + 0.025 * r.sprintW) * weight + (if twoHands then 0 else -0.04)
-	local twist = sw * (CARRY_TWIST + 0.02 * r.sprintW) * weight
-	local stagger = if isLocal and ArmorFx and ArmorFx.waistOffset then ArmorFx.waistOffset else CF0
-	r.waist.Transform = CF0:Lerp(r.waist.Transform, 0.2) * stagger * CFrame.Angles(r.lean + stepPitch, twist, roll)
+		-- Upper body: slight lean back at walk/idle, side-to-side sway & heavy step nod
+		local stepPitch = -(0.03 + 0.06 * r.sprintW) * bounce * r.walkW
+		local roll = sw * (CARRY_ROLL + 0.025 * r.sprintW)
+		local twist = sw * (CARRY_TWIST + 0.02 * r.sprintW)
+		local stagger = if isLocal and ArmorFx and ArmorFx.waistOffset then ArmorFx.waistOffset else CF0
+		r.waist.Transform = CF0:Lerp(r.waist.Transform, 0.2) * stagger * CFrame.Angles(r.lean + stepPitch, twist, roll)
 
-	if r.neck then
-		-- Head stays level-ish over the load (counters most of the lean and sway)
-		r.neck.Transform = CF0:Lerp(r.neck.Transform, 0.35) * CFrame.Angles(-(r.lean + stepPitch) * 0.65, 0, -roll * 0.55)
+		if r.neck then
+			-- Head stays level-ish over the load (counters most of the lean and sway)
+			r.neck.Transform = CF0:Lerp(r.neck.Transform, 0.35) * CFrame.Angles(-(r.lean + stepPitch) * 0.65, 0, -roll * 0.55)
+		end
+	else
+		r.walkW = 0
+		r.sprintW = 0
+		r.lean = CARRY_LEAN_BACK
 	end
 
 	-- Arms: 2 cells = two-handed chest carry; 1 cell = left hand at the hip, the right arm belongs to CombatPose (hip-fire)

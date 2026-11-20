@@ -602,7 +602,7 @@ end
 -- crawl until you stop and walk again", 2026-11-16). Re-apply Animate's own formula every frame with the current
 -- HipHeight (same numbers it would pick, just not stale).
 local animDamp: NumberValue? = nil
-local function syncRunAnim(hum: Humanoid, root: BasePart, base: number, carrying: boolean)
+local function syncRunAnim(hum: Humanoid, root: BasePart, base: number, heavyCarry: boolean)
 	local animator = hum:FindFirstChildOfClass("Animator")
 	if not animator or base <= 0 then
 		return
@@ -624,7 +624,7 @@ local function syncRunAnim(hum: Humanoid, root: BasePart, base: number, carrying
 	end
 	local runSpeed = speed / 16 * 1.25 / scale -- onRunning: setAnimationSpeed(speed / 16) -> setRunSpeed -> x1.25 / scale
 	local timeWarp = if runSpeed <= 0.5 then runSpeed / 0.5 elseif runSpeed < 1 then 1 else runSpeed
-	if carrying then
+	if heavyCarry then
 		timeWarp *= Carry.ANIM_MULT
 	end
 	for _, tr in animator:GetPlayingAnimationTracks() do
@@ -859,7 +859,7 @@ local function step(dt: number)
 			hipCur = cur
 		end
 	end
-	syncRunAnim(hum, root, base, carrying)
+	syncRunAnim(hum, root, base, Carry.count(player) >= Carry.MAX_CELLS)
 	CellCarry.setLocal(sprintApplied, grounded, stance, mode ~= "none" and mode ~= "recover")
 	if jumpLock and not Input.isDown("Jump") then
 		jumpLock = false

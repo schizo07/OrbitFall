@@ -11,10 +11,10 @@ Carry.ATTR = "CarryCell"
 Carry.COUNT_ATTR = "CarryCount"
 Carry.RULE_ATTR = "HaulCarryRule" -- legacy workspace attribute set by server/Objectives/ObjectiveService; no longer read
 Carry.MAX_CELLS = 2
-Carry.SPEED_MULT = 0.8 -- walk speed while carrying 1 cell
-Carry.SPRINT_MULT = 0.6 -- sprint speed while carrying 1 cell (sprint stays allowed, stamina drains as usual)
-Carry.TWO_SPEED_MULT = 0.6 -- walk speed while carrying 2 cells (no sprint)
-Carry.ANIM_MULT = 0.76 -- slower walk/run animation cadence while hauling
+Carry.SPEED_MULT = 0.88 -- walk speed while carrying 1 cell
+Carry.SPRINT_MULT = 0.84 -- sprint speed while carrying 1 cell (sprint stays allowed, stamina drains as usual)
+Carry.TWO_SPEED_MULT = 0.58 -- walk speed while carrying 2 cells (no sprint)
+Carry.ANIM_MULT = 0.76 -- slower walk/run animation cadence while hauling 2 cells
 -- cell placement in UpperTorso space (+X right, +Y up, -Z forward):
 -- 1 cell: held in the left hand at the hip (rotated so the long axis runs front-to-back)
 Carry.HOLD_ONE = CFrame.new(-1.48, -1.05, -0.08) * CFrame.Angles(0, math.pi / 2, 0) * CFrame.Angles(math.rad(8), 0, 0)
