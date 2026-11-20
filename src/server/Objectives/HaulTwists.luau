@@ -16,6 +16,7 @@
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
 local EnemyData = require(Shared.Data.Enemies)
+local Intensity = require(Shared.Data.Intensity)
 local MapPlan = require(script.Parent.Parent.World.MapPlan)
 local Garrisons = require(script.Parent.Parent.Enemies.Garrisons)
 
@@ -569,9 +570,10 @@ function HaulTwists.new(ctx: any, cfg: any): any
 		end
 	end
 
-	-- units that walk in through a gap (up to two gaps share the group)
-	local function throughGates(kinds: { string }, tag: string)
-		local order = shuffled(gates)
+	-- units that walk in through a gap (up to two gaps share the group); optional pre-picked `order` keeps the wave
+	-- warning's compass direction lined up with the real approach
+	local function throughGates(kinds: { string }, tag: string, presetOrder: { CFrame }?, outList: { any }?)
+		local order = presetOrder or shuffled(gates)
 		local groups: { { string } } = { {}, {} }
 		local use = math.min(2, #order)
 		for i, k in kinds do
@@ -581,26 +583,87 @@ function HaulTwists.new(ctx: any, cfg: any): any
 		for gi = 1, use do
 			local cf: CFrame = order[gi]
 			local base = gp(cf.Position.X - cf.LookVector.X * 9, cf.Position.Z - cf.LookVector.Z * 9)
-			task.spawn(spawnHunters, groups[gi], base, liftPos, squad)
+			task.spawn(function()
+				local spawned = spawnHunters(groups[gi], base, liftPos, squad)
+				if outList then
+					for _, e in spawned do
+						table.insert(outList, e)
+					end
+				end
+			end)
 		end
 	end
 
-	-- groups of <= 4 from different points of the outer ring
-	local function fromRing(kinds: { string }, tag: string)
+	-- groups of <= 4 from different points of the outer ring (optional pre-picked `bases` align with wave warning)
+	local function fromRing(kinds: { string }, tag: string, presetBases: { Vector3 }?, outList: { any }?)
 		local ps = playerPositions()
 		local i = 1
+		local bi = 0
 		while i <= #kinds do
 			local group: { string } = {}
 			for j = i, math.min(i + 3, #kinds) do
 				table.insert(group, kinds[j])
 			end
 			i += 4
-			local base = wavePoint(liftPos, 70, 95, ps)
-			task.spawn(spawnHunters, group, base, liftPos, nextSquad(tag))
+			bi += 1
+			local base = (presetBases and presetBases[bi]) or wavePoint(liftPos, 70, 95, ps)
+			task.spawn(function()
+				local spawned = spawnHunters(group, base, liftPos, nextSquad(tag))
+				if outList then
+					for _, e in spawned do
+						table.insert(outList, e)
+					end
+				end
+			end)
 		end
 	end
 
 	local fired = { guard = false, final = false }
+	local warnSeq = 0
+	local function watchWaveForLull(waveUnits: { any })
+		task.spawn(function()
+			task.wait(3) -- let staggered spawns finish populating waveUnits
+			local deadline = os.clock() + 90
+			while alive and ctx.alive() and not fired.final and os.clock() < deadline do
+				local left = 0
+				for _, e in waveUnits do
+					if e.alive then
+						left += 1
+					end
+				end
+				if left == 0 then
+					ctx.beginQuietLull(rng:NextNumber(20, 26))
+					return
+				end
+				task.wait(1)
+			end
+		end)
+	end
+
+	-- Broadcast an 8-10 s directional warning before a haul counter-attack hits (shortened in DebugFast)
+	local function warnAndSpawn(delaySec: number, fromPos: Vector3, label: string?, spawnFn: () -> ())
+		local dur = if workspace:GetAttribute("DebugFast") then math.min(delaySec, 2.2) else delaySec
+		warnSeq += 1
+		local myId = warnSeq
+		local t0 = workspace:GetServerTimeNow()
+		local delta = Vector3.new(fromPos.X - liftPos.X, 0, fromPos.Z - liftPos.Z)
+		local bearing = if delta.Magnitude > 0.5 then Intensity.bearingOf(delta) else 0
+		ctx.warnWave({
+			id = myId,
+			t0 = t0,
+			endsAt = t0 + dur,
+			dir = bearing,
+			pos = fromPos,
+			label = label,
+		})
+		task.delay(dur, function()
+			ctx.clearWaveWarn(myId)
+			if not alive or not ctx.alive() then
+				return
+			end
+			spawnFn()
+		end)
+	end
 
 	local function canAddHeavy(): boolean
 		if not roster.heavy or not (S and S.Enemies and S.Enemies.countByClass) then
@@ -786,26 +849,45 @@ function HaulTwists.new(ctx: any, cfg: any): any
 		end
 	end
 
-	-- Every cell loaded escalates the mission a step with a reinforcement wave toward the lifter
+	-- Every cell loaded escalates the mission a step with a telegraphed counter-attack toward the lifter
 	function tw.onDelivered(delivered: number, total: number)
 		if not alive or delivered >= total then
 			return
 		end
+		local ps = playerPositions()
+		local gateOrder = shuffled(gates)
+		local primaryGatePos = if gateOrder[1] then gateOrder[1].Position else wavePoint(liftPos, 70, 95, ps)
 		if delivered == 1 then
-			ctx.notify("Lifter power spike detected — contacts at the gates!", DANGER)
-			throughGates(mix(math.clamp(squadCount(2, 3), 2, 3), 0.25), "step1")
+			ctx.notify("Lifter power spike detected — contacts converging on the gates!", DANGER)
+			local kinds = mix(math.clamp(squadCount(2, 3), 2, 3), 0.25)
+			warnAndSpawn(8.5, primaryGatePos, nil, function()
+				local tracked: { any } = {}
+				throughGates(kinds, "step1", gateOrder, tracked)
+				watchWaveForLull(tracked)
+			end)
 		elseif delivered == 2 then
 			ctx.notify("Hostile squad pushing the refinery gates!", DANGER)
 			say("Movement at the gates!", nil)
-			throughGates(mix(math.clamp(squadCount(3, 5), 3, 5), 0.34), "step2")
-			task.delay(8, maybeTriggerSurprise)
+			local kinds = mix(math.clamp(squadCount(3, 5), 3, 5), 0.34)
+			warnAndSpawn(8.5, primaryGatePos, nil, function()
+				local tracked: { any } = {}
+				throughGates(kinds, "step2", gateOrder, tracked)
+				watchWaveForLull(tracked)
+			end)
+			task.delay(14, maybeTriggerSurprise)
 		elseif delivered == 3 then
 			ctx.notify("Flankers converging on the cargo lifter!", DANGER)
 			say("They're flanking the lifter!", nil)
 			ctx.sound("Alarm", liftPos)
-			fromRing(mix(math.clamp(squadCount(4, 6), 4, 6), 0.4), "step3")
+			local kinds = mix(math.clamp(squadCount(4, 6), 4, 6), 0.4)
+			local bases = { wavePoint(liftPos, 70, 95, ps), wavePoint(liftPos, 70, 95, ps) }
+			warnAndSpawn(9.0, bases[1], nil, function()
+				local tracked: { any } = {}
+				fromRing(kinds, "step3", bases, tracked)
+				watchWaveForLull(tracked)
+			end)
 		else
-			ctx.notify("Heavy COG counter-attack hitting the refinery!", DANGER)
+			ctx.notify("Heavy COG counter-attack inbound on the refinery!", DANGER)
 			say("Big push on the lifter, hold the pad!", nil)
 			ctx.sound("Alarm", liftPos)
 			local kinds = mix(math.clamp(squadCount(5, 7), 5, 7), 0.45)
@@ -817,12 +899,17 @@ function HaulTwists.new(ctx: any, cfg: any): any
 			for i, k in kinds do
 				table.insert(if i <= half then viaG else viaR, k)
 			end
-			if #viaG > 0 then
-				throughGates(viaG, "stepN")
-			end
-			if #viaR > 0 then
-				fromRing(viaR, "stepN")
-			end
+			local bases = { wavePoint(liftPos, 70, 95, ps), wavePoint(liftPos, 70, 95, ps) }
+			warnAndSpawn(9.5, primaryGatePos, nil, function()
+				local tracked: { any } = {}
+				if #viaG > 0 then
+					throughGates(viaG, "stepN", gateOrder, tracked)
+				end
+				if #viaR > 0 then
+					fromRing(viaR, "stepN", bases, tracked)
+				end
+				watchWaveForLull(tracked)
+			end)
 		end
 	end
 
@@ -836,7 +923,7 @@ function HaulTwists.new(ctx: any, cfg: any): any
 		ctx.intensity("FINAL_STEPS")
 		say("Everything they've got is coming — defend the lifter while it climbs!", nil)
 
-		local function sendAssault(nLo: number, nHi: number, medShare: number, allowHeavy: boolean, tag: string)
+		local function sendAssault(nLo: number, nHi: number, medShare: number, allowHeavy: boolean, tag: string, presetOrder: { CFrame }?, presetBases: { Vector3 }?)
 			if not alive or not ctx.alive() then
 				return
 			end
@@ -852,33 +939,45 @@ function HaulTwists.new(ctx: any, cfg: any): any
 				table.insert(if i <= half then viaGates else viaRing, k)
 			end
 			if #viaGates > 0 then
-				throughGates(viaGates, tag)
+				throughGates(viaGates, tag, presetOrder)
 			end
 			if #viaRing > 0 then
-				fromRing(viaRing, tag)
+				fromRing(viaRing, tag, presetBases)
 			end
 		end
 
-		-- Pulse 1: immediate heavy assault
-		sendAssault(7, 10, 0.38, true, "last1")
+		local function warnAssault(warnSec: number, nLo: number, nHi: number, medShare: number, allowHeavy: boolean, tag: string, label: string?)
+			local ps = playerPositions()
+			local order = shuffled(gates)
+			local bases = { wavePoint(liftPos, 70, 95, ps), wavePoint(liftPos, 70, 95, ps) }
+			local origin = if order[1] then order[1].Position else bases[1]
+			warnAndSpawn(warnSec, origin, label, function()
+				sendAssault(nLo, nHi, medShare, allowHeavy, tag, order, bases)
+			end)
+		end
 
-		-- Pulse 2: mid-climb flanking push
-		if dur >= 15 then
-			task.delay(dur * 0.36, function()
+		-- Pulse 1: short urgent warning so the launch lighting dip/klaxon lands before the first assault hits
+		warnAssault(4.5, 7, 10, 0.38, true, "last1", nil)
+
+		-- Pulse 2: mid-climb flanking push with 8 s warning
+		if dur >= 18 then
+			local lead2 = math.min(8, dur * 0.25)
+			task.delay(math.max(5, dur * 0.36 - lead2), function()
 				if alive and ctx.alive() then
 					ctx.notify("Second assault wave closing on the lifter!", DANGER)
-					sendAssault(4, 6, 0.45, false, "last2")
+					warnAssault(lead2, 4, 6, 0.45, false, "last2", nil)
 				end
 			end)
 		end
 
-		-- Pulse 3: final surge before liftoff
-		if dur >= 25 then
-			task.delay(dur * 0.68, function()
+		-- Pulse 3: final surge before liftoff with 8.5 s warning
+		if dur >= 28 then
+			local lead3 = math.min(8.5, dur * 0.22)
+			task.delay(math.max(12, dur * 0.68 - lead3), function()
 				if alive and ctx.alive() then
 					ctx.sound("Alarm", liftPos)
 					ctx.notify("Final COG surge — hold until liftoff!", DANGER)
-					sendAssault(5, 7, 0.45, difficulty >= 3, "last3")
+					warnAssault(lead3, 5, 7, 0.45, difficulty >= 3, "last3", nil)
 				end
 			end)
 		end
@@ -931,6 +1030,7 @@ function HaulTwists.new(ctx: any, cfg: any): any
 
 	function tw.stop()
 		alive = false
+		ctx.clearWaveWarn()
 		if stormActive then
 			stormActive = false
 			local now = workspace:GetServerTimeNow()

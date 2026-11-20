@@ -111,6 +111,8 @@ local swapAt = -10
 local leanCur = 0
 local sideBlend = 1
 local rollCur = 0
+local accelLag = 0
+local prevFwdSpeed = 0
 local focusXZ: Vector3? = nil
 local lastFade = 0
 local lastHeadFade = 0
@@ -386,6 +388,7 @@ function CameraController.init()
 			scoped = wantScope
 			scopeSince = os.clock()
 		end
+		local weightedMove = workspace:GetAttribute("Feel_MoveWeight") ~= "Snappy"
 		local focus: Vector3
 		if root then
 			-- horizontal follow lags a touch (weight); snap on teleports / drops
@@ -394,7 +397,8 @@ function CameraController.init()
 			if not focusXZ or (focusXZ - want).Magnitude > 8 or root.Anchored then
 				focusXZ = want
 			else
-				focusXZ = focusXZ:Lerp(want, 1 - math.exp(-dt * FOLLOW_RATE))
+				local followRate = if weightedMove then 13 else FOLLOW_RATE
+				focusXZ = focusXZ:Lerp(want, 1 - math.exp(-dt * followRate))
 			end
 			local fxz = focusXZ :: Vector3
 			focus = Vector3.new(fxz.X, rp.Y + tune("PivotUp", PIVOT_UP), fxz.Z)
@@ -445,12 +449,27 @@ function CameraController.init()
 			-- the roof lets go later than the distance, so on the way back in the lens comes down over the capsule
 			focus += Vector3.new(0, CAP_TOP * capK ^ 0.4, 0)
 		end
-		-- strafe roll: lean slightly into sideways motion
+		-- strafe roll + forward/back acceleration inertia
 		local rollT = 0
 		if root then
 			local right = Vector3.new(math.cos(yaw), 0, -math.sin(yaw))
-			local vx = root.AssemblyLinearVelocity:Dot(right)
-			rollT = -math.clamp(vx / 16, -1, 1) * STRAFE_ROLL * (1 - aimBlend * 0.6)
+			local fwd = Vector3.new(-math.sin(yaw), 0, -math.cos(yaw))
+			local vel = root.AssemblyLinearVelocity
+			local vx = vel:Dot(right)
+			local vf = vel:Dot(fwd)
+			local rollMax = if weightedMove then math.rad(1.8) else STRAFE_ROLL
+			rollT = -math.clamp(vx / 16, -1, 1) * rollMax * (1 - aimBlend * 0.6)
+			if weightedMove and not root.Anchored then
+				local accel = (vf - prevFwdSpeed) / math.max(dt, 1 / 120)
+				local lagT = math.clamp(accel / 95, -0.35, 0.35) * (1 - aimBlend * 0.7)
+				accelLag += (lagT - accelLag) * (1 - math.exp(-dt * 8))
+			else
+				accelLag *= math.exp(-dt * 10)
+			end
+			prevFwdSpeed = vf
+		else
+			accelLag = 0
+			prevFwdSpeed = 0
 		end
 		rollCur += (rollT - rollCur) * (1 - math.exp(-dt * 6))
 		-- shoulder lean (V, 2026-11-15 ask): the camera leans toward the shoulder it sits over and dips while it crosses.
@@ -486,7 +505,7 @@ function CameraController.init()
 		end
 		-- aim-down-sights: pull in tight over the right shoulder (fixed ADS distance, independent of wheel zoom)
 		local ads = aimBlend * aimBlend * (3 - 2 * aimBlend) -- smoothstep: snappy in the middle, soft ends
-		local wantDist = hipDist + (tune("AdsDist", ADS_DIST) - hipDist) * ads
+		local wantDist = hipDist + (tune("AdsDist", ADS_DIST) - hipDist) * ads + accelLag
 		local shoulder = hipShoulder:Lerp(tune("AdsShoulder", ADS_SHOULDER), ads)
 		sideBlend += (side - sideBlend) * (1 - math.exp(-dt * SIDE_RATE))
 		-- LEFT SHOULDER "camera" preset (Studio A/B Feel_LeftShoulder): the gun stays on the right, so while aiming over

@@ -456,6 +456,15 @@ local GROUPS = {
 			{ name = "C off", set = { Feel_Sway = "off" } },
 		},
 	},
+	{
+		-- client/Movement + CameraController: grounded movement weight (accel/decel ramp, sprint turn drag, backpedal/ADS penalty, landing weight)
+		name = "MOVE WEIGHT",
+		keys = { "Feel_MoveWeight" },
+		presets = {
+			{ name = "A Weighted (default)", set = {} },
+			{ name = "B Snappy", set = { Feel_MoveWeight = "Snappy" } },
+		},
+	},
 }
 
 -- sound layer swaps: Audio reads layer.id at play time, so editing the shared Sounds table is enough

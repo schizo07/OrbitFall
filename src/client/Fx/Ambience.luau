@@ -109,11 +109,14 @@ local folder: Folder? = nil
 local conn: RBXScriptConnection? = nil
 local activeBiome: string? = nil
 local columnToken = 0
+local airEmitters: { { pe: ParticleEmitter, baseRate: number } } = {}
+local lastRateScale = 1
 
 local function makeEmitter(parent: Instance, spec: any, q: number)
 	local pe = Instance.new("ParticleEmitter")
 	pe.Texture = spec.tex
-	pe.Rate = math.max(spec.rate * q, 0.2)
+	local baseRate = math.max(spec.rate * q, 0.2)
+	pe.Rate = baseRate
 	pe.Lifetime = NumberRange.new(spec.life[1], spec.life[2])
 	pe.Speed = NumberRange.new(spec.speed[1], spec.speed[2])
 	pe.SpreadAngle = Vector2.new(spec.spread, spec.spread)
@@ -131,10 +134,37 @@ local function makeEmitter(parent: Instance, spec: any, q: number)
 	pe.Shape = Enum.ParticleEmitterShape.Box
 	pe.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
 	pe.Parent = parent
+	table.insert(airEmitters, { pe = pe, baseRate = baseRate })
+end
+
+local function updateThreatScale()
+	if #airEmitters == 0 then
+		return
+	end
+	local s = Store and Store.get("intensity")
+	local scale = 1
+	if type(s) == "table" and s.state ~= "off" then
+		local quiet = type(s.quietUntil) == "number"
+			and s.quietUntil > Workspace:GetServerTimeNow()
+			and s.state ~= "build"
+			and s.state ~= "breach"
+		local threat = math.clamp(tonumber(s.threat) or 0, 0, 4)
+		scale = if quiet then 0.7 else 1 + threat * 0.12
+	end
+	if math.abs(scale - lastRateScale) > 0.02 then
+		lastRateScale = scale
+		for _, e in airEmitters do
+			if e.pe.Parent then
+				e.pe.Rate = e.baseRate * scale
+			end
+		end
+	end
 end
 
 local function teardown()
 	columnToken += 1
+	table.clear(airEmitters)
+	lastRateScale = 1
 	if conn then
 		conn:Disconnect()
 		conn = nil
@@ -287,6 +317,9 @@ function Ambience.init(Fx: any, _Audio: any, _Juice: any)
 		Store.on("mission", function()
 			refresh()
 		end)
+		Store.on("intensity", function()
+			updateThreatScale()
+		end)
 	end
 	Workspace.ChildAdded:Connect(function(c)
 		if c.Name == "Map" then
@@ -302,6 +335,7 @@ function Ambience.init(Fx: any, _Audio: any, _Juice: any)
 	task.spawn(function()
 		while true do
 			refresh()
+			updateThreatScale()
 			task.wait(1)
 		end
 	end)

@@ -10,6 +10,7 @@
 -- The mini-game reports with Action "minigame"(obj, {locks = {a1, a2, a3}} | {cancel = true}).
 
 local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ContextActionService = game:GetService("ContextActionService")
@@ -1537,6 +1538,163 @@ local function watchHorizon()
 	end
 end
 
+-- ---------------------------------------------------------------- haul launch alarm + lighting dip
+local launchToken = 0
+local launchCC: ColorCorrectionEffect? = nil
+local launchRig: Folder? = nil
+
+local function stopHaulLaunch()
+	launchToken += 1
+	if launchRig then
+		launchRig:Destroy()
+		launchRig = nil
+	end
+	if launchCC then
+		local cc = launchCC
+		launchCC = nil
+		if cc.Parent then
+			TweenService:Create(cc, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Brightness = 0,
+				Contrast = 0,
+				Saturation = 0,
+				TintColor = Color3.new(1, 1, 1),
+			}):Play()
+			task.delay(0.65, function()
+				if cc.Parent then
+					cc:Destroy()
+				end
+			end)
+		end
+	end
+end
+
+local function onHaulLaunchStart(data: any)
+	stopHaulLaunch()
+	launchToken += 1
+	local my = launchToken
+	local pos: Vector3? = if type(data) == "table" and typeof(data.p) == "Vector3" then data.p else nil
+	local dur = math.clamp(if type(data) == "table" and type(data.dur) == "number" then data.dur else 50, 4, 90)
+
+	-- Brief dramatic lighting dip / blackout beat -> emergency red pulse
+	local cc = Instance.new("ColorCorrectionEffect")
+	cc.Name = "HaulLaunchCC"
+	cc.Brightness = 0
+	cc.Contrast = 0
+	cc.Saturation = 0
+	cc.TintColor = Color3.new(1, 1, 1)
+	cc.Parent = Lighting
+	launchCC = cc
+
+	TweenService:Create(cc, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Brightness = -0.46,
+		Contrast = 0.24,
+		Saturation = -0.35,
+		TintColor = Color3.fromRGB(255, 190, 175),
+	}):Play()
+
+	if Audio then
+		if pos then
+			Audio.play("Klaxon", pos, { volume = 1.15, pitch = 0.92, priority = 5 })
+		else
+			Audio.play2D("Klaxon", { volume = 0.9, pitch = 0.92, priority = 5 })
+		end
+	end
+	if Juice then
+		if pos then
+			Juice.trauma(1.6, 0.95, pos, 220)
+		else
+			Juice.shake(1.1, 0.85)
+		end
+	end
+
+	-- Lightweight pulsing red alarm beacon + 1 PointLight over the lifter (phone-safe)
+	local beaconPart: Part? = nil
+	local alarmLight: PointLight? = nil
+	if pos then
+		local rig = Instance.new("Folder")
+		rig.Name = "HaulLaunchAlarm"
+		rig.Parent = getFolder()
+		launchRig = rig
+
+		local ring = Instance.new("Part")
+		ring.Name = "AlarmBeacon"
+		ring.Anchored = true
+		ring.CanCollide = false
+		ring.CanQuery = false
+		ring.CanTouch = false
+		ring.CastShadow = false
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Material = Enum.Material.Neon
+		ring.Color = Color3.fromRGB(255, 42, 32)
+		ring.Transparency = 0.25
+		ring.Size = Vector3.new(0.35, 9.5, 9.5)
+		ring.CFrame = CFrame.new(pos + Vector3.new(0, 7.6, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+		ring.Parent = rig
+		beaconPart = ring
+
+		local l = Instance.new("PointLight")
+		l.Color = Color3.fromRGB(255, 45, 35)
+		l.Range = if quality() >= 0.6 then 44 else 28
+		l.Brightness = 3.2
+		l.Shadows = false
+		l.Parent = ring
+		alarmLight = l
+	end
+
+	task.spawn(function()
+		task.wait(0.32)
+		if my ~= launchToken then
+			return
+		end
+		-- Recover from the blackout beat into an uneasy emergency grade
+		if cc.Parent then
+			TweenService:Create(cc, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Brightness = -0.05,
+				Contrast = 0.08,
+				Saturation = -0.1,
+				TintColor = Color3.fromRGB(255, 226, 218),
+			}):Play()
+		end
+		local t0 = os.clock()
+		local pulseOn = true
+		local nextKlaxon = 11
+		while my == launchToken do
+			local elapsed = os.clock() - t0
+			if elapsed >= dur then
+				stopHaulLaunch()
+				return
+			end
+			pulseOn = not pulseOn
+			if beaconPart and beaconPart.Parent then
+				TweenService:Create(beaconPart, TweenInfo.new(0.38, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+					Transparency = if pulseOn then 0.2 else 0.78,
+				}):Play()
+			end
+			if alarmLight and alarmLight.Parent then
+				TweenService:Create(alarmLight, TweenInfo.new(0.38, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+					Brightness = if pulseOn then 3.2 else 0.4,
+				}):Play()
+			end
+			if cc.Parent then
+				TweenService:Create(cc, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+					TintColor = if pulseOn then Color3.fromRGB(255, 218, 208) else Color3.fromRGB(255, 236, 232),
+				}):Play()
+			end
+			if elapsed >= nextKlaxon then
+				nextKlaxon += 12
+				if Audio then
+					if pos then
+						Audio.play("Klaxon", pos, { volume = 0.85, pitch = 0.94, priority = 4 })
+					else
+						Audio.play2D("Klaxon", { volume = 0.6, pitch = 0.94, priority = 4 })
+					end
+				end
+			end
+			task.wait(0.45)
+		end
+	end)
+end
+
 -- ---------------------------------------------------------------- init
 function WorldFx.init(Fx: any, audio: any, juice: any)
 	Audio = audio
@@ -1545,6 +1703,8 @@ function WorldFx.init(Fx: any, audio: any, juice: any)
 	task.spawn(watchHorizon)
 	Fx.register("Missile", onMissile)
 	Fx.register("Skiff", onSkiff)
+	Fx.register("HaulLaunchStart", onHaulLaunchStart)
+	Fx.register("HaulLaunchEnd", stopHaulLaunch)
 	Fx.register("Minigame", function(data: any)
 		if type(data) == "table" and data.id == "trajectory" then
 			openTrajectory(data)

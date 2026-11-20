@@ -38,12 +38,17 @@ local HudStyle: any
 local built = false
 local cur: any = nil -- latest "intensity" snapshot
 local buildLoopToken = 0
+local waveWarnToken = 0
+local activeWarnId: number? = nil
+local lastWarnTick = -1
+local lastWarnSoundAt = 0
 local lastTick = -1
 local lastExtractKey = ""
 local heavy = { bearing = 0, p = Vector3.zero, active = false }
 
 local MUSIC = { off = 0.5, calm = 0.3, build = 0.6, breach = 0.95, relax = 0.4, extract = 1.0 }
-local PRIO = { build = 1, relax = 1, breach = 2, hold = 2, extract = 3 }
+local PRIO = { build = 1, relax = 1, breach = 2, hold = 2, waveWarn = 2.5, extract = 3 }
+local FACTION_TAG = { COG = "COG", BROOD = "BROOD", LUMEN = "CONCORD" }
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -101,7 +106,23 @@ local function refreshAlert()
 		return
 	end
 	local s = cur
-	if not s or s.state == "off" or s.state == "calm" then
+	if not s or s.state == "off" then
+		AlertBar.clear("build")
+		AlertBar.clear("breach")
+		AlertBar.clear("hold")
+		AlertBar.clear("relax")
+		AlertBar.clear("waveWarn")
+		return
+	end
+	local ww = s.waveWarn
+	if type(ww) == "table" and type(ww.endsAt) == "number" and now() < ww.endsAt + 1.2 then
+		local dirShort = IT.compassShort(ww.dir or 0)
+		local tag = if type(ww.label) == "string" and ww.label ~= "" then ww.label else (FACTION_TAG[s.faction] or "COG")
+		AlertBar.set("waveWarn", string.format("%s INBOUND — %s", tag, dirShort), { color = HudStyle.Amber, priority = PRIO.waveWarn, arrow = true })
+	else
+		AlertBar.clear("waveWarn")
+	end
+	if s.state == "calm" then
 		AlertBar.clear("build")
 		AlertBar.clear("breach")
 		AlertBar.clear("hold")
@@ -131,6 +152,64 @@ local function refreshAlert()
 		AlertBar.clear("hold")
 		AlertBar.set("build", string.format("%s - %s", W.title, dirShort), { color = HudStyle.Amber, priority = PRIO.build })
 	end
+end
+
+-- Rising positional rumble + siren cue for an explicit 8-10 s haul wave warning
+local function startWaveWarnLoop(ww: any)
+	waveWarnToken += 1
+	local my = waveWarnToken
+	local warnId = ww.id
+	local endsAt = tonumber(ww.endsAt) or (now() + 8)
+	local t0 = tonumber(ww.t0) or now()
+	local total = math.max(endsAt - t0, 1)
+	local dir = tonumber(ww.dir) or 0
+	local pos = if typeof(ww.pos) == "Vector3" then ww.pos else nil
+	task.spawn(function()
+		while my == waveWarnToken do
+			local t = now()
+			if not cur or cur.state == "off" or not cur.waveWarn or cur.waveWarn.id ~= warnId then
+				return
+			end
+			if t >= endsAt then
+				-- Wave arrival sting
+				if Audio then
+					local at = pos or farPos(dir, 140)
+					if at then
+						Audio.play("Klaxon", at, { volume = 0.85, pitch = 0.92, priority = 5 })
+					else
+						Audio.play2D("Klaxon", { volume = 0.65, pitch = 0.92, priority = 5 })
+					end
+				end
+				if Juice then
+					if Juice.thump then
+						Juice.thump(0.75, 0.55)
+					else
+						Juice.shake(0.6, 0.45)
+					end
+				end
+				return
+			end
+			local p = math.clamp((t - t0) / total, 0, 1)
+			local W = IT.Warnings[cur.faction] or IT.WarningDefault
+			if Audio and t - lastWarnSoundAt >= 1.2 then
+				lastWarnSoundAt = t
+				local at = pos or farPos(dir, 230 - 100 * p)
+				if at then
+					Audio.play(W.sound, at, { volume = 0.55 + 0.65 * p, pitch = 0.9 + 0.2 * p, priority = 4 })
+				end
+			end
+			if Juice then
+				local mag = 0.16 + 0.48 * p
+				if Juice.thump then
+					Juice.thump(mag, 0.65)
+				else
+					Juice.shake(mag, 0.65)
+				end
+			end
+			music(0.5 + 0.42 * p, 2)
+			task.wait(math.max(2.6 - 1.4 * p, 1.1))
+		end
+	end)
 end
 
 -- Cues ------------------------------------------------------------------------------------------------------------
@@ -225,6 +304,29 @@ local function onIntensity(s: any)
 	end
 	if s.extract then
 		music(MUSIC.extract, 1.5)
+	else
+		local threat = math.clamp(tonumber(s.threat) or 0, 0, 4)
+		local quiet = type(s.quietUntil) == "number" and s.quietUntil > now() and s.state ~= "build" and s.state ~= "breach"
+		if Audio and Audio.setSuspense then
+			Audio.setSuspense(if s.state == "off" then 0 else threat, quiet)
+		end
+		if quiet then
+			music(0.1, 3.0)
+		elseif s.state == "calm" and threat > 0 then
+			music(math.clamp(MUSIC.calm + threat * 0.08, 0.25, 0.7), 3.0)
+		end
+	end
+	-- Explicit wave warning transitions (8-10 s haul counter-attack countdowns)
+	local ww = s.waveWarn
+	local wwId = if type(ww) == "table" and type(ww.endsAt) == "number" and now() < ww.endsAt then ww.id else nil
+	if wwId ~= activeWarnId then
+		activeWarnId = wwId
+		lastWarnTick = -1
+		if wwId ~= nil then
+			startWaveWarnLoop(ww)
+		else
+			waveWarnToken += 1
+		end
 	end
 end
 
@@ -321,6 +423,28 @@ local function step(_dt: number)
 	local inMission = mission and (mission.state == "Active" or mission.state == "Extract")
 	AlertBar.setVisible(inMission == true)
 	if s then
+		local ww = s.waveWarn
+		local wwActive = type(ww) == "table" and type(ww.endsAt) == "number" and t < ww.endsAt + 1.0
+		if wwActive and AlertBar.isShowing("waveWarn") then
+			AlertBar.setArrow(relDeg(ww.dir or 0, yaw))
+			local total = math.max((ww.endsAt or 0) - (ww.t0 or 0), 1)
+			local left = math.max((ww.endsAt or 0) - t, 0)
+			AlertBar.setClock(fmtTime(left), math.clamp(left / total, 0, 1))
+			if left > 0 and left <= 3 then
+				local sec = math.ceil(left)
+				if sec ~= lastWarnTick then
+					lastWarnTick = sec
+					if Audio then
+						Audio.play2D("DialTick", { volume = 0.85, pitch = 1.0 + (3 - sec) * 0.08 })
+					end
+					if AlertBar.pulseOnce then
+						AlertBar.pulseOnce()
+					end
+				end
+			end
+		elseif not wwActive and AlertBar.isShowing("waveWarn") then
+			AlertBar.clear("waveWarn")
+		end
 		if AlertBar.isShowing("breach") or AlertBar.isShowing("hold") then
 			AlertBar.setArrow(relDeg(s.dir or 0, yaw))
 		end
@@ -328,6 +452,12 @@ local function step(_dt: number)
 			local total = math.max(s.endsAt - s.t0, 1)
 			local left = math.max(s.endsAt - t, 0)
 			AlertBar.setClock(fmtTime(left), math.clamp(if s.state == "build" then (t - s.t0) / total else left / total, 0, 1))
+		end
+		-- keep suspense EQ synced when quietUntil expires naturally
+		if Audio and Audio.setSuspense then
+			local threat = math.clamp(tonumber(s.threat) or 0, 0, 4)
+			local quiet = type(s.quietUntil) == "number" and s.quietUntil > t and s.state ~= "build" and s.state ~= "breach"
+			Audio.setSuspense(if s.state == "off" or not inMission then 0 else threat, quiet)
 		end
 	end
 	if heavy.active and AlertBar.calloutVisible() then

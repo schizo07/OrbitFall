@@ -30,20 +30,21 @@ local TAC = EnemyData.Tactics
 local MAP_HALF = Config.MapSize / 2 - 6
 local rng = Random.new()
 
-local HIDE = { 1, 2.5 }
-local PEEK_T = { 1.8, 3.2 }
+local HIDE = { 0.75, 1.65 }
+local PEEK_T = { 2.2, 3.6 }
 local MOVE_T = 7 -- give up walking to a cover point after this long (flankers get FLANK_T)
-local FLANK_T = 11
-local FIND_RETRY = 2.5 -- seconds between cover searches that found nothing
-local RECHECK = 2 -- seconds between "is my cover still hiding me" checks
+local FLANK_T = 10
+local FIND_RETRY = 2.0 -- seconds between cover searches that found nothing
+local RECHECK = 1.8 -- seconds between "is my cover still hiding me" checks
 local REACH = 2 -- studs from a point that count as there
-local MAX_TRAVEL = 45 -- never pick a cover point further than this from the unit
+local MAX_TRAVEL = 48 -- never pick a cover point further than this from the unit
 local SQUAD_CELL = 70
 local PROBE_LEN = 6
 local PROBE_HOLD = 0.6 -- a probed back-off / side-step direction is reused this long
 local MELEE_STRAIGHT = math.max(12, Config.Action.MeleeClaimRange or 14)
-local MELEE_SIDES = { 0, 70, -70 }
+local MELEE_SIDES = { 0, 62, -62 }
 
+local S_ref: { [string]: any } = {}
 local squads: { [any]: { [any]: boolean } } = {}
 local packCount: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any
 
@@ -164,7 +165,29 @@ local function assignRole(e: any, st: any)
 			end
 		end
 	end
-	st.role = if flankers < math.floor((n + 1) / 4) then "flanker" else "suppress"
+	st.role = if flankers < math.floor((n + 2) / 3) then "flanker" else "suppress"
+end
+
+local function threatBoost(): number
+	local d = S_ref.Director
+	if d and d.getThreat then
+		return math.clamp((d.getThreat() or 0) / 4, 0, 1)
+	end
+	return 0
+end
+
+-- Target is holding ground or backpedaling slowly in the open -> squad closes in and flanks aggressively
+local function targetPressurable(t: any, dir: Vector3): boolean
+	if not t or not t.vel then
+		return false
+	end
+	local tv = flat(t.vel)
+	local spd = tv.Magnitude
+	if spd < 4.5 then
+		return true -- holding ground in LOS
+	end
+	-- moving away slowly (backpedaling) rather than turning and sprinting away
+	return spd < Config.SprintSpeed * 0.8 and tv:Dot(dir) > 1.5
 end
 
 -- Probed moves -----------------------------------------------------------------------------------
@@ -188,17 +211,27 @@ local function probedPick(e: any, st: any, list: { Vector3 }, now: number): Vect
 end
 
 -- Open-ground band hold (no cover, heavies, spitters): approach above the band, back off below it, side-step / plant inside it.
-local function bandHold(e: any, st: any, _t: any, dist: number, dir: Vector3, kd: number, now: number): (Vector3?, number, boolean)
+-- Flankers without cover angle around the target; when the target holds ground or backpedals in the open, the squad pushes tighter.
+local function bandHold(e: any, st: any, t: any, dist: number, dir: Vector3, kd: number, now: number): (Vector3?, number, boolean)
 	local tac = e.def.tactics or {}
-	local pref = kd * (tac.push or 1)
+	local press = e.los and targetPressurable(t, dir)
+	local th = threatBoost()
+	local pref = kd * (tac.push or 1) * (if press then 0.8 else 0.92) * (1 - 0.1 * th)
 	if st.wounded then
 		pref *= tac.retreatMul or 1.3
 	end
 	local hold = tac.hold or TAC.holdDefault
 	local side = Vector3.new(-dir.Z, 0, dir.X)
+	if st.role == "flanker" and not st.wounded and dist > pref * hold[1] * 0.9 and dist < kd * 1.45 then
+		local flankDir = (dir * (if dist > pref * hold[2] then 0.82 else 0.45) + side * (st.stepSign * 0.78)).Unit
+		local d = probedPick(e, st, { flankDir, dir, side * st.stepSign }, now)
+		if d then
+			return d, 1.05, true
+		end
+	end
 	if not e.los or dist > pref * hold[2] then
 		st.mDir = nil
-		return dir, 1, true
+		return dir, if press then 1.06 else 1, true
 	elseif dist < pref * hold[1] then
 		local s = st.stepSign
 		local d = probedPick(e, st, { -dir + side * (0.5 * s), -dir - side * (0.5 * s), side * s, -side * s }, now)
@@ -212,7 +245,7 @@ local function bandHold(e: any, st: any, _t: any, dist: number, dir: Vector3, kd
 		st.mUntil = 0
 		if st.stepping then
 			st.stepping = false
-			st.stepUntil = now + rng:NextNumber(TAC.pause[1], TAC.pause[2])
+			st.stepUntil = now + rng:NextNumber(TAC.pause[1], TAC.pause[2]) * (if press then 0.75 else 1)
 		else
 			st.stepping = true
 			st.stepUntil = now + rng:NextNumber(TAC.step[1], TAC.step[2])
@@ -222,9 +255,10 @@ local function bandHold(e: any, st: any, _t: any, dist: number, dir: Vector3, kd
 		end
 	end
 	if st.stepping then
-		local d = probedPick(e, st, { side * st.stepSign, -side * st.stepSign }, now)
+		local adv = if press then dir * 0.35 else Vector3.zero
+		local d = probedPick(e, st, { (side * st.stepSign + adv).Unit, (-side * st.stepSign + adv).Unit }, now)
 		if d then
-			return d, 0.8, true
+			return d, if press then 0.92 else 0.82, true
 		end
 		st.stepping = false
 	end
@@ -351,12 +385,13 @@ function Tactician.ranged(e: any, t: any, dist: number, dir: Vector3, now: numbe
 		if away.Magnitude < kd * 0.5 and away.Magnitude > 0.1 then
 			mv = (mv + away.Unit * 0.8).Unit
 		end
-		return mv, 1, false
+		return mv, if st.role == "flanker" then 1.08 else 1, false
 	elseif st.phase == "hide" then
 		if now >= st.untilT then
 			st.phase = "peek"
 			st.peekAt = now
-			st.untilT = now + rng:NextNumber(PEEK_T[1], PEEK_T[2])
+			local th = threatBoost()
+			st.untilT = now + rng:NextNumber(PEEK_T[1], PEEK_T[2]) * (1 + 0.15 * th)
 			st.hiddenSince = nil
 		end
 		return nil, 0, false
@@ -436,6 +471,7 @@ function Tactician.onDamaged(e: any, _fromPos: Vector3)
 end
 
 function Tactician.init(s: { [string]: any })
+	S_ref = s
 	Cover.init(s)
 end
 

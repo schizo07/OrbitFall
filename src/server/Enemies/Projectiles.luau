@@ -174,7 +174,7 @@ local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, bloc
 
 	local fx = S.Fx
 	if fx then
-		local data: any = { id = pr.id, p = pos, style = pr.style, r = radius }
+		local data: any = { id = pr.id, p = pos, style = pr.style, r = radius, cls = pr.cls, hv = pr.heavy }
 		if pr.puddle and not blocked and not miss then
 			data.pd = pr.puddle.dur
 		end
@@ -192,7 +192,7 @@ local function finish(i: number, pr: any, pos: Vector3, hitPlayer: Player?, bloc
 			fx.play("Explosion", { p = pos, r = radius, size = radius >= 6 and "L" or "M", style = "fire" })
 		end
 		if pr.shake and pr.shake > 0 and not blocked and not miss then
-			fx.playU("Shake", { p = pos, mag = pr.shake, r = 70 })
+			fx.playU("Shake", { p = pos, mag = pr.shake, r = if pr.heavy or isBlastVisual then 115 else 75 })
 		end
 	end
 end
@@ -357,6 +357,11 @@ function Projectiles.fire(spec: any): number?
 			life /= m
 		end
 	end
+	local owner = spec.owner
+	local oid = if type(owner) == "table" then owner.id else nil
+	local cls = if type(owner) == "table" then owner.class else nil
+	local ek = if type(owner) == "table" then owner.kind else nil
+	local heavy = spec.heavy == true or spec.style == "cannon" or spec.style == "mortar" or cls == "heavy" or cls == "behemoth"
 	local pr = {
 		id = id,
 		a = spec.a,
@@ -375,14 +380,18 @@ function Projectiles.fire(spec: any): number?
 		kind = spec.kind,
 		puddle = spec.puddle,
 		shake = spec.shake,
-		owner = spec.owner,
+		owner = owner,
+		cls = cls,
+		ek = ek,
+		heavy = heavy,
 		spare = spec.spare,
 	}
 	table.insert(live, pr)
 	if S.Fx then
-		local owner = spec.owner
-		local oid = if type(owner) == "table" then owner.id else nil
-		S.Fx.play("Bolt", { id = id, a = pr.a, v = pr.v, g = pr.g, style = pr.style, c = pr.c, life = pr.life, r = pr.radius, o = oid })
+		S.Fx.play("Bolt", {
+			id = id, a = pr.a, v = pr.v, g = pr.g, style = pr.style, c = pr.c, life = pr.life, r = pr.radius,
+			o = oid, cls = cls, ek = ek, hv = if heavy then true else nil,
+		})
 	end
 	return id
 end

@@ -346,6 +346,20 @@ local function onHurt(d: any)
 	local missing = 1 - hpFrac(me)
 	hitPulse = math.max(hitPulse, math.clamp(amount / 30 + 0.2 + missing * 0.3, 0, 1))
 	hitDesat = math.max(hitDesat, math.clamp(amount / 40, 0.1, 0.6))
+	-- physical damage impact: directional camera kick + crisp shake + red hit vignette (scaled by damage)
+	if Juice then
+		local scale = math.clamp(amount / 25, 0.35, 2.0) * math.min(k, 1.5)
+		local dir = hitDir(d.from)
+		-- flinch away from the side the hit landed on, with a crisp upward-back snap
+		local yawKick = -dir.X * (0.9 + 1.6 * scale)
+		local pitchKick = (0.65 + 1.35 * scale) * (if dir.Y > 0.4 then -0.7 else 1)
+		Juice.kick(pitchKick, yawKick)
+		Juice.shake(0.55 + 1.15 * scale, 0.16 + 0.12 * scale)
+		Juice.vignette(Color3.fromRGB(220, 28, 32), math.clamp(0.22 + 0.26 * scale, 0.2, 0.6), 0.28 + 0.14 * scale)
+		if amount >= 25 then
+			Juice.punchFov(-2.2 * math.min(scale, 1.5))
+		end
+	end
 	-- big-hit visor overlay
 	local mode = overlayMode()
 	if mode ~= "none" then

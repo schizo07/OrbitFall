@@ -222,9 +222,68 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		local strip = ctx.part(lifter, Vector3.new(s[3], 0.32, s[4]), bedCF * CFrame.new(s[1], 0.02, s[2]), HAZARD, Enum.Material.SmoothPlastic, { CanCollide = false, CastShadow = false })
 		table.insert(bedParts, strip)
 	end
-	for _, c in { { -4.4, -4.4 }, { 4.4, -4.4 }, { -4.4, 4.4 }, { 4.4, 4.4 } } do
+	local alarmCaps: { BasePart } = {}
+	local alarmLights: { PointLight } = {}
+	for i, c in { { -4.4, -4.4 }, { 4.4, -4.4 }, { -4.4, 4.4 }, { 4.4, 4.4 } } do
 		ctx.part(lifter, Vector3.new(0.6, 7, 0.6), plaza * CFrame.new(c[1], 3.5, 2.5 + c[2]), DARK, Enum.Material.Metal)
 		ctx.part(lifter, Vector3.new(0.66, 0.5, 0.66), plaza * CFrame.new(c[1], 6.6, 2.5 + c[2]), HAZARD, Enum.Material.Metal, { CanCollide = false })
+		local cap = ctx.part(lifter, Vector3.new(0.55, 0.35, 0.55), plaza * CFrame.new(c[1], 7.15, 2.5 + c[2]), Color3.fromRGB(58, 30, 30), Enum.Material.SmoothPlastic, { CanCollide = false, CastShadow = false })
+		table.insert(alarmCaps, cap)
+		-- keep PointLights to 2 diagonal posts so phone frame budgets stay light
+		if i == 1 or i == 4 then
+			local al = Instance.new("PointLight")
+			al.Name = "LaunchAlarmLight"
+			al.Color = Color3.fromRGB(255, 45, 35)
+			al.Range = 28
+			al.Brightness = 2.6
+			al.Shadows = false
+			al.Enabled = false
+			al.Parent = cap
+			table.insert(alarmLights, al)
+		end
+	end
+	local launchAlarmOn = false
+	local function setLaunchAlarm(on: boolean)
+		launchAlarmOn = on
+		if not on then
+			for _, cap in alarmCaps do
+				if cap.Parent then
+					cap.Color = Color3.fromRGB(58, 30, 30)
+					cap.Material = Enum.Material.SmoothPlastic
+				end
+			end
+			for _, al in alarmLights do
+				if al.Parent then
+					al.Enabled = false
+				end
+			end
+			return
+		end
+		task.spawn(function()
+			local lit = false
+			local RED_ON = Color3.fromRGB(255, 45, 35)
+			local RED_OFF = Color3.fromRGB(68, 22, 22)
+			while launchAlarmOn and alive and ctx.alive() do
+				lit = not lit
+				for _, cap in alarmCaps do
+					if cap.Parent then
+						cap.Color = if lit then RED_ON else RED_OFF
+						cap.Material = if lit then Enum.Material.Neon else Enum.Material.SmoothPlastic
+					end
+				end
+				for _, al in alarmLights do
+					if al.Parent then
+						al.Enabled = lit
+					end
+				end
+				task.wait(0.42)
+			end
+			for _, al in alarmLights do
+				if al.Parent then
+					al.Enabled = false
+				end
+			end
+		end)
 	end
 	-- terminal: upright glowing blue panel behind the bed, facing the arrivals, with one load light per cell
 	local panelCF = plaza * CFrame.new(0, 0, 8.6)
@@ -1047,7 +1106,13 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		st.text = string.format(LAUNCH_FMT, secs)
 		st.progress = 0
 		syncSiteMarkers(true)
+		ctx.setThreat(4)
+		setLaunchAlarm(true)
+		if S and S.Fx then
+			S.Fx.play("HaulLaunchStart", { p = liftPos, dur = secs })
+		end
 		ctx.notify(string.format("All cells loaded! Defend the cargo lifter while it climbs (%d s)!", secs), Config.Colors.Danger)
+		ctx.sound("Klaxon", liftPos)
 		ctx.sound("Generator", liftPos)
 		ctx.sound("Alarm", liftPos)
 
@@ -1089,6 +1154,11 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			end
 			if not alive or not ctx.alive() then
 				return
+			end
+			setLaunchAlarm(false)
+			ctx.clearWaveWarn()
+			if S and S.Fx then
+				S.Fx.play("HaulLaunchEnd", { p = liftPos })
 			end
 			st.text = string.format(STEP_FMT, total, total)
 			st.progress = nil
@@ -1134,6 +1204,10 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			finished = true
 			beginLaunch()
 		else
+			local threatLvl = if delivered >= 3 or (delivered / math.max(total, 1)) >= 0.65 then 3
+				elseif delivered >= 2 then 2
+				else 1
+			ctx.setThreat(threatLvl)
 			-- Short "LIFTER CHARGING x/N" beat + escalating reinforcement wave on every load
 			chargeGen += 1
 			local myGen = chargeGen
@@ -1372,6 +1446,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		dropLock[p] = nil
 	end)
 
+	ctx.setThreat(0)
 	ctx.setMarker(entry, liftPos)
 	syncSiteMarkers(true)
 	ctx.notify(string.format("Inspect the crashed drone's flight log or scout the basin to recover %d core cells.", total), Config.Colors.Friendly)
@@ -1379,6 +1454,11 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 
 	function ctl.stop()
 		alive = false
+		setLaunchAlarm(false)
+		ctx.clearWaveWarn()
+		if S and S.Fx then
+			S.Fx.play("HaulLaunchEnd", { p = liftPos })
+		end
 		twists.stop()
 		if encounters then
 			encounters.stop()

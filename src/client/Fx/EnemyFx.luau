@@ -187,9 +187,10 @@ local function removeBolt(id: any, b: any)
 	end
 end
 
--- Near miss: whiz + screen-edge flash on the side the shot passed ------------------------------------
+-- Near miss: whiz + screen-edge flash + directional flinch/micro-shake on the side the shot passed ----------
 local WHIZ_ID = "rbxassetid://123402454968182" -- short whoosh arc
-local WHIZ_NEAR = 5 -- studs from the trooper's root
+local WHIZ_NEAR = 6.2 -- studs from the trooper's root (bolts)
+local WHIZ_NEAR_HEAVY = 9.8 -- heavy cannon shells roar past wider
 local WHIZ_HIT = 2.4 -- closer than this the server counts a hit (hitRadius ~2.2): no whiz
 local lastWhiz = 0
 local whizAtt: Attachment? = nil
@@ -197,16 +198,16 @@ local whizSound: Sound? = nil
 local edgeGui: ScreenGui? = nil
 local edges: { [string]: Frame } = {}
 
-local function whizAudio(at: Vector3)
+local function whizAudio(at: Vector3, heavy: boolean?)
 	if not whizAtt or not whizAtt.Parent then
 		local att = Instance.new("Attachment")
 		att.Name = "BoltWhiz"
 		att.Parent = workspace.Terrain
 		local s = Instance.new("Sound")
 		s.SoundId = WHIZ_ID
-		s.Volume = 0.7
+		s.Volume = 0.78
 		s.RollOffMinDistance = 6
-		s.RollOffMaxDistance = 45
+		s.RollOffMaxDistance = 55
 		local master = SoundService:FindFirstChild("OrbitMaster")
 		local group = master and master:FindFirstChild("Enemies")
 		if group and group:IsA("SoundGroup") then
@@ -219,7 +220,8 @@ local function whizAudio(at: Vector3)
 	local att = whizAtt :: Attachment
 	local s = whizSound :: Sound
 	att.WorldPosition = at
-	s.PlaybackSpeed = 1.45 + math.random() * 0.3
+	s.Volume = if heavy then 1.05 else 0.78
+	s.PlaybackSpeed = if heavy then (0.66 + math.random() * 0.14) else (1.45 + math.random() * 0.3)
 	s.TimePosition = 0
 	s:Play()
 end
@@ -274,13 +276,13 @@ local function edgeHint(side: string, color: Color3)
 end
 
 -- q = closest point of the pass, lp = trooper root position
-local function nearMiss(q: Vector3, lp: Vector3, color: Color3)
+local function nearMiss(q: Vector3, lp: Vector3, color: Color3, heavy: boolean?)
 	local now = os.clock()
-	if now - lastWhiz < 0.12 then
+	if now - lastWhiz < (if heavy then 0.08 else 0.12) then
 		return
 	end
 	lastWhiz = now
-	whizAudio(q)
+	whizAudio(q, heavy)
 	local cam = workspace.CurrentCamera
 	if not cam then
 		return
@@ -291,6 +293,17 @@ local function nearMiss(q: Vector3, lp: Vector3, color: Color3)
 	local side = if math.abs(rx) >= math.abs(uy) * 0.8 then (if rx >= 0 then "right" else "left")
 		else (if uy >= 0 then "top" else "bottom")
 	edgeHint(side, color)
+	if Juice then
+		local flinchSign = if rx >= 0 then -1 else 1
+		if heavy then
+			Juice.shake(0.85, 0.24)
+			Juice.kick(0.55, flinchSign * 1.05)
+			Juice.punchFov(-1.2)
+		else
+			Juice.shake(0.34, 0.14)
+			Juice.kick(0.22, flinchSign * 0.45)
+		end
+	end
 end
 
 local function closestOnSeg(a: Vector3, b: Vector3, p: Vector3): (Vector3, number)
@@ -336,12 +349,13 @@ local function stepBolt(b: any, now: number, camPos: Vector3?, viewPos: Vector3?
 	b.lastPos = pos
 	if lpPos and lastPos and not b.whizzed and b.oriented and b.g <= 0 then
 		local dl = pos - lpPos
-		if dl:Dot(dl) < 900 then
+		if dl:Dot(dl) < 1200 then
 			local q, u = closestOnSeg(lastPos, pos, lpPos)
 			local d = (q - lpPos).Magnitude
-			if u > 0 and u < 1 and d <= WHIZ_NEAR and d >= WHIZ_HIT then
+			local nearR = if b.heavy then WHIZ_NEAR_HEAVY else WHIZ_NEAR
+			if u > 0 and u < 1 and d <= nearR and d >= WHIZ_HIT then
 				b.whizzed = true
-				nearMiss(q, lpPos, b.col)
+				nearMiss(q, lpPos, b.col, b.heavy)
 			end
 		end
 	end
@@ -585,18 +599,28 @@ local function onBolt(d: any)
 		tailBack = shellLen * 0.6 + tailLen * 0.5
 	end
 	local col: Color3 = if typeof(d.c) == "Color3" then d.c else BOLT_CORE
+	local cls = d.cls
+	local ek = d.ek
+	local isHeavy = d.hv == true or style == "cannon" or style == "mortar" or cls == "heavy" or cls == "behemoth"
+	local isFodder = ek == "TINKER_SWARM" or ek == "DRONE_COG"
 	if style == "bolt" then
-		slug(1.5, 0.5, 2.3, 1.2, 3, col)
-		if camDist < 140 then
+		if isFodder then
+			slug(1.3, 0.38, 2.0, 0.95, 2.5, col)
+		elseif isHeavy then
+			slug(2.4, 0.95, 3.6, 2.1, 5.8, col)
+		else
+			slug(1.8, 0.54, 2.8, 1.32, 4.2, col)
+		end
+		if camDist < 150 then
 			lightColor = col
 		end
 	elseif style == "cannon" then
 		col = if typeof(d.c) == "Color3" then d.c else ORANGE
-		slug(2.1, 1.1, 3.2, 2.5, 4.5, col)
+		slug(2.8, 1.38, 4.4, 2.95, 7.2, col)
 		lightColor = ORANGE
 	elseif style == "mortar" then
 		col = if typeof(d.c) == "Color3" then d.c else ORANGE
-		slug(1.9, 1.1, 3, 2.4, 3, col)
+		slug(2.4, 1.35, 3.8, 2.85, 5.4, col)
 		lightColor = ORANGE
 	else -- acid: green-yellow blob (wobbles in stepBolts), arcs with the projectile's gravity
 		col = ACID
@@ -617,6 +641,8 @@ local function onBolt(d: any)
 		tailSize = if tail then tail.Size else nil,
 		k = 1,
 		col = col,
+		heavy = isHeavy,
+		cls = cls,
 		whizzed = false,
 		lastPos = nil,
 		lit = false,
@@ -640,8 +666,8 @@ local function onBolt(d: any)
 		b.lit = true
 		local l = Instance.new("PointLight")
 		l.Color = lightColor
-		l.Range = if style == "bolt" then 9 else 14
-		l.Brightness = if style == "bolt" then 1.3 else 1.6
+		l.Range = if isHeavy then 18 elseif style == "bolt" then 10 else 14
+		l.Brightness = if isHeavy then 2.1 elseif style == "bolt" then 1.4 else 1.6
 		l.Shadows = false
 		l.Parent = part
 	end
@@ -649,22 +675,41 @@ local function onBolt(d: any)
 		rememberMuzzle(d.o, d.a, col)
 	end
 	if style == "bolt" then
-		flash(d.a, col, 2.4, 0.1)
+		flash(d.a, col:Lerp(BOLT_HOT, 0.5), if isFodder then 1.9 else 2.8, 0.11)
 	elseif style == "cannon" then
-		flash(d.a, ORANGE, 3.2, 0.12)
+		flash(d.a, BOLT_HOT, 2.4, 0.1)
+		flash(d.a, ORANGE, 5.2, 0.17)
+		if Juice then
+			Juice.shake(0.55, 0.22, d.a, 50)
+		end
 	elseif style == "mortar" then
-		flash(d.a, ORANGE, 3.6, 0.14)
+		flash(d.a, BOLT_HOT, 2.6, 0.11)
+		flash(d.a, ORANGE, 5.0, 0.18)
+		if Juice then
+			Juice.shake(0.65, 0.25, d.a, 65)
+		end
 	end
 	if Fx and Fx.burst then
 		if style == "acid" and camDist < 120 then
 			Fx.burst("goo", d.a, 2, { scale = 0.4, speed = 0.4 })
-		elseif camDist < 100 and (style == "bolt" or style == "cannon") then
-			Fx.burst("sparks", d.a, 2, { scale = 0.4, speed = 0.5, color = col })
+		elseif style == "cannon" or style == "mortar" then
+			if camDist < 160 then
+				Fx.burst("sparks", d.a, 7, { scale = 0.85, speed = 0.9, color = ORANGE })
+				Fx.burst("puff", d.a, 3, { scale = 1.0 })
+			end
+		elseif camDist < 110 and style == "bolt" then
+			Fx.burst("sparks", d.a, if isFodder then 2 else 4, { scale = 0.5, speed = 0.6, color = col })
 		end
 	end
 	local key = BOLT_SOUND[style]
 	if key and Audio then
-		Audio.play(key, d.a)
+		if style == "cannon" then
+			Audio.play(key, d.a, { volume = 1.25, pitch = if cls == "behemoth" then 0.78 else 0.88, priority = 4 })
+		elseif style == "bolt" and isFodder then
+			Audio.play(key, d.a, { volume = 0.75, pitch = 1.15 })
+		else
+			Audio.play(key, d.a)
+		end
 	end
 end
 
@@ -690,12 +735,14 @@ local function puddle(p: Vector3, r: number, dur: number)
 	end)
 end
 
+local lastBoltScorch = 0
 local function onBoltEnd(d: any)
 	if type(d) ~= "table" then
 		return
 	end
 	local b = d.id ~= nil and bolts[d.id]
 	local bcol: Color3 = if b and typeof(b.col) == "Color3" then b.col else BOLT_RED
+	local bHeavy = d.hv == true or (b and b.heavy == true) or d.style == "cannon" or d.style == "mortar"
 	if b then
 		removeBolt(d.id, b)
 	end
@@ -705,26 +752,39 @@ local function onBoltEnd(d: any)
 	local p = d.p
 	local style = d.style or "bolt"
 	if d.blocked then
-		flash(p, C3(120, 200, 255), 3, 0.25)
+		flash(p, C3(120, 200, 255), if bHeavy then 5.2 else 3, 0.25)
+		if Fx and Fx.burst then
+			Fx.burst("sparks", p, if bHeavy then 12 else 5, { color = C3(130, 220, 255) })
+		end
+		if bHeavy and Juice then
+			Juice.trauma(1.2, 0.3, p, 85)
+		end
 		if Audio then
-			Audio.play("BoltImpact", p)
+			Audio.play("BoltImpact", p, { volume = if bHeavy then 1.2 else 1 })
 		end
 		return
 	end
+	local hq = if Fx and type(Fx.quality) == "number" then Fx.quality else 1
+	local cDist = if Fx and Fx.camDistance then Fx.camDistance(p) else 0
 	if style == "bolt" then
 		if d.hit then
-			-- struck a trooper: bigger pop
-			flash(p, bcol, 3.4, 0.18)
-			flash(p, bcol:Lerp(BOLT_HOT, 0.6), 1.6, 0.1)
+			-- struck a trooper: crisp multi-layer impact flash + spark burst
+			flash(p, bcol, 3.8, 0.18)
+			flash(p, bcol:Lerp(BOLT_HOT, 0.65), 1.9, 0.11)
 			if Fx and Fx.burst then
-				Fx.burst("sparks", p, 9, { color = bcol })
+				Fx.burst("sparks", p, 11, { color = bcol, speed = 1.1 })
 			end
 		else
-			-- ground / wall: small spark puff
-			flash(p, bcol, 1.7, 0.12)
-			if Fx and Fx.burst and (not Fx.camDistance or Fx.camDistance(p) < 140) then
-				Fx.burst("sparks", p, 3, { color = bcol, scale = 0.7 })
-				Fx.burst("puff", p, 1, { scale = 0.5 })
+			-- ground / wall: crisp flash + sparks + lightweight scorch
+			flash(p, bcol:Lerp(BOLT_HOT, 0.4), 2.1, 0.13)
+			if Fx and Fx.burst and cDist < 150 then
+				Fx.burst("sparks", p, 5, { color = bcol, scale = 0.8 })
+				Fx.burst("puff", p, 1, { scale = 0.55 })
+			end
+			local now = os.clock()
+			if Fx and Fx.scorch and hq >= 0.5 and cDist < 110 and now - lastBoltScorch > 0.22 then
+				lastBoltScorch = now
+				Fx.scorch(p, 1.1)
 			end
 		end
 		if Audio then
@@ -748,8 +808,16 @@ local function onBoltEnd(d: any)
 			Audio.play("AcidSplat", p)
 		end
 	else
-		-- cannon / mortar: the server also sends a core Explosion; add a quick scorch flash
-		flash(p, ORANGE, math.max(d.r or 4, 3) * (if d.hit then 1.5 else 1.2), 0.2)
+		-- cannon / mortar: multi-layer flash + sparks + scorch (Blast handles the main fireball & explosion trauma)
+		local r = math.max(d.r or 5, 3.5)
+		flash(p, BOLT_HOT, r * 0.85, 0.12)
+		flash(p, ORANGE, r * (if d.hit then 1.8 else 1.45), 0.24)
+		if Fx and Fx.burst and cDist < 200 then
+			Fx.burst("sparks", p, 14, { color = ORANGE, scale = 1.15, speed = 1.25 })
+		end
+		if Fx and Fx.scorch and hq >= 0.45 and cDist < 180 then
+			Fx.scorch(p, r * 0.85)
+		end
 	end
 end
 
@@ -1210,6 +1278,8 @@ local function guessMuzzle(m: Model, kind: any, def: any, frame: CFrame): Vector
 	return Vector3.new(0, size * 1.2, -size * 0.6)
 end
 
+local lastChargeCueReg = 0
+local lastChargeCueHeavy = 0
 local function chargeUp(d: any)
 	local windup = tonumber(d.t) or 0
 	if windup < 0.12 then
@@ -1242,13 +1312,25 @@ local function chargeUp(d: any)
 	if dist > (if heavy then 260 else 170) then
 		return
 	end
+	-- Brief crisp audio cue before firing (rate-limited so packs stay clean)
+	if Audio then
+		local nowT = os.clock()
+		if heavy and dist < 200 and nowT - lastChargeCueHeavy > 0.35 then
+			lastChargeCueHeavy = nowT
+			Audio.play("EMPPulse", start, { volume = 0.65, pitch = 0.78, priority = 3 })
+			Audio.play("Telegraph", start, { volume = 0.5, pitch = 0.64, priority = 3 })
+		elseif not heavy and dist < 95 and nowT - lastChargeCueReg > 0.24 then
+			lastChargeCueReg = nowT
+			Audio.play("ShotVolt", start, { volume = 0.22, pitch = 1.65, priority = 1 })
+		end
+	end
 	local cached = muzzleCache[kind]
 	local col: Color3 = if cached then cached.col
 		elseif d.kind == "cannon" then ORANGE
 		else (def and FACTION_CHARGE[def.faction]) or FACTION_CHARGE.COG
 	local hq = if Fx and type(Fx.quality) == "number" then Fx.quality else 1
-	local coreMax = if heavy then 1.5 else 0.75
-	local shellMax = if heavy then 3.4 else 1.7
+	local coreMax = if heavy then 1.9 else 0.9
+	local shellMax = if heavy then 4.2 else 2.0
 	-- far away the glow grows a little so it still reads
 	local far = math.clamp(dist / 80, 1, 1.6)
 	coreMax *= far
@@ -1337,9 +1419,30 @@ local function onEnemyAttack(d: any)
 		return
 	end
 	if kind == "step" then
-		Audio.play("RobotStep", p)
-		if Juice and (e == "COLOSSUS" or e == "TITAN") then
-			Juice.shake(0.28, 0.22, p, 90)
+		local behemoth = e == "COLOSSUS" or e == "TITAN" or e == "SPIRE"
+		local heavyStep = behemoth or e == "BULWARK" or e == "CHARGER" or e == "LANCER" or e == "BASTION"
+		if behemoth then
+			Audio.play("RobotStep", p, { volume = 1.35, pitch = 0.52, priority = 3 })
+			Audio.play("Land", p, { volume = 1.15, pitch = 0.52, priority = 3 })
+			if Juice then
+				if Juice.thump then
+					Juice.thump(0.78, 0.34, p, 115)
+				else
+					Juice.shake(0.65, 0.3, p, 115)
+				end
+			end
+		elseif heavyStep then
+			Audio.play("RobotStep", p, { volume = 1.05, pitch = 0.68, priority = 2 })
+			Audio.play("Land", p, { volume = 0.78, pitch = 0.64, priority = 2 })
+			if Juice then
+				if Juice.thump then
+					Juice.thump(0.38, 0.22, p, 62)
+				else
+					Juice.shake(0.32, 0.2, p, 62)
+				end
+			end
+		else
+			Audio.play("RobotStep", p)
 		end
 	elseif kind == "screech" then
 		Audio.play("BugScreech", p)
@@ -1354,8 +1457,6 @@ local function onEnemyAttack(d: any)
 		Audio.play("ColossusHorn", p)
 	elseif e == "TITAN" and (kind == "stomp" or kind == "spit") then
 		Audio.play("TitanRoar", p)
-	elseif kind == "cannon" then
-		Audio.play("EnemyCannon", p)
 	end
 end
 

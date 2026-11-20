@@ -369,6 +369,20 @@ function AlertBar.isShowing(id: string): boolean
 	return shownId == id
 end
 
+-- Brief urgency flash on the active alert bar (e.g. final countdown seconds of an inbound wave warning)
+function AlertBar.pulseOnce()
+	if not built or not ui.bar or not ui.bar.Visible then
+		return
+	end
+	local base = ui.barAlpha or 0.15
+	tw(ui.bar, 0.08, { BackgroundTransparency = math.min(base + 0.55, 0.82) })
+	task.delay(0.1, function()
+		if built and ui.bar and ui.bar.Visible then
+			tw(ui.bar, 0.14, { BackgroundTransparency = base })
+		end
+	end)
+end
+
 -- Amber callout line ------------------------------------------------------------------------------------------------
 function AlertBar.callout(text: string, color: Color3?, seconds: number?, showArrow: boolean?)
 	if not built then

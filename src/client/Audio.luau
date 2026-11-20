@@ -507,6 +507,31 @@ function Audio.setMasterVolume(v: number)
 	master.Volume = v
 end
 
+-- Subtle suspense mix shaping across mission threat (0..4) and quiet wind-only lulls.
+local lastSuspenseThreat = -1
+local lastSuspenseQuiet = false
+function Audio.setSuspense(threat: number, quiet: boolean)
+	ensure()
+	local lvl = math.clamp(math.floor((tonumber(threat) or 0) + 0.5), 0, 4)
+	local q = quiet == true
+	if lvl == lastSuspenseThreat and q == lastSuspenseQuiet then
+		return
+	end
+	lastSuspenseThreat, lastSuspenseQuiet = lvl, q
+	local eq = master and master:FindFirstChild("MasterEQ") :: EqualizerSoundEffect?
+	if eq then
+		-- threat adds subtle low-end weight and edge; a quiet lull pulls back slightly so wind stands out
+		local low = if q then 2.2 else 3 + lvl * 0.45
+		local mid = if q then -1.2 else 0
+		local high = if q then 0.5 else 1 + lvl * 0.25
+		TweenService:Create(eq, TweenInfo.new(1.5, Enum.EasingStyle.Quad), {
+			LowGain = low,
+			MidGain = mid,
+			HighGain = high,
+		}):Play()
+	end
+end
+
 -- PLAY ------------------------------------------------------------------------------
 
 -- POP SOUND A/B: Feel_PopSound "B" / "C" / "D" plays `<key>_PopB/C/D` (Sounds.luau) instead of these keys

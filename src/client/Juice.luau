@@ -104,6 +104,39 @@ function Juice.trauma(mag: number, dur: number, pos: Vector3?, range: number?)
 	Juice.shake(mag, dur)
 end
 
+-- Low-frequency ground thump (heavy walker footsteps, distant subterranean rumbles): slower oscillation than gunfire shake.
+function Juice.thump(mag: number, dur: number, pos: Vector3?, range: number?)
+	if Juice.intensity <= 0 or mag <= 0 then
+		return
+	end
+	if pos then
+		local cam = workspace.CurrentCamera
+		if cam then
+			local d = (cam.CFrame.Position - pos).Magnitude
+			local r = range or 85
+			if d >= r then
+				return
+			end
+			local f = 1 - d / r
+			mag *= f * f
+		end
+	end
+	mag *= Juice.intensity
+	if mag < 0.02 then
+		return
+	end
+	if #shakes >= MAX_SHAKES then
+		table.remove(shakes, 1)
+	end
+	table.insert(shakes, {
+		mag = mag,
+		dur = math.max(dur, 0.08),
+		t = 0,
+		seed = rng:NextNumber() * 1000,
+		freq = 7.5 + rng:NextNumber() * 2.5,
+	})
+end
+
 function Juice.kick(pitchDeg: number, yawDeg: number)
 	local i = Juice.intensity
 	if i <= 0 then

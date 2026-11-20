@@ -63,6 +63,9 @@ local front: Part? = nil
 local emitters: { { pe: ParticleEmitter, rate: number } } = {}
 local lastRateK = -1
 local windLoop: any = nil
+local lastSuspenseKey = ""
+local calmWindVol = 0 -- smoothed wind-only bed during quietUntil lulls
+local QUIET_WIND_VOL = 0.28
 local atmBase: { [Instance]: { [string]: any } } = setmetatable({}, { __mode = "k" }) :: any
 local lastAtmK = -1
 local tag: Frame? = nil
@@ -123,6 +126,20 @@ local function windDir(): Vector3
 	return Vector3.new(math.cos(a), 0, math.sin(a))
 end
 
+-- Suspense state from Store "intensity": threat 0..4 and wind-only quiet lull
+local function suspenseState(): (number, boolean)
+	local s = Store and Store.get("intensity")
+	if type(s) ~= "table" or s.state == "off" then
+		return 0, false
+	end
+	local threat = math.clamp(tonumber(s.threat) or 0, 0, 4)
+	local quiet = type(s.quietUntil) == "number"
+		and s.quietUntil > Workspace:GetServerTimeNow()
+		and s.state ~= "build"
+		and s.state ~= "breach"
+	return threat, quiet
+end
+
 -- colour grade ----------------------------------------------------------------------------------------------------------
 local function applyGrade(storm: number)
 	local g = activeBiome and GRADE[activeBiome]
@@ -149,6 +166,20 @@ local function applyGrade(storm: number)
 		sat += s.sat * storm
 		contrast += s.contrast * storm
 		bright += s.bright * storm
+	end
+	-- Subtle threat 0..4 grade escalation (keeps dark robots readable while deepening tension)
+	local threat, quiet = suspenseState()
+	if k > 0 and threat > 0 then
+		local tk = threat / 4
+		contrast += 0.07 * tk
+		sat -= 0.09 * tk
+		bright -= 0.025 * tk
+		if threat >= 3 then
+			tint = mulColor(tint, Color3.new(1, 1 - 0.03 * tk, 1 - 0.045 * tk))
+		end
+	elseif k > 0 and quiet then
+		-- eerie calm breath: slightly desaturated still air
+		sat -= 0.04
 	end
 	local e = cc :: ColorCorrectionEffect
 	e.TintColor = tint
@@ -412,11 +443,13 @@ local function refresh()
 	showTag(false)
 end
 
-local function step()
+local function step(dt: number)
 	if not activeBiome then
 		return
 	end
 	local storm = stormIntensity()
+	local threat, quiet = suspenseState()
+	local suspKey = tostring(threat) .. (if quiet then "q" else "")
 	-- particles follow the camera, upwind of it, blowing through the view
 	if box then
 		local cam = Workspace.CurrentCamera
@@ -431,8 +464,9 @@ local function step()
 			end
 		end
 	end
-	if math.abs(storm - lastRateK) > 0.02 or (storm == 0 and lastRateK ~= 0) then
+	if math.abs(storm - lastRateK) > 0.02 or (storm == 0 and lastRateK ~= 0) or suspKey ~= lastSuspenseKey then
 		lastRateK = storm
+		lastSuspenseKey = suspKey
 		setRates(storm)
 		applyGrade(storm)
 	end
@@ -440,13 +474,16 @@ local function step()
 		lastAtmK = storm
 		applyAtmosphere(storm)
 	end
-	-- wind loop: only alive while a storm blows
-	if storm > 0.01 then
+	-- wind loop: swells during storms, or holds a soft eerie wind-only bed during quietUntil lulls
+	local wantQuietWind = if quiet then QUIET_WIND_VOL elseif threat >= 3 then 0.08 + 0.04 * (threat - 2) else 0
+	calmWindVol += (wantQuietWind - calmWindVol) * (1 - math.exp(-math.min(dt or 0.016, 0.1) * 1.8))
+	local targetWind = math.max(storm * WIND_VOL, calmWindVol)
+	if targetWind > 0.015 then
 		if not windLoop and Audio and Audio.loop then
 			windLoop = Audio.loop("Wind", nil, { volume = WIND_BASE })
 		end
 		if windLoop then
-			windLoop.setVolume(storm * WIND_VOL / WIND_BASE)
+			windLoop.setVolume(targetWind / WIND_BASE)
 		end
 	elseif windLoop then
 		windLoop.stop(1)

@@ -56,9 +56,9 @@ local ROBOT_BOLT = Color3.fromRGB(255, 84, 58)
 -- clear pause. The pause counts from the end of the volley: cooldown = windup + volley time + max(atk.cooldown, pause).
 local VOLLEY = {
 	minWindup = 0.35,
-	burstMax = 2, -- shots per burst volley (Data count is capped to this)
-	burstGap = 0.22, -- seconds between the shots of a burst
-	pause = { bolt = 1.4, burst = 2.4 }, -- shortest quiet time after a volley
+	burstMax = 3, -- shots per burst volley (Rivet 3-round suppressive burst)
+	burstGap = 0.17, -- seconds between the shots of a burst
+	pause = { bolt = 1.15, burst = 1.9 }, -- shortest quiet time after a volley
 }
 -- AWARENESS reaction: stop and turn to the target for this long before the first attack after noticing it
 local NOTICE = { 0.4, 0.6 }
@@ -462,22 +462,27 @@ local function aimSpread(e: any, t: Target, from: Vector3, oldSpread: number, no
 	end
 	local aim = e.def.aim or AimDefault
 	local harsh = mode == "harsh"
+	local threat = if S.Director and S.Director.getThreat then math.clamp(S.Director.getThreat(), 0, 4) else 0
+	local speed = flat(t.vel).Magnitude
+	local stance = if S.Players and S.Players.getStance then S.Players.getStance(t.p) else "stand"
+	local exposedOpen = stance == "stand" and speed < Config.WalkSpeed * 1.02
 	e.aimShots = (e.aimShots or 0) + 1
 	local warn = aim.warnShots - (if harsh then 1 else 0)
+	if exposedOpen and (threat >= 2 or warn >= 2) then
+		warn = math.max(1, warn - 1) -- exposed in the open: still 1 readable warning tracer, then live fire
+	end
 	if e.aimShots <= warn then
 		return 0, true
 	end
-	local tighten = aim.tighten * (if harsh then AIM.harshTighten else 1)
+	local tighten = aim.tighten * (if harsh then AIM.harshTighten else 1) * (if exposedOpen then 0.72 else 1) * (1 - 0.06 * threat)
 	local k = math.clamp((now - (e.aimT0 or now)) / math.max(tighten, 0.05), 0, 1)
 	local spread = aim.base + (aim.min - aim.base) * k
 	local dist = (t.pos - from).Magnitude
 	spread *= 1 + aim.rangeMul * math.clamp((dist - AIM.rangeFrom) / AIM.rangeRef, 0, 2)
-	local speed = flat(t.vel).Magnitude
 	spread *= 1 + aim.moveMul * math.clamp(speed / Config.WalkSpeed, 0, 1)
 	if speed >= AIM.sprintAt then
 		spread *= 1 + aim.moveMul * AIM.sprintBonus
 	end
-	local stance = if S.Players and S.Players.getStance then S.Players.getStance(t.p) else "stand"
 	if stance == "prone" then
 		spread *= AIM.prone
 	elseif stance == "crouch" then
@@ -565,21 +570,39 @@ FIRE.cannon = function(e, a, atk, now)
 	local from = muzzleWorld(e)
 	local pt = a.point
 	if pt then
-		local dir = (pt - from).Unit
-		S.Projectiles.fire({
-			a = from,
-			v = dir * (atk.speed or 90),
-			style = "cannon",
-			c = Color3.fromRGB(255, 150, 50),
-			damage = atk.damage,
-			radius = atk.radius or 5,
-			knockback = 45,
-			shake = 0.8,
-			hitRadius = 1.6,
-			life = 3,
-			kind = "cannon",
-			owner = e,
-		})
+		local function fireShell(origin: Vector3, targetPt: Vector3, dmgScale: number)
+			local dir = (targetPt - origin).Unit
+			S.Projectiles.fire({
+				a = origin,
+				v = dir * (atk.speed or 90),
+				style = "cannon",
+				c = Color3.fromRGB(255, 138, 42),
+				damage = math.floor(atk.damage * dmgScale + 0.5),
+				radius = atk.radius or 5,
+				knockback = 48,
+				shake = if e.kind == "BASTION" then 1.8 else 1.5,
+				hitRadius = 1.9,
+				life = 3.2,
+				kind = "cannon",
+				heavy = true,
+				owner = e,
+			})
+		end
+		if e.kind == "BASTION" then
+			-- Bastion twin-barrel staggered heavy salvo: unmistakable heavy emplacement firepower
+			local right = rootCF(e).RightVector
+			fireShell(from - right * 1.4, pt, 0.58)
+			local tRef = targetEntry(e)
+			local secondPt = if tRef then Vector3.new(tRef.pos.X, pt.Y, tRef.pos.Z) else pt
+			task.delay(0.18, function()
+				if e.alive then
+					local f2 = muzzleWorld(e) + rootCF(e).RightVector * 1.4
+					fireShell(f2, secondPt, 0.58)
+				end
+			end)
+		else
+			fireShell(from, pt, 1)
+		end
 	end
 	e.act = nil
 end
@@ -634,10 +657,11 @@ ACTIVE.mortar = function(e, a, atk, dt, now)
 				damage = atk.damage,
 				radius = atk.radius or 7,
 				knockback = 40,
-				shake = 0.9,
-				hitRadius = 0.5,
+				shake = 2.0,
+				hitRadius = 0.7,
 				life = MORTAR_T + 1.5,
 				kind = "mortar",
+				heavy = true,
 				owner = e,
 			})
 		end
@@ -1077,7 +1101,10 @@ local function startAttack(e: any, idx: number, atk: any, now: number)
 	local cdBase = windup + atk.cooldown
 	if volley then
 		local shots = if atk.kind == "burst" then math.min(atk.count or 3, VOLLEY.burstMax) else 1
-		cdBase = windup + (shots - 1) * VOLLEY.burstGap + math.max(atk.cooldown, VOLLEY.pause[atk.kind])
+		local threat = if S.Director and S.Director.getThreat then math.clamp(S.Director.getThreat(), 0, 4) else 0
+		local suppressMul = if e.tc and e.tc.role == "suppress" then 0.88 else 1
+		local pause = math.max(atk.cooldown, VOLLEY.pause[atk.kind]) * suppressMul * (1 - 0.04 * threat)
+		cdBase = windup + (shots - 1) * VOLLEY.burstGap + pause
 	end
 	e.cd[idx] = now + cdBase * (e.cdMul or 1) * rng:NextNumber(0.9, 1.15) -- cdMul: elite SWIFT
 	e.gcd = now + windup + 0.35

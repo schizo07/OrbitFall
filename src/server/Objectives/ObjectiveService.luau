@@ -250,6 +250,34 @@ local function buildCtx(map: any, faction: string): any
 		end
 	end
 
+	function ctx.setThreat(level: number)
+		local d = S and S.Director
+		if d and d.setThreat then
+			pcall(d.setThreat, level)
+		end
+	end
+
+	function ctx.warnWave(info: any)
+		local d = S and S.Director
+		if d and d.setWaveWarning then
+			pcall(d.setWaveWarning, info)
+		end
+	end
+
+	function ctx.clearWaveWarn(id: number?)
+		local d = S and S.Director
+		if d and d.clearWaveWarning then
+			pcall(d.clearWaveWarning, id)
+		end
+	end
+
+	function ctx.beginQuietLull(dur: number?)
+		local d = S and S.Director
+		if d and d.beginQuietLull then
+			pcall(d.beginQuietLull, dur)
+		end
+	end
+
 	ctx.players = alivePlayers
 	ctx.playersNear = playersNear
 	ctx.getRoot = getRoot
@@ -399,6 +427,12 @@ local function fireMain()
 		return
 	end
 	mainFired = true
+	if S and S.Director and S.Director.clearWaveWarning then
+		pcall(S.Director.clearWaveWarning)
+	end
+	if S and S.Fx then
+		S.Fx.play("HaulLaunchEnd", {})
+	end
 	local cb = ObjectiveService.onMainComplete
 	if cb then
 		local ok, err = pcall(cb)
@@ -505,6 +539,20 @@ function ObjectiveService.stop()
 	local old = Workspace:FindFirstChild("ObjectiveObjects")
 	if old then
 		old:Destroy()
+	end
+	if S and S.Director then
+		if S.Director.clearWaveWarning then
+			pcall(S.Director.clearWaveWarning)
+		end
+		if S.Director.clearQuietLull then
+			pcall(S.Director.clearQuietLull)
+		end
+		if S.Director.setThreat then
+			pcall(S.Director.setThreat, 0)
+		end
+	end
+	if S and S.Fx then
+		S.Fx.play("HaulLaunchEnd", {})
 	end
 	if S and S.State then
 		S.State.broadcast("objectives", {})

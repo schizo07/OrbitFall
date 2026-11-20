@@ -121,6 +121,10 @@ local sourcesToOpen = 0 -- sources scheduled to open (staggered) but not open ye
 local heavyFired = false
 local breachStartedAt = 0
 local lullUntil = 0 -- no new spawns until then (a player just went down)
+local threatLevel = 0 -- mission suspense threat 0..4
+local quietLullUntil = 0 -- post-wave ambience lull (20-30 s of wind-only quiet)
+local activeWaveWarn: any = nil -- external wave warning ({ id, t0, endsAt, dir, pos })
+local relaxLullArmed = false
 local aliveSet: { [Player]: boolean } = {}
 local pendingCall: { e: any, fireAt: number, prev: number, flare: Instance? }? = nil
 local srcEvSeq = 0
@@ -611,6 +615,9 @@ local function snapshot(): any
 		faction = factionId,
 		sources = BreachSources.publicList(),
 		ev = srcLastEv,
+		threat = threatLevel,
+		quietUntil = quietLullUntil,
+		waveWarn = activeWaveWarn,
 	}
 end
 
@@ -939,6 +946,8 @@ end
 
 local function startBuild(dur: number?)
 	pendingForcedBuild = nil
+	quietLullUntil = 0
+	relaxLullArmed = false
 	iBearing = chooseBearing(playerPositions(), lastBearing)
 	setPhase("build", dur or randIn(IT.Build))
 	nextPatrol = math.min(nextPatrol, now() + 2) -- the field fills up: one more patrol right away
@@ -1022,6 +1031,7 @@ end
 local nextTrim = 0
 local function startRelax()
 	lastBreachEnd = now()
+	relaxLullArmed = true
 	setPhase("relax", randIn(IT.Relax))
 	trimStragglers()
 	nextTrim = now() + IT.Relax.trimEvery
@@ -1168,6 +1178,74 @@ function Director.endExtractHold()
 	end
 end
 
+function Director.getThreat(): number
+	return threatLevel
+end
+
+function Director.setThreat(level: number)
+	local clamped = math.clamp(math.floor((tonumber(level) or 0) + 0.5), 0, 4)
+	if clamped ~= threatLevel then
+		threatLevel = clamped
+		if running then
+			broadcastIntensity()
+		end
+	end
+end
+
+function Director.setWaveWarning(info: any)
+	if not running or type(info) ~= "table" then
+		return
+	end
+	activeWaveWarn = info
+	quietLullUntil = 0
+	if istate == "calm" and type(info.endsAt) == "number" then
+		iEndsAt = math.max(iEndsAt, info.endsAt + 4)
+	end
+	broadcastIntensity()
+end
+
+function Director.clearWaveWarning(id: number?)
+	if not activeWaveWarn then
+		return
+	end
+	if id ~= nil and activeWaveWarn.id ~= id then
+		return
+	end
+	activeWaveWarn = nil
+	if running then
+		broadcastIntensity()
+	end
+end
+
+function Director.beginQuietLull(dur: number?)
+	if not running or extractHold then
+		return
+	end
+	local t = now()
+	if activeWaveWarn and t < (activeWaveWarn.endsAt or 0) then
+		return
+	end
+	if istate == "build" or istate == "breach" then
+		return
+	end
+	local d = math.clamp(tonumber(dur) or rng:NextNumber(20, 30), 20, 30)
+	quietLullUntil = math.max(quietLullUntil, t + d)
+	if istate == "calm" and not pendingForcedBuild then
+		iEndsAt = math.max(iEndsAt, quietLullUntil)
+	end
+	broadcastIntensity()
+end
+
+function Director.clearQuietLull()
+	if quietLullUntil <= 0 then
+		return
+	end
+	quietLullUntil = 0
+	if running then
+		broadcastIntensity()
+	end
+end
+
 local function nearFraction(): number
 	local ps = playerPositions()
 	local all = if S.Enemies then S.Enemies.getAll() else {}
@@ -1201,6 +1279,8 @@ function Director.getIntensity(): any
 		sources = BreachSources.count(),
 		legacyWaves = legacyWaves,
 		lull = math.max(0, math.floor((lullUntil - t) * 10) / 10),
+		quietLeft = math.max(0, math.floor((quietLullUntil - t) * 10) / 10),
+		threat = threatLevel,
 		near = math.floor(nearFraction() * 100) / 100,
 	}
 end
@@ -1268,7 +1348,16 @@ local function intensityTick()
 		extractTick(t)
 		return
 	end
+	if activeWaveWarn and t > (activeWaveWarn.endsAt or 0) + 2 then
+		activeWaveWarn = nil
+		broadcastIntensity()
+	end
 	if istate == "calm" then
+		if activeWaveWarn and t < (activeWaveWarn.endsAt or 0) + 4 then
+			iEndsAt = math.max(iEndsAt, (activeWaveWarn.endsAt or 0) + 4)
+		elseif t < quietLullUntil and not pendingForcedBuild and not timerCritical then
+			iEndsAt = math.max(iEndsAt, quietLullUntil)
+		end
 		if t >= iEndsAt then
 			local forced = pendingForcedBuild
 			startBuild(if forced then math.clamp(forced, IT.Build.min, IT.Build.max) else nil)
@@ -1283,7 +1372,26 @@ local function intensityTick()
 			startRelax()
 		end
 	elseif istate == "relax" then
+		if relaxLullArmed and S.Enemies and S.Enemies.getAll then
+			local activeHostiles = 0
+			for _, e in S.Enemies.getAll() do
+				if e.alive and not e.garrison and (e.aggro or e.awareState == "alert") then
+					activeHostiles += 1
+					if activeHostiles > 1 then
+						break
+					end
+				end
+			end
+			if activeHostiles <= 1 then
+				relaxLullArmed = false
+				Director.beginQuietLull(rng:NextNumber(20, 30))
+			end
+		end
 		if t >= iEndsAt then
+			if relaxLullArmed then
+				relaxLullArmed = false
+				Director.beginQuietLull(rng:NextNumber(20, 30))
+			end
 			startCalm()
 		elseif t >= nextTrim then
 			nextTrim = t + IT.Relax.trimEvery
@@ -1656,7 +1764,7 @@ local function loop(myGen: number)
 			local P = IT.Patrol
 			local interval = (if istate == "build" then P.buildInterval else P.calmInterval) * ENC.PatrolIntervalMult / pressure
 			nextPatrol = t + interval * rng:NextNumber(0.85, 1.15)
-			if (istate == "calm" or istate == "build") and not extractHold then
+			if (istate == "calm" or istate == "build") and not extractHold and t >= quietLullUntil then
 				guarded("patrol", patrol, t)
 			end
 		end
@@ -1780,6 +1888,10 @@ function Director.start(m: any, faction: string, diff: number, opts: any?)
 	sourcesToOpen = 0
 	heavyFired = false
 	lullUntil = 0
+	threatLevel = 0
+	quietLullUntil = 0
+	activeWaveWarn = nil
+	relaxLullArmed = false
 	aliveSet = {}
 	pendingCall = nil
 	srcEvSeq = 0
@@ -1872,6 +1984,10 @@ function Director.stop(clearEnemies: boolean?)
 	istate = "calm"
 	extractHold = nil
 	queuedForce = nil
+	threatLevel = 0
+	quietLullUntil = 0
+	activeWaveWarn = nil
+	relaxLullArmed = false
 	if wasRunning then
 		broadcastIntensity() -- state "off": clients drop the strip / music swell
 	end
