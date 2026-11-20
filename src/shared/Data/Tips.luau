@@ -154,9 +154,9 @@ Tips.list = {
 		trigger = "cell",
 		priority = 2,
 		times = 1,
-		kb = "Carrying a core cell: sidearm only, no sprint. Take it to the marker. E or G drops it.",
-		pad = "Carrying a core cell: sidearm only, no sprint. Take it to the marker. R1 drops it.",
-		touch = "Carrying a core cell: sidearm only, no sprint. Take it to the marker. GRENADE drops it.",
+		kb = "Carrying a core cell: hip-fire only (1 cell), no weapons at 2 cells. Take it to the lifter. E or G drops it.",
+		pad = "Carrying a core cell: hip-fire only (1 cell), no weapons at 2 cells. Take it to the lifter. R1 drops it.",
+		touch = "Carrying a core cell: hip-fire only (1 cell), no weapons at 2 cells. Take it to the lifter. GRENADE drops it.",
 	},
 	{
 		id = "side",

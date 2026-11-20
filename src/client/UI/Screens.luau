@@ -1223,7 +1223,7 @@ local FACTIONS = {
 local OBJECTIVES = {
 	{ id = "MISSILE", name = "Missile Launch", shape = "up", desc = "Find the codes, power the generator, set the trajectory, open the silo, launch." },
 	{ id = "UPLINK", name = "Uplink Relay", shape = "reticle", desc = "Find the relay, plug in the uplink, defend the upload, retrieve the data core." },
-	{ id = "HAUL", name = "Recover Core Cells", shape = "square", desc = "Carry 5-9 core cells from guarded caches to the cargo lifter. Carriers can't shoot." },
+	{ id = "HAUL", name = "Recover Core Cells", shape = "square", desc = "Carry 5-9 core cells from guarded caches to the cargo lifter. One cell allows hip-fire; two cells take both hands." },
 }
 local DIFFICULTY = { "Cadet", "Trooper", "Veteran", "Elite", "Mayhem" }
 
