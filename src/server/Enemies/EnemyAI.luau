@@ -2049,22 +2049,35 @@ local function think(e: any, now: number)
 end
 
 -- Per-frame update -------------------------------------------------------------------
-local function snapGround(e: any, dt: number, force: boolean)
+-- Vertical error the smoothed snap may leave behind: it can hover a little above the terrain but never sink into it.
+-- Without the clamp a steep slope outruns the smoothing (the gap per snap is slope * snap distance) and the model
+-- alternately floats and clips through the surface.
+local SNAP_RATE = 26 -- 1/s: smoothing speed, applied to the real time since the last snap (not to one frame's dt)
+local SNAP_HOVER = 0.5 -- studs above the terrain
+local SNAP_SINK = 0.1 -- studs below the terrain
+
+-- exact: the model is written on this frame at the throttled rate (far from every player), so put it right on the surface
+local function snapGround(e: any, dt: number, force: boolean, exact: boolean)
 	local moved = flat(e.pos - e.lastSnap).Magnitude
 	local coarse = e.fodder or perfOn -- PERF A/B: non-fodder snap as rarely as PERF_SNAP and close the gap like fodder
-	if not force and moved < (if perfOn and not e.fodder then PERF_SNAP else e.snapDist) then
+	local acc = (e.snapAcc or 0) + dt
+	e.snapAcc = acc
+	if not force and not (exact and moved > 0.02) and moved < (if perfOn and not e.fodder then PERF_SNAP else e.snapDist) then
 		return
 	end
+	e.snapAcc = 0
 	e.lastSnap = e.pos
 	local origin = Vector3.new(e.pos.X, e.pos.Y + 8 + e.def.size * 0.5, e.pos.Z)
 	local r = workspace:Raycast(origin, Vector3.new(0, -70, 0), groundParams)
 	if r then
 		local gy = r.Position.Y
-		if force or math.abs(gy - e.pos.Y) > 6 then
+		if force or exact or math.abs(gy - e.pos.Y) > 6 then
 			e.pos = Vector3.new(e.pos.X, gy, e.pos.Z)
 		else
 			-- fodder snaps less often, so each snap closes more of the gap
-			e.pos = Vector3.new(e.pos.X, e.pos.Y + (gy - e.pos.Y) * (if coarse then 0.6 else math.min(1, dt * 14)), e.pos.Z)
+			local k = if coarse then 0.6 else 1 - math.exp(-SNAP_RATE * math.min(acc, 0.1))
+			local y = e.pos.Y + (gy - e.pos.Y) * k
+			e.pos = Vector3.new(e.pos.X, math.clamp(y, gy - SNAP_SINK, gy + SNAP_HOVER), e.pos.Z)
 		end
 	end
 end
@@ -2155,7 +2168,7 @@ local function update(e: any, dt: number, now: number)
 		end
 	end
 
-	snapGround(e, dt, e.needSnap)
+	snapGround(e, dt, e.needSnap, e.close == false and not e.skipMove)
 	e.needSnap = false
 
 	-- windup pose for big walkers
@@ -2172,7 +2185,8 @@ local function update(e: any, dt: number, now: number)
 		e.animT += dt * math.min(speed / def.size * 1.6, 16)
 	end
 	local move = math.min(speed / (def.speed * 0.7), 1.3)
-	local bobY = if moving then math.abs(math.sin(e.animT)) * e.rig.bob * math.min(move, 1) else 0
+	-- no walk bob on throttled enemies: sampled at 8-20 Hz the bob aliases into random vertical hops against the terrain
+	local bobY = if moving and e.close ~= false then math.abs(math.sin(e.animT)) * e.rig.bob * math.min(move, 1) else 0
 	local pos = e.pos + Vector3.new(0, bobY + e.air, 0)
 	local pivotYaw = if def.static then (e.baseYaw or e.yaw) else e.yaw -- emplacement body never turns
 	local cf = CFrame.new(pos) * CFrame.Angles(0, pivotYaw, 0)

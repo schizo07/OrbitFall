@@ -819,7 +819,7 @@ end
 -- Breach sources: eruption, crack decal, collapse ---------------------------------------------------------------------
 local CRACK_PAL: { [string]: { dark: Color3, glow: Color3 } } = {
 	BROOD = { dark = C3(34, 26, 20), glow = C3(150, 235, 90) },
-	COG = { dark = C3(20, 20, 22), glow = C3(255, 150, 60) },
+	COG = { dark = C3(20, 20, 22), glow = C3(190, 74, 26) },
 	LUMEN = { dark = C3(30, 24, 44), glow = C3(150, 125, 255) },
 }
 
@@ -869,7 +869,7 @@ local function eruption(g: Vector3, faction: string, strength: number, palette: 
 	if d < 220 then
 		Fx.debris(g + V3(0, 1, 0), {
 			n = math.floor(14 * strength),
-			style = "rock",
+			style = if faction == "COG" then "scrap" else "rock",
 			palette = palette,
 			speed = 46,
 			up = 1.8,
@@ -882,7 +882,7 @@ local function eruption(g: Vector3, faction: string, strength: number, palette: 
 	end
 end
 
-type SourceRec = { f: string, p: Vector3, g: Vector3, ready: boolean, crack: any?, pal: { Color3 }? }
+type SourceRec = { f: string, p: Vector3, g: Vector3, n: Vector3?, ready: boolean, crack: any?, pal: { Color3 }? }
 local sources: { [number]: SourceRec } = {}
 local firstSnapshot = true
 
@@ -890,7 +890,9 @@ local function onSourceOpen(id: number, rec: SourceRec)
 	local g, n, res = ground(rec.p, 4, 12)
 	rec.g = g or rec.p
 	rec.pal = groundPalette(res)
-	if g and n and n.Y > 0.55 and dist(g) < 500 then
+	rec.n = n
+	-- a COG pod scars the ground only once it has hit (see onSourceReady)
+	if rec.f ~= "COG" and g and n and n.Y > 0.55 and dist(g) < 500 then
 		rec.crack = startCrack(g, n, rec.f)
 	end
 	if rec.f == "BROOD" then
@@ -916,6 +918,10 @@ local function onSourceReady(id: number, rec: SourceRec)
 		snd("Breach", rec.g, { volume = 0.8, pitch = 0.9, priority = 4 })
 		snd("ChargerRoar", rec.g, { volume = 0.4, pitch = 0.75, priority = 3 }) -- the low howl
 	elseif rec.f == "COG" then
+		local n = rec.n
+		if not rec.crack and n and n.Y > 0.55 and dist(rec.g) < 500 then
+			rec.crack = startCrack(rec.g, n, rec.f)
+		end
 		eruption(rec.g, rec.f, 1.2, rec.pal)
 		snd("ExplosionSmall", rec.g, { volume = 0.8, pitch = 0.7, priority = 4 })
 		snd("Breach", rec.g, { volume = 0.5, pitch = 0.8, priority = 3 })
