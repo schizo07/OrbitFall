@@ -1,4 +1,5 @@
 -- Supply Drop: a pod crushes whatever it lands on, then opens into a resupply crate.
+local Players = game:GetService("Players")
 local ModelShare = require(script.Parent.Parent.ModelShare)
 
 local POD_FALL = 1.6
@@ -143,10 +144,13 @@ return function(ctx)
 		model:Destroy()
 	end)
 
-	local maxTakes = if type(prm.players) == "number" and prm.players > 0 then math.min(prm.players, MAX_TAKES) else MAX_TAKES
+	local playerCap = if type(prm.players) == "number" and prm.players > 0 then math.min(prm.players, MAX_TAKES) else MAX_TAKES
+	local maxTakes = math.clamp(#Players:GetPlayers(), 1, playerCap)
 	local remaining = maxTakes
 	local taken: { [number]: boolean } = {}
 	local closed = false
+	local conn: RBXScriptConnection? = nil
+	local removingConn: RBXScriptConnection? = nil
 
 	local gui = Instance.new("BillboardGui")
 	gui.Size = UDim2.fromOffset(150, 34)
@@ -197,6 +201,19 @@ return function(ctx)
 		end
 	end
 
+	local function allActivePlayersTook(): boolean
+		local active = Players:GetPlayers()
+		if #active == 0 then
+			return false
+		end
+		for _, p in active do
+			if not taken[p.UserId] then
+				return false
+			end
+		end
+		return true
+	end
+
 	local function closePod()
 		if closed then
 			return
@@ -206,31 +223,56 @@ return function(ctx)
 		prompt.ActionText = "EMPTY"
 		prompt.ObjectText = "Supply Crate (EMPTY)"
 		label.Text = "EMPTY"
+		if conn then
+			conn:Disconnect()
+			conn = nil
+		end
+		if removingConn then
+			removingConn:Disconnect()
+			removingConn = nil
+		end
 		dimLights()
 	end
 
 	refreshState()
 
-	local conn = prompt.Triggered:Connect(function(player)
+	conn = prompt.Triggered:Connect(function(player)
 		if closed or remaining <= 0 or not player or not S.Players.isAlive(player) then
 			return
 		end
-		if taken[player.UserId] then
+		local uid = player.UserId
+		if taken[uid] then
 			S.State.notify(player, "You already took supplies from this crate", nil, "callin")
 			return
 		end
-		taken[player.UserId] = true
+		taken[uid] = true
 		remaining -= 1
 		S.Players.refill(player, { grenades = prm.grenades })
 		S.Fx.to(player, "Sound", { k = "CrateOpen", p = body.Position })
 		S.State.notify(player, "Resupplied", Color3.fromRGB(62, 230, 200), "callin")
 		refreshState()
-		if remaining <= 0 then
+		if remaining <= 0 or allActivePlayersTook() then
 			closePod()
 		end
 	end)
+	removingConn = Players.PlayerRemoving:Connect(function()
+		if not closed and next(taken) ~= nil then
+			task.defer(function()
+				if not closed and (remaining <= 0 or allActivePlayersTook()) then
+					closePod()
+				end
+			end)
+		end
+	end)
 	ctx.onStop(function()
-		conn:Disconnect()
+		if conn then
+			conn:Disconnect()
+			conn = nil
+		end
+		if removingConn then
+			removingConn:Disconnect()
+			removingConn = nil
+		end
 	end)
 
 	local t0 = os.clock()

@@ -1489,27 +1489,26 @@ end
 local crystalCount = 0
 
 local function crystals(parent: Instance, x: number, z: number, s: number, color: Color3?, unlit: boolean?)
+	if biomeName == "desert" then
+		return
+	end
 	local c = color or B.crystal
 	if s <= 4 then -- small clusters shrink; the giant landmark crystals keep their scale
 		s *= rng:NextNumber(0.6, 1.0)
 	end
 	crystalCount += 1
-	-- desert crystals are dull mineral (no Neon, no light): the glowing white clusters fought the backlit sun
-	local dull = biomeName == "desert"
-	local lit = crystalCount % 3 == 1 and not unlit and not dull -- a small light on ~1 in 3 clusters
+	local lit = crystalCount % 3 == 1 and not unlit -- a small light on ~1 in 3 clusters
 	local m, skipped = placeMesh(parent, "env_crystal_cluster", x, z, {
 		scale = s, collide = false, tint = rockTint(), material = B.rockMat, align = 0.6,
 		paint = function(p)
 			if p:GetAttribute("Role") == "weak" then
 				p.Color = c
-				p.Material = if dull then Enum.Material.Slate else Enum.Material.Neon
-				p.Transparency = if dull then 0 else 0.15
+				p.Material = Enum.Material.Neon
+				p.Transparency = 0.15
 				if lit then
 					lit = false
 					pointLight(p, c, 10, 0.8)
 				end
-			elseif dull then
-				keepMat(p)
 			end
 		end,
 	})
@@ -1518,7 +1517,7 @@ local function crystals(parent: Instance, x: number, z: number, s: number, color
 		for _ = 1, rng:NextInteger(3, 5) do
 			local h = rng:NextNumber(3, 7) * s
 			local p = onGround(x + rng:NextNumber(-3, 3), z + rng:NextNumber(-3, 3), h / 2 - 0.4)
-			local cp = part(parent, Vector3.new(1.2, h, 1.2), CFrame.new(p) * CFrame.Angles(math.rad(rng:NextNumber(-20, 20)), math.rad(rng:NextNumber(0, 90)), math.rad(rng:NextNumber(-20, 20))), c, if dull then Enum.Material.Slate else Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = if dull then 0 else 0.15 })
+			local cp = part(parent, Vector3.new(1.2, h, 1.2), CFrame.new(p) * CFrame.Angles(math.rad(rng:NextNumber(-20, 20)), math.rad(rng:NextNumber(0, 90)), math.rad(rng:NextNumber(-20, 20))), c, Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = 0.15 })
 			if first and lit then
 				first = false
 				pointLight(cp, c, 10, 0.8)
@@ -3965,10 +3964,12 @@ function MapBuilder.build(faction: string?, biome: string?): any
 			spire(props, x, z, rng:NextNumber(0.9, 2.1))
 		end
 	end
-	-- crystal clusters
-	for _ = 1, 12 do
-		local x, z = wildSpot(40, 18, 258)
-		crystals(props, x, z, rng:NextNumber(0.8, 2.0))
+	-- crystal clusters (crystal biome only)
+	if biomeName == "crystal" then
+		for _ = 1, 12 do
+			local x, z = wildSpot(40, 18, 258)
+			crystals(props, x, z, rng:NextNumber(0.8, 2.0))
+		end
 	end
 	-- broken wall lines (round stone drums, never slabs)
 	for _ = 1, 6 do

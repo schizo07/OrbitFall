@@ -457,8 +457,19 @@ function WeaponService.spawnAmmoPack(parent: Instance, cf: CFrame)
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = box
 	box.Parent = parent
-	prompt.Triggered:Connect(function(pl)
-		if box.Parent and takePack(pl) then
+	local taken = false
+	local conn: RBXScriptConnection? = nil
+	conn = prompt.Triggered:Connect(function(pl)
+		if taken or not box.Parent then
+			return
+		end
+		if takePack(pl) then
+			taken = true
+			prompt.Enabled = false
+			if conn then
+				conn:Disconnect()
+				conn = nil
+			end
 			box:Destroy()
 		end
 	end)
