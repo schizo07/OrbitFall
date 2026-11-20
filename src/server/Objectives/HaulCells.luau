@@ -257,9 +257,10 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			p.Anchored = false
 			p.Massless = true
 			p.CanTouch = false
-			local w = Instance.new("WeldConstraint")
+			local w = Instance.new("Weld")
 			w.Part0 = case
 			w.Part1 = p
+			w.C0 = case.CFrame:ToObjectSpace(p.CFrame)
 			w.Parent = p
 			table.insert(parts, p)
 		end
@@ -841,6 +842,10 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	end
 
 	local function completeAttach(cell: Cell, p: Player, torso: BasePart, fromCache: boolean)
+		if cell.weld then
+			cell.weld:Destroy()
+			cell.weld = nil
+		end
 		local list = carriers[p]
 		if not list then
 			list = {}
