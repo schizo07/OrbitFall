@@ -13,6 +13,11 @@
 --   done    : N/N -> launch countdown (LAUNCH_SECONDS), then the step completes, the lifter launches, onComplete() (the
 --             Mission goes to Extract).
 -- Callouts go through the Notify remote with kind "comms" as "<name>: <line>".
+-- Volatile core cells: 2-3 EXTRA amber cells (never part of the required N) rest on cradles along the approaches to the
+-- cell places. A trooper can carry one like any cell and load it (counts toward [k/N], overcharge flare, shorter launch
+-- hold), or shoot / blast it while it sits on its cradle or on the ground: 0.65 s overload strobe, then an improvised
+-- EMP + heat blast. A carried (or loaded) volatile cell is never shootable, so nothing detonates in a trooper's hands.
+-- Cargo lifter spectacle: every load plays clamp-down -> steam + escalating deck -> sky flare (see loadSequence).
 -- Receives `ctx` from ObjectiveService; returns a controller { entry, stop, drop, stepsDone, debugSolve }.
 
 local Players = game:GetService("Players")
@@ -21,6 +26,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Carry = require(Shared.Carry)
+local Net = require(Shared.Net)
 local SetPieces = require(script.Parent.SetPieces)
 local HaulTwists = require(script.Parent.HaulTwists)
 local HaulEncounters = require(script.Parent.HaulEncounters)
@@ -44,6 +50,25 @@ local STEP_FMT = "Load cells into the cargo lifter [%d/%d]"
 local CHARGE_FMT = "LIFTER CHARGING %d/%d"
 local LAUNCH_FMT = "Defend the cargo lifter: climbing %d s"
 local LOG_AMBER = Color3.fromRGB(255, 190, 65)
+
+-- cargo lifter load sequence timing (s): the cell slides into its slot, the clamps slam shut over it, then the climb waits
+local LOAD_SLIDE = 0.45
+local CLAMP_SECONDS = 0.14
+local CLIMB_DELAY = 1.05 -- final cell: the climb tween starts after slide + clamp + settle, so no tween ever overlaps
+
+-- volatile core cells
+local VOLATILE = Color3.fromRGB(255, 140, 26) -- #FF8C1A
+local VOLATILE_HOT = Color3.fromRGB(255, 232, 170)
+local VOLATILE_HP = 40 -- two hits from any weapon (or one big one) set it off
+local VOLATILE_OVERLOAD = 0.65 -- s of rising whine + strobe before the blast
+local VOLATILE_BLAST = { radius = 22, core = 8, damage = 260, ap = 3, knock = 34 }
+local VOLATILE_EMP_RADIUS = 32
+local VOLATILE_STUN = 4.5 -- s COG are stunned
+local VOLATILE_SLOW = 0.55 -- Brood (and behemoths) slow magnitude
+local VOLATILE_SLOW_TIME = 6
+local VOLATILE_LAUNCH_BONUS = 4 -- s shaved off the launch hold per volatile cell loaded
+local VOLATILE_MAX_BONUS = 12
+local THRUSTER = Color3.fromRGB(255, 150, 60)
 
 local DARK = Color3.fromRGB(40, 44, 52)
 local STEEL = Color3.fromRGB(112, 118, 128)
@@ -81,10 +106,21 @@ type Cell = {
 	marker: BillboardGui?,
 	above: BillboardGui?,
 	everTaken: boolean,
+	-- volatile core cells (extra amber cells that can be shot / blasted while resting)
+	volatile: boolean?,
+	hitbox: Part?,
+	core: Part?,
+	glow: PointLight?,
+	sparks: ParticleEmitter?,
+	tag: BillboardGui?,
+	hp: number?,
+	hits: number?,
+	detonating: boolean?,
+	igniter: Player?,
 }
 
 -- small world marker: a rotated-square "cell" glyph plus an optional caption
-local function billboard(adornee: BasePart, name: string, caption: string?, offset: Vector3, maxDist: number, glyph: number): BillboardGui
+local function billboard(adornee: BasePart, name: string, caption: string?, offset: Vector3, maxDist: number, glyph: number, tint: Color3?): BillboardGui
 	local bb = Instance.new("BillboardGui")
 	bb.Name = name
 	bb.AlwaysOnTop = true
@@ -99,7 +135,7 @@ local function billboard(adornee: BasePart, name: string, caption: string?, offs
 	d.Position = UDim2.new(0.5, 0, 0, 4)
 	d.Size = UDim2.fromOffset(glyph, glyph)
 	d.Rotation = 45
-	d.BackgroundColor3 = Carry.COLOR
+	d.BackgroundColor3 = tint or Carry.COLOR
 	d.BorderSizePixel = 0
 	local st = Instance.new("UIStroke")
 	st.Color = Color3.new(0, 0, 0)
@@ -116,7 +152,7 @@ local function billboard(adornee: BasePart, name: string, caption: string?, offs
 		l.Size = UDim2.new(1, 0, 0, 14)
 		l.Font = Enum.Font.GothamBold
 		l.TextSize = 12
-		l.TextColor3 = Carry.COLOR
+		l.TextColor3 = tint or Carry.COLOR
 		l.TextStrokeTransparency = 0.4
 		l.Text = caption
 		l.Parent = bb
@@ -128,6 +164,7 @@ end
 function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	local S = ctx.S
 	local map = ctx.map
+	local hitConfirmEv = Net.event("HitConfirm")
 	local root = Instance.new("Folder")
 	root.Name = "Haul"
 	root.Parent = ctx.folder
@@ -150,6 +187,8 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	local delivered = 0
 
 	local cells: { Cell } = {}
+	local volatiles: { Cell } = {} -- extra amber cells still in play (on a cradle, dropped or carried); never counted in `total`
+	local launchBonus = 0 -- s shaved off the launch hold by loaded volatile cells
 	local carriers: { [Player]: { Cell } } = {}
 	local picking: { [Player]: number } = {}
 	local lastPos: { [Player]: Vector3 } = {}
@@ -306,8 +345,210 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		return bedCF * CFrame.new((col - 1) * 2.2, 0.15 + Carry.SIZE.Y / 2, (row - 1) * 2.2)
 	end
 
+	-- ============================================================ hydraulic cargo lifter spectacle
+	-- Every part that moves goes through `glide`, which remembers the part's goal CFrame. Before the climb (and the final
+	-- blast-off) `settleGlides` cancels whatever tween is still running and pins the part to its goal, so two tweens can
+	-- never fight over one CFrame (a loaded cell would otherwise be left floating beside the climbing bed).
+	local goalCF: { [BasePart]: CFrame } = {}
+	local tweenOf: { [BasePart]: Tween } = {}
+	local function glide(part: BasePart, secs: number, cf: CFrame, style: Enum.EasingStyle?, dir: Enum.EasingDirection?)
+		local old = tweenOf[part]
+		if old then
+			old:Cancel()
+		end
+		goalCF[part] = cf
+		local tw = ctx.tween(part, secs, { CFrame = cf }, style, dir)
+		tweenOf[part] = tw
+		tw.Completed:Connect(function()
+			if tweenOf[part] == tw then
+				tweenOf[part] = nil
+			end
+		end)
+	end
+	local function settleGlides()
+		for part, tw in table.clone(tweenOf) do
+			tw:Cancel()
+			local g = goalCF[part]
+			if g and part.Parent then
+				part.CFrame = g
+			end
+		end
+		table.clear(tweenOf)
+	end
+
+	local function newBurst(name: string, rate: number): ParticleEmitter
+		local em = Instance.new("ParticleEmitter")
+		em.Name = name
+		em.Rate = rate
+		em.Enabled = false
+		return em
+	end
+
+	-- the bed's rim strips are bedParts[2..5] right now (the hazard edges); they climb from hazard yellow to cyan
+	local rimStrips: { BasePart } = {}
+	for i = 2, #bedParts do
+		table.insert(rimStrips, bedParts[i])
+	end
+	local deckLight = ctx.light(bed, Carry.COLOR, 12, 0.35)
+	deckLight.Name = "DeckGlow"
+
+	-- four corner steam nozzles on the bed
+	local steamJets: { ParticleEmitter } = {}
+	for _, c in { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } } do
+		local outward = plaza:VectorToWorldSpace(Vector3.new(c[1], 0, c[2]).Unit)
+		local nz = ctx.part(lifter, Vector3.new(0.7, 0.6, 0.7), bedCF * CFrame.new(c[1] * 3.5, 0.42, c[2] * 3.5), DARK, Enum.Material.Metal, { Name = "SteamNozzle", CanCollide = false, CastShadow = false })
+		local jet = newBurst("SteamJet", 0)
+		jet.Texture = TEX_SMOKE
+		jet.Lifetime = NumberRange.new(0.7, 1.2)
+		jet.Speed = NumberRange.new(14, 22)
+		jet.SpreadAngle = Vector2.new(20, 20)
+		jet.EmissionDirection = Enum.NormalId.Top
+		jet.Acceleration = outward * 7 + Vector3.new(0, 3, 0)
+		jet.Drag = 3
+		jet.Rotation = NumberRange.new(0, 360)
+		jet.RotSpeed = NumberRange.new(-60, 60)
+		jet.LightEmission = 0.15
+		jet.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 3.4) })
+		jet.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) })
+		jet.Color = ColorSequence.new(Color3.fromRGB(235, 244, 252))
+		jet.Parent = nz
+		table.insert(steamJets, jet)
+		table.insert(bedParts, nz)
+	end
+
+	-- one pair of hydraulic clamp bars per bed slot, built when the slot is first used (open until a cell is loaded)
+	type Clamp = { part: Part, open: CFrame, shut: CFrame, spark: ParticleEmitter }
+	local clampSets: { [number]: { Clamp } } = {}
+	local function ensureClamps(idx: number): { Clamp }
+		local existing = clampSets[idx]
+		if existing then
+			return existing
+		end
+		local set: { Clamp } = {}
+		local slot = bedSlot(idx)
+		for _, sz in { -1, 1 } do
+			local shut = slot * CFrame.new(0, Carry.SIZE.Y / 2 - 0.14, sz * (Carry.SIZE.Z / 2 + 0.2))
+			local open = slot * CFrame.new(0, Carry.SIZE.Y / 2 + 1.25, sz * (Carry.SIZE.Z / 2 + 1.05)) * CFrame.Angles(sz * math.rad(28), 0, 0)
+			local bar = ctx.part(lifter, Vector3.new(Carry.SIZE.X + 0.7, 0.62, 0.34), open, HAZARD, Enum.Material.Metal, { Name = "ClampBar", CanCollide = false, CastShadow = false })
+			local spark = newBurst("ClampSparks", 0)
+			spark.Lifetime = NumberRange.new(0.2, 0.45)
+			spark.Speed = NumberRange.new(9, 18)
+			spark.SpreadAngle = Vector2.new(70, 70)
+			spark.EmissionDirection = Enum.NormalId.Top
+			spark.Acceleration = Vector3.new(0, -26, 0)
+			spark.LightEmission = 1
+			spark.Color = ColorSequence.new(Color3.fromRGB(255, 226, 150), Color3.fromRGB(255, 120, 30))
+			spark.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.28), NumberSequenceKeypoint.new(1, 0) })
+			spark.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
+			spark.Parent = bar
+			goalCF[bar] = open
+			table.insert(bedParts, bar)
+			table.insert(set, { part = bar, open = open, shut = shut, spark = spark })
+		end
+		clampSets[idx] = set
+		return set
+	end
+
+	-- deck state after `n` cells: rim strips, status beacons and the deck light all escalate with the count
+	local function updateDeck(n: number)
+		local frac = math.clamp(n / math.max(total, 1), 0, 1)
+		local rim = HAZARD:Lerp(Carry.COLOR, frac)
+		for _, strip in rimStrips do
+			if strip.Parent then
+				strip.Color = rim
+				strip.Material = if frac >= 0.5 then Enum.Material.Neon else Enum.Material.SmoothPlastic
+			end
+		end
+		if not launchAlarmOn then
+			local lit = math.ceil(frac * #alarmCaps)
+			for i, cap in alarmCaps do
+				if cap.Parent then
+					local on = i <= lit
+					cap.Color = if on then Carry.COLOR else Color3.fromRGB(58, 30, 30)
+					cap.Material = if on then Enum.Material.Neon else Enum.Material.SmoothPlastic
+				end
+			end
+		end
+		deckLight.Range = 12 + 12 * frac
+		deckLight.Brightness = 0.35 + 1.5 * frac
+	end
+
+	-- a crisp light pillar from the lifter toward orbit that fades out
+	local function skyFlare(color: Color3, width: number, life: number, delaySecs: number?)
+		task.delay(delaySecs or 0, function()
+			if not alive or not ctx.alive() then
+				return
+			end
+			local h = 340
+			local f = ctx.glow(root, Vector3.new(width, h, width), CFrame.new(liftPos + Vector3.new(0, h / 2, 0)), color, { Name = "OrbitFlare", Transparency = 0.1, CastShadow = false })
+			ctx.tween(f, life, { Transparency = 1, Size = Vector3.new(width * 0.2, h, width * 0.2) }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			task.delay(life + 0.1, function()
+				if f.Parent then
+					f:Destroy()
+				end
+			end)
+		end)
+	end
+
+	-- the 3-beat load sequence: 1 clamp-down (sparks, clank, camera thump), 2 steam jets + deck escalation, 3 sky flare
+	local function loadSequence(idx: number, cell: Cell)
+		local clamps = ensureClamps(idx)
+		local volatile = cell.volatile == true
+		local final = idx >= total
+		task.delay(LOAD_SLIDE - 0.05, function()
+			if not alive or not ctx.alive() then
+				return
+			end
+			for _, c in clamps do
+				if c.part.Parent then
+					glide(c.part, CLAMP_SECONDS, c.shut, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+				end
+			end
+			task.delay(CLAMP_SECONDS, function()
+				if not alive or not ctx.alive() then
+					return
+				end
+				-- beat 1: the clamps hit
+				for _, c in clamps do
+					if c.spark.Parent then
+						c.spark:Emit(12)
+					end
+				end
+				ctx.sound("HitMetal", liftPos)
+				ctx.sound("PodImpact", liftPos)
+				ctx.fx("Shake", { p = liftPos, mag = if final then 0.85 else 0.55, r = 60 })
+				-- beat 2: pressurised steam, deck flashes up to its new level
+				for _, jet in steamJets do
+					if jet.Parent then
+						jet:Emit(if final then 26 else 16)
+					end
+				end
+				ctx.sound("GasHiss", liftPos)
+				if idx >= 2 then
+					ctx.sound("LanceHum", liftPos)
+				end
+				deckLight.Brightness = 3.4
+				ctx.tween(deckLight, 0.7, { Brightness = 0.35 + 1.5 * math.clamp(idx / math.max(total, 1), 0, 1) }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+				-- beat 3: sky flare (the final cell's double-pulse ignition is fired by beginLaunch)
+				task.delay(0.18, function()
+					if not alive or not ctx.alive() or final then
+						return
+					end
+					if volatile then
+						skyFlare(VOLATILE, 3.6, 1.0)
+						skyFlare(Carry.COLOR, 2.0, 1.1, 0.12)
+						ctx.fx("Shockwave", { p = liftPos, r = 22 })
+					else
+						skyFlare(Carry.COLOR, 2.4, 0.8)
+					end
+					ctx.sound("ShieldUp", liftPos)
+				end)
+			end)
+		end)
+	end
+
 	-- ============================================================ cells
-	local function buildCell(cf: CFrame, id: number): Cell
+	local function buildCell(cf: CFrame, id: number, volatile: boolean?): Cell
 		local opts = { Name = "CoreCell", CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false }
 		local case = ctx.part(root, Carry.SIZE, cf, DARK, Enum.Material.Metal, opts)
 		case.Massless = true
@@ -324,7 +565,9 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			table.insert(parts, p)
 		end
 		-- glowing core band through the middle + steel end caps + a carry handle on top
-		add(ctx.glow(root, Vector3.new(Carry.SIZE.X * 0.6, Carry.SIZE.Y * 0.62, Carry.SIZE.Z + 0.08), cf, Carry.COLOR, { Name = "Core" }))
+		local coreColor = if volatile then VOLATILE else Carry.COLOR
+		local core = ctx.glow(root, Vector3.new(Carry.SIZE.X * 0.6, Carry.SIZE.Y * 0.62, Carry.SIZE.Z + 0.08), cf, coreColor, { Name = "Core" })
+		add(core)
 		for _, sx in { -1, 1 } do
 			add(ctx.part(root, Vector3.new(0.16, Carry.SIZE.Y + 0.1, Carry.SIZE.Z + 0.1), cf * CFrame.new(sx * (Carry.SIZE.X / 2 - 0.05), 0, 0), STEEL, Enum.Material.Metal, { CanCollide = false, CanQuery = false, CastShadow = false }))
 		end
@@ -332,7 +575,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		-- lights the carrier up while the cell is in their arms (on in pickup, off in detach)
 		local light = Instance.new("PointLight")
 		light.Name = "CarryLight"
-		light.Color = Carry.COLOR
+		light.Color = if volatile then VOLATILE else Carry.COLOR
 		light.Range = 10
 		light.Brightness = 1.6
 		light.Shadows = false
@@ -352,6 +595,45 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			above = nil,
 			everTaken = false,
 		}
+		if volatile then
+			cell.volatile = true
+			cell.core = core
+			cell.hp = VOLATILE_HP
+			cell.hits = 0
+			-- pulsing warm light + crackling sparks around the unstable core
+			local glow = Instance.new("PointLight")
+			glow.Name = "VolatileGlow"
+			glow.Color = VOLATILE
+			glow.Range = 13
+			glow.Brightness = 1.6
+			glow.Shadows = false
+			glow.Parent = core
+			cell.glow = glow
+			local sparks = Instance.new("ParticleEmitter")
+			sparks.Name = "VolatileSparks"
+			sparks.Rate = 8
+			sparks.Lifetime = NumberRange.new(0.3, 0.7)
+			sparks.Speed = NumberRange.new(3, 9)
+			sparks.SpreadAngle = Vector2.new(180, 180)
+			sparks.Acceleration = Vector3.new(0, -7, 0)
+			sparks.LightEmission = 1
+			sparks.Color = ColorSequence.new(VOLATILE_HOT, VOLATILE)
+			sparks.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.24), NumberSequenceKeypoint.new(1, 0) })
+			sparks.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
+			sparks.Parent = core
+			cell.sparks = sparks
+			-- generous invisible hit volume (CanQuery only while the cell may be shot: see the pulse loop)
+			local hb = ctx.part(root, Carry.SIZE + Vector3.new(1.4, 1.4, 1.4), cf, DARK, Enum.Material.SmoothPlastic, {
+				Name = "VolatileHit",
+				Transparency = 1,
+				CanCollide = false,
+				CanQuery = false,
+				CanTouch = false,
+				CastShadow = false,
+			})
+			add(hb)
+			cell.hitbox = hb
+		end
 		return cell
 	end
 
@@ -479,54 +761,59 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	-- place twists: ambient crews, carrier draw, per-cell escalation, mid-mission surprise, finale
 	local twists = HaulTwists.new(ctx, { liftPos = plaza.Position, places = placePositions, spots = cacheSpots, encounters = encounterMap })
 
+	-- 5-part cradle (plinth, seat, faint glow ring, 2 clamp arms): cells rest in the cradle, not on the ground
+	local function buildCradle(f: Instance, spot: CFrame, ringColor: Color3): (Cradle, CFrame)
+		local floor = spot.Position
+		local _, yaw = spot:ToOrientation()
+		local at = CFrame.new(floor) * CFrame.Angles(0, yaw, 0)
+		local cradleOpts = { CanCollide = false, CanQuery = false, CastShadow = false }
+		local plinth = ctx.cyl(f, 3.3, 0.26, at * CFrame.new(0, 0.13, 0), DARK, Enum.Material.Metal, cradleOpts)
+		ctx.part(f, Vector3.new(2.1, 0.12, 1.4), at * CFrame.new(0, 0.30, 0), STEEL, Enum.Material.Metal, cradleOpts)
+		local ring = ctx.cyl(f, 2.75, 0.05, at * CFrame.new(0, 0.285, 0), ringColor, Enum.Material.Neon, { CanCollide = false, CanQuery = false, CastShadow = false, Transparency = 0.6 })
+		local arms: { CradleArm } = {}
+		for _, sz in { -1, 1 } do
+			local closedCF = at * CFrame.new(0, PAD_H + 0.44, sz * (Carry.SIZE.Z / 2 + 0.14)) * CFrame.Angles(sz * math.rad(8), 0, 0)
+			local openCF = at * CFrame.new(0, PAD_H + 0.38, sz * (Carry.SIZE.Z / 2 + 0.56)) * CFrame.Angles(sz * math.rad(-28), 0, 0)
+			local arm = ctx.part(f, Vector3.new(0.46, 0.92, 0.22), closedCF, STEEL, Enum.Material.Metal, cradleOpts)
+			table.insert(arms, { part = arm, openCF = openCF })
+		end
+		local steam = Instance.new("ParticleEmitter")
+		steam.Name = "CradleSteam"
+		steam.Texture = TEX_SMOKE
+		steam.Rate = 0
+		steam.Enabled = false
+		steam.Lifetime = NumberRange.new(0.45, 0.75)
+		steam.Speed = NumberRange.new(3, 6)
+		steam.SpreadAngle = Vector2.new(38, 38)
+		steam.EmissionDirection = Enum.NormalId.Top
+		steam.Acceleration = Vector3.new(0, 2, 0)
+		steam.Drag = 2.5
+		steam.Rotation = NumberRange.new(0, 360)
+		steam.RotSpeed = NumberRange.new(-45, 45)
+		steam.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1.5) })
+		steam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.45), NumberSequenceKeypoint.new(1, 1) })
+		steam.Color = ColorSequence.new(Color3.fromRGB(220, 235, 245))
+		steam.Parent = plinth
+		local cradle: Cradle = {
+			pos = floor,
+			arms = arms,
+			ring = ring,
+			steam = steam,
+			opened = false,
+		}
+		return cradle, at
+	end
+
 	for _, cache in caches do
 		local f = Instance.new("Model")
 		f.Name = "CellCache"
 		f.Parent = root
 		local spots: { CFrame } = cache.spots
 		for k, spot in spots do
-			-- 5-part cradle (plinth, seat, faint glow ring, 2 clamp arms): cells rest in the cradle, not on the ground
-			local floor = spot.Position
-			local _, yaw = spot:ToOrientation()
-			local at = CFrame.new(floor) * CFrame.Angles(0, yaw, 0)
-			local cradleOpts = { CanCollide = false, CanQuery = false, CastShadow = false }
-			local plinth = ctx.cyl(f, 3.3, 0.26, at * CFrame.new(0, 0.13, 0), DARK, Enum.Material.Metal, cradleOpts)
-			ctx.part(f, Vector3.new(2.1, 0.12, 1.4), at * CFrame.new(0, 0.30, 0), STEEL, Enum.Material.Metal, cradleOpts)
-			local ring = ctx.cyl(f, 2.75, 0.05, at * CFrame.new(0, 0.285, 0), Carry.COLOR, Enum.Material.Neon, { CanCollide = false, CanQuery = false, CastShadow = false, Transparency = 0.6 })
-			local arms: { CradleArm } = {}
-			for _, sz in { -1, 1 } do
-				local closedCF = at * CFrame.new(0, PAD_H + 0.44, sz * (Carry.SIZE.Z / 2 + 0.14)) * CFrame.Angles(sz * math.rad(8), 0, 0)
-				local openCF = at * CFrame.new(0, PAD_H + 0.38, sz * (Carry.SIZE.Z / 2 + 0.56)) * CFrame.Angles(sz * math.rad(-28), 0, 0)
-				local arm = ctx.part(f, Vector3.new(0.46, 0.92, 0.22), closedCF, STEEL, Enum.Material.Metal, cradleOpts)
-				table.insert(arms, { part = arm, openCF = openCF })
-			end
-			local steam = Instance.new("ParticleEmitter")
-			steam.Name = "CradleSteam"
-			steam.Texture = TEX_SMOKE
-			steam.Rate = 0
-			steam.Enabled = false
-			steam.Lifetime = NumberRange.new(0.45, 0.75)
-			steam.Speed = NumberRange.new(3, 6)
-			steam.SpreadAngle = Vector2.new(38, 38)
-			steam.EmissionDirection = Enum.NormalId.Top
-			steam.Acceleration = Vector3.new(0, 2, 0)
-			steam.Drag = 2.5
-			steam.Rotation = NumberRange.new(0, 360)
-			steam.RotSpeed = NumberRange.new(-45, 45)
-			steam.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1.5) })
-			steam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.45), NumberSequenceKeypoint.new(1, 1) })
-			steam.Color = ColorSequence.new(Color3.fromRGB(220, 235, 245))
-			steam.Parent = plinth
-
+			local cradle, at = buildCradle(f, spot, Carry.COLOR)
 			local cell = buildCell(at * CFrame.new(0, PAD_H + Carry.SIZE.Y / 2 + 0.03, 0), #cells + 1)
 			cell.cache = cache
-			cell.cradle = {
-				pos = floor,
-				arms = arms,
-				ring = ring,
-				steam = steam,
-				opened = false,
-			}
+			cell.cradle = cradle
 			table.insert(cache.cells, cell)
 			table.insert(cells, cell)
 			-- a short lamp post by the first cell carries the place's marker once revealed
@@ -537,6 +824,54 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			end
 		end
 		refreshCacheMarker(cache)
+	end
+
+	-- ============================================================ volatile core cells (extra spawns)
+	-- 2-3 extra amber cells on cradles along the approaches to the cell places, sidestepped off the direct line to the
+	-- lifter so they sit where squads patrol. They are never part of `total`: the required cyan cells stay indestructible.
+	do
+		local want = if Workspace:GetAttribute("DebugFast") or diff <= 2 then 2 else 3
+		local order = table.clone(PLACES)
+		for i = #order, 2, -1 do
+			local j = ctx.rng:NextInteger(1, i)
+			order[i], order[j] = order[j], order[i]
+		end
+		local lp = plaza.Position
+		local floors: { Vector3 } = {}
+		for _, name in order do
+			if #floors >= want then
+				break
+			end
+			local c = placePositions[name]
+			local d = Vector3.new(lp.X - c.X, 0, lp.Z - c.Z)
+			local dist = d.Magnitude
+			if dist > 70 then
+				local dir = d / dist
+				local side = Vector3.new(-dir.Z, 0, dir.X) * (if #floors % 2 == 0 then 14 else -14)
+				local out = math.min(math.max(dist * 0.42, 26), dist - 45)
+				local p = Vector3.new(c.X, 0, c.Z) + dir * out + side
+				table.insert(floors, Vector3.new(p.X, groundAtXZ(p.X, p.Z), p.Z))
+			end
+		end
+		local k = 0
+		while #floors < want do
+			k += 1
+			local a = (k / want) * math.pi * 2 + 0.9
+			local x, z = lp.X + math.cos(a) * 62, lp.Z + math.sin(a) * 62
+			table.insert(floors, Vector3.new(x, groundAtXZ(x, z), z))
+		end
+		local vf = Instance.new("Model")
+		vf.Name = "VolatileCells"
+		vf.Parent = root
+		for _, floor in floors do
+			local spot = CFrame.lookAt(floor, Vector3.new(lp.X, floor.Y, lp.Z))
+			local cradle, at = buildCradle(vf, spot, VOLATILE)
+			local cell = buildCell(at * CFrame.new(0, PAD_H + Carry.SIZE.Y / 2 + 0.03, 0), #cells + 1, true)
+			cell.cradle = cradle
+			cell.tag = billboard(cell.case, "VolatileTag", "[VOLATILE]", Vector3.new(0, 3.2, 0), 700, 12, VOLATILE)
+			table.insert(cells, cell)
+			table.insert(volatiles, cell)
+		end
 	end
 
 	-- ============================================================ carry helpers
@@ -653,6 +988,9 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	end
 
 	local function setDroppedMarker(cell: Cell, on: boolean)
+		if cell.volatile then
+			return -- volatile cells carry their own [VOLATILE] tag
+		end
 		if on and not cell.marker then
 			cell.marker = billboard(cell.case, "DroppedMarker", "CORE CELL", Vector3.new(0, 2.4, 0), 800, 10)
 		elseif not on and cell.marker then
@@ -769,6 +1107,18 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 					detail = "EXPLORE / RADAR",
 					done = false,
 				})
+			end
+			-- bonus volatile cells (on a cradle or dropped; hidden while carried)
+			for _, v in volatiles do
+				if v.case.Parent and (v.state == "cache" or v.state == "dropped") then
+					table.insert(outMarkers, {
+						key = "haul_vol_" .. v.id,
+						pos = v.case.Position + Vector3.new(0, 3.2, 0),
+						label = "VOLATILE CELL",
+						glyph = "diamondHollow",
+						color = VOLATILE,
+					})
+				end
 			end
 		end
 		entry.markers = outMarkers
@@ -940,7 +1290,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 				syncSiteMarkers(false)
 			end
 		end
-		callout(p, if #list >= Carry.MAX_CELLS then "Got a second cell." else "Cell secured.")
+		callout(p, if cell.volatile then "Volatile cell. Easy." elseif #list >= Carry.MAX_CELLS then "Got a second cell." else "Cell secured.")
 		ctx.sound("Pickup", torso.Position)
 		if fromCache and cell.cache then
 			twists.onLift(cell.cache.name, p)
@@ -1058,6 +1408,261 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end)
 	end
 
+	-- ============================================================ volatile core cells: shoot / blast / overload
+	-- A volatile cell is only ever shootable or blastable while it rests on a cradle or on the ground ("cache" /
+	-- "dropped"). Carried, picking, loaded and already-overloading cells ignore hits and blasts.
+	local function volatileLive(cell: Cell): boolean
+		return alive and not cell.detonating and cell.case.Parent ~= nil and (cell.state == "cache" or cell.state == "dropped")
+	end
+
+	-- out of play for good (loaded or gone): never shootable again, no tag, no sparks
+	local function retireVolatile(cell: Cell)
+		local i = table.find(volatiles, cell)
+		if i then
+			table.remove(volatiles, i)
+		end
+		if cell.hitbox then
+			if encounters then
+				encounters.removeShootable(cell.hitbox)
+			end
+			cell.hitbox.CanQuery = false
+		end
+		if cell.tag then
+			cell.tag:Destroy()
+			cell.tag = nil
+		end
+		if cell.sparks then
+			cell.sparks.Enabled = false
+		end
+	end
+
+	-- remove the whole cell (model, tag, prompt, shootable, list entries) before its blast runs
+	local function removeVolatileCell(cell: Cell)
+		retireVolatile(cell)
+		cell.state = "gone"
+		local i = table.find(cells, cell)
+		if i then
+			table.remove(cells, i)
+		end
+		if cell.above then
+			cell.above:Destroy()
+			cell.above = nil
+		end
+		local cr = cell.cradle
+		if cr then
+			for _, arm in cr.arms do
+				if arm.part.Parent then
+					ctx.tween(arm.part, 0.2, { CFrame = arm.openCF })
+				end
+			end
+			if cr.ring.Parent then
+				cr.ring.Color = Color3.fromRGB(40, 34, 30)
+				cr.ring.Transparency = 0.8
+			end
+			if cr.steam and cr.steam.Parent then
+				cr.steam:Emit(18)
+			end
+		end
+		if cell.prompt then
+			cell.prompt:Destroy()
+		end
+		for _, part in cell.parts do
+			if part.Parent then
+				part:Destroy()
+			end
+		end
+		if cell.case.Parent then
+			cell.case:Destroy()
+		end
+		syncSiteMarkers(false)
+	end
+
+	local function detonateVolatile(cell: Cell)
+		local pos = cell.case.Position + Vector3.new(0, 1.2, 0)
+		local shooter = cell.igniter
+		removeVolatileCell(cell)
+		if not alive or not ctx.alive() then
+			return
+		end
+		local killed = 0
+		if S and S.Explosions and S.Explosions.blast then
+			local ok, res = pcall(S.Explosions.blast, pos, {
+				radius = VOLATILE_BLAST.radius,
+				core = VOLATILE_BLAST.core,
+				damage = VOLATILE_BLAST.damage,
+				ap = VOLATILE_BLAST.ap,
+				knock = VOLATILE_BLAST.knock,
+				size = "L",
+				style = "emp",
+				shake = 1.3,
+				shakeRadius = 140,
+			}, { player = shooter, kind = "explosion", id = "VOLATILE" })
+			if ok and type(res) == "table" then
+				killed = res.killed or 0
+			end
+		end
+		-- scorching heat flash on top of the EMP look
+		ctx.fx("Explosion", { p = pos, r = 14, size = "M", style = "fire" })
+		ctx.fx("Shockwave", { p = pos, r = VOLATILE_EMP_RADIUS })
+		ctx.fx("Debris", { p = pos, n = 22, c = VOLATILE, style = "scrap" })
+		ctx.fx("Shake", { p = pos, mag = 1.3, r = 120 })
+		ctx.sound("ExplosionHuge", pos)
+		ctx.sound("EMPPulse", pos)
+		-- EMP: robots (COG) are stunned with their shields offline, Brood and heavy behemoths are slowed
+		if S and S.Enemies and S.Enemies.getInRadius and S.Enemies.applyStatus then
+			local untilT = Workspace:GetServerTimeNow() + VOLATILE_STUN
+			local ok, list = pcall(S.Enemies.getInRadius, pos, VOLATILE_EMP_RADIUS)
+			if ok and type(list) == "table" then
+				for _, e in list do
+					if e and e.alive then
+						if e.faction == "COG" and e.class ~= "behemoth" then
+							S.Enemies.applyStatus(e, "stun", VOLATILE_STUN)
+							if e.model then
+								e.model:SetAttribute("EmpUntil", untilT)
+							end
+						else
+							S.Enemies.applyStatus(e, "slow", VOLATILE_SLOW_TIME, VOLATILE_SLOW)
+						end
+					end
+				end
+			end
+		end
+		if killed > 0 and shooter and shooter.Parent then
+			hitConfirmEv:FireClient(shooter, "pen", pos, true, false, 0)
+			ctx.sound("Kill", pos)
+		end
+		ctx.notify(
+			if killed > 0 then string.format("Volatile cell detonated: %d down, hostiles EMP'd!", killed) else "Volatile cell detonated: hostiles EMP'd!",
+			VOLATILE
+		)
+	end
+
+	-- 0.65 s rising whine + frantic strobe, then the blast
+	local function igniteVolatile(cell: Cell, shooter: Player?)
+		if not volatileLive(cell) then
+			return
+		end
+		cell.detonating = true
+		cell.state = "overload"
+		cell.igniter = shooter
+		cell.prompt.Enabled = false
+		if cell.hitbox then
+			cell.hitbox.CanQuery = false
+		end
+		local pos = cell.case.Position
+		if cell.tag then
+			local l = cell.tag:FindFirstChild("Caption") :: TextLabel?
+			if l then
+				l.Text = "[OVERLOAD]"
+				l.TextColor3 = VOLATILE_HOT
+			end
+		end
+		if cell.sparks then
+			cell.sparks.Rate = 60
+		end
+		ctx.sound("LanceCharge", pos)
+		ctx.sound("Telegraph", pos)
+		task.spawn(function()
+			local t0 = os.clock()
+			local core = cell.core
+			local baseSize = if core then core.Size else nil
+			local lastOn = false
+			local beeps = 0
+			while alive and ctx.alive() do
+				local a = (os.clock() - t0) / VOLATILE_OVERLOAD
+				if a >= 1 or not cell.case.Parent then
+					break
+				end
+				-- strobe frequency climbs as the overload builds
+				local on = math.floor(a * (7 + 16 * a) * 2) % 2 == 0
+				if core and core.Parent then
+					core.Color = if on then VOLATILE_HOT else VOLATILE
+					if baseSize then
+						core.Size = baseSize * (1 + 0.45 * a)
+					end
+				end
+				if cell.glow then
+					cell.glow.Brightness = if on then 6 else 1.2
+					cell.glow.Range = 14 + 12 * a
+				end
+				if on and not lastOn and beeps < 6 then
+					beeps += 1
+					ctx.sound("MineBeep", pos)
+				end
+				lastOn = on
+				task.wait(0.04)
+			end
+			if not alive or not ctx.alive() or not cell.case.Parent then
+				return
+			end
+			detonateVolatile(cell)
+		end)
+	end
+
+	-- gunfire: first hit = confirm + sparks, second hit (or one big one) = overload. nil = ignored (carried / loaded).
+	local function hitVolatile(cell: Cell, dmg: number, hitPos: Vector3, shooter: Player?): boolean?
+		if not volatileLive(cell) then
+			return nil
+		end
+		cell.hits = (cell.hits or 0) + 1
+		cell.hp = (cell.hp or VOLATILE_HP) - dmg
+		if cell.hp <= 0 or cell.hits >= 2 then
+			igniteVolatile(cell, shooter)
+			return true
+		end
+		if cell.sparks then
+			cell.sparks:Emit(28)
+		end
+		if cell.glow then
+			cell.glow.Brightness = 6
+		end
+		if cell.core then
+			cell.core.Color = VOLATILE_HOT
+		end
+		if cell.tag then
+			local l = cell.tag:FindFirstChild("Caption") :: TextLabel?
+			if l then
+				l.Text = "[VOLATILE] UNSTABLE"
+			end
+		end
+		ctx.fx("Debris", { p = hitPos, n = 8, c = VOLATILE, style = "scrap" })
+		ctx.sound("HitMetal", hitPos)
+		return false
+	end
+
+	-- pulsing warm light, tag / hit-volume gating by state, and the compass markers
+	task.spawn(function()
+		local lastSig = ""
+		while alive and ctx.alive() do
+			local t = os.clock()
+			local sig = ""
+			for _, cell in table.clone(volatiles) do
+				if cell.case.Parent and not cell.detonating then
+					local live = cell.state == "cache" or cell.state == "dropped"
+					sig ..= cell.id .. cell.state .. ","
+					if cell.hitbox and cell.hitbox.CanQuery ~= live then
+						cell.hitbox.CanQuery = live
+					end
+					if cell.tag and cell.tag.Enabled ~= live then
+						cell.tag.Enabled = live
+					end
+					local pulse = 0.5 + 0.5 * math.sin(t * 5 + cell.id * 1.7)
+					if cell.glow then
+						cell.glow.Brightness = 1 + 1.6 * pulse
+					end
+					if cell.core then
+						cell.core.Color = VOLATILE:Lerp(VOLATILE_HOT, pulse * 0.4)
+					end
+				end
+			end
+			if sig ~= lastSig then
+				lastSig = sig
+				syncSiteMarkers(false)
+			end
+			task.wait(0.12)
+		end
+	end)
+
 	-- ============================================================ delivery + completion
 	local launchBeam: BasePart? = nil
 	local function collectMovers(): { BasePart }
@@ -1070,16 +1675,91 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		return movers
 	end
 
+	-- thruster plume + exhaust column under the bed, built by beginLaunch (parts ride along in bedParts)
+	local thrusterLive = false
+	local thrust: any = {}
+	local function buildThrusters()
+		if thrust.nozzle then
+			return
+		end
+		local nozzle = ctx.part(lifter, Vector3.new(2.6, 0.3, 2.6), bedCF * CFrame.new(0, -0.35, 0), DARK, Enum.Material.Metal, { Name = "ThrusterNozzle", Transparency = 1, CanCollide = false, CanQuery = false, CastShadow = false })
+		local plume = ctx.glow(lifter, Vector3.new(2.6, 5, 2.6), bedCF * CFrame.new(0, -2.9, 0), THRUSTER, { Name = "ThrusterPlume", Transparency = 1 })
+		local light = Instance.new("PointLight")
+		light.Name = "ThrusterLight"
+		light.Color = THRUSTER
+		light.Range = 30
+		light.Brightness = 0
+		light.Shadows = false
+		light.Parent = nozzle
+		local smoke = newBurst("ExhaustSmoke", 22)
+		smoke.Texture = TEX_SMOKE
+		smoke.Lifetime = NumberRange.new(2.4, 3.4)
+		smoke.Speed = NumberRange.new(16, 24)
+		smoke.SpreadAngle = Vector2.new(22, 22)
+		smoke.EmissionDirection = Enum.NormalId.Bottom
+		smoke.Drag = 1.5
+		smoke.Rotation = NumberRange.new(0, 360)
+		smoke.RotSpeed = NumberRange.new(-40, 40)
+		smoke.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 3), NumberSequenceKeypoint.new(1, 14) })
+		smoke.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.25), NumberSequenceKeypoint.new(1, 1) })
+		smoke.Color = ColorSequence.new(Color3.fromRGB(96, 92, 88), Color3.fromRGB(176, 170, 162))
+		smoke.Parent = nozzle
+		local fire = newBurst("ExhaustFire", 38)
+		fire.Lifetime = NumberRange.new(0.35, 0.55)
+		fire.Speed = NumberRange.new(22, 30)
+		fire.SpreadAngle = Vector2.new(9, 9)
+		fire.EmissionDirection = Enum.NormalId.Bottom
+		fire.LightEmission = 1
+		fire.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 3.2), NumberSequenceKeypoint.new(1, 0.6) })
+		fire.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1) })
+		fire.Color = ColorSequence.new(Color3.fromRGB(255, 230, 160), Color3.fromRGB(255, 90, 30))
+		fire.Parent = nozzle
+		-- ground blast of dust rolling out along the plaza while the bed is still low (stays on the ground)
+		local gb = ctx.part(lifter, Vector3.new(1, 0.2, 1), plaza * CFrame.new(0, 0.6, 2.5), DARK, Enum.Material.SmoothPlastic, { Name = "ExhaustBillow", Transparency = 1, CanCollide = false, CanQuery = false, CastShadow = false })
+		local dust = newBurst("ExhaustDust", 16)
+		dust.Texture = TEX_SMOKE
+		dust.Lifetime = NumberRange.new(1.8, 2.6)
+		dust.Speed = NumberRange.new(10, 18)
+		dust.SpreadAngle = Vector2.new(85, 85)
+		dust.EmissionDirection = Enum.NormalId.Top
+		dust.Drag = 2
+		dust.Rotation = NumberRange.new(0, 360)
+		dust.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 4), NumberSequenceKeypoint.new(1, 16) })
+		dust.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.45), NumberSequenceKeypoint.new(1, 1) })
+		dust.Color = ColorSequence.new(Color3.fromRGB(170, 150, 120), Color3.fromRGB(200, 190, 176))
+		dust.Parent = gb
+		goalCF[nozzle] = nozzle.CFrame
+		goalCF[plume] = plume.CFrame
+		table.insert(bedParts, nozzle)
+		table.insert(bedParts, plume)
+		thrust = { nozzle = nozzle, plume = plume, light = light, smoke = smoke, fire = fire, dust = dust }
+	end
+
 	local function blastOffLifter()
 		ctx.sound("Generator", liftPos)
+		-- the climb tweens are (all but) done: pin every mover to its goal so the blast-off tween starts from a clean CFrame
+		settleGlides()
 		local movers = collectMovers()
 		for _, m in movers do
 			if m.Parent then
 				m.CanCollide = false
-				ctx.tween(m, 5.5, { CFrame = m.CFrame + Vector3.new(0, 150, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+				glide(m, 5.5, m.CFrame + Vector3.new(0, 150, 0), Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 			end
 		end
+		-- the exhaust roars as the lifter leaves
+		if thrust.smoke then
+			thrust.smoke.Rate = 70
+			thrust.fire.Rate = 90
+			thrust.dust.Rate = 40
+		end
 		task.delay(5.7, function()
+			thrusterLive = false
+			if thrust.smoke then
+				thrust.smoke.Enabled = false
+				thrust.fire.Enabled = false
+				thrust.dust.Enabled = false
+				thrust.light.Enabled = false
+			end
 			for _, m in movers do
 				if m.Parent and m ~= bed then
 					m.Transparency = 1
@@ -1101,7 +1781,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 
 	-- Finale: after the last cell, the lifter climbs for ~50 s while the bar fills and the toughest wave hits
 	local function beginLaunch()
-		local secs = if Workspace:GetAttribute("DebugFast") then DEBUG_LAUNCH_SECONDS else LAUNCH_SECONDS
+		local secs = if Workspace:GetAttribute("DebugFast") then DEBUG_LAUNCH_SECONDS else math.max(math.min(LAUNCH_SECONDS, 20), LAUNCH_SECONDS - launchBonus)
 		local st = entry.steps[1]
 		st.text = string.format(LAUNCH_FMT, secs)
 		st.progress = 0
@@ -1116,20 +1796,58 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		ctx.sound("Generator", liftPos)
 		ctx.sound("Alarm", liftPos)
 
-		-- Ignite thruster beam and begin gradual climb after the last cell settles into its bed slot (0.5 s tween)
+		-- Ignition: once the last cell has slid home and the clamps have slammed shut, a double-pulse flare lights the sky,
+		-- the thruster plume roars and the exhaust column starts billowing. The climb tween starts CLIMB_DELAY in, after
+		-- settleGlides has pinned every loaded cell and clamp to its goal: nothing else ever tweens a mover's CFrame.
 		local beam = ctx.glow(lifter, Vector3.new(2.8, 600, 2.8), CFrame.new(liftPos + Vector3.new(0, 300, 0)), PANEL_BLUE, { Transparency = 1 })
 		launchBeam = beam
-		ctx.tween(beam, 0.8, { Transparency = 0.42 })
-		task.delay(0.55, function()
+		buildThrusters()
+		local igniteAt = LOAD_SLIDE + CLAMP_SECONDS + 0.2
+		task.delay(igniteAt, function()
 			if not alive or not ctx.alive() then
 				return
 			end
-			local climbSecs = math.max(1, secs - 0.55)
-			local movers = collectMovers()
-			for _, m in movers do
+			ctx.tween(beam, 0.8, { Transparency = 0.42 })
+			thrusterLive = true
+			ctx.tween(thrust.plume, 0.5, { Transparency = 0.3 })
+			thrust.light.Brightness = 3.4
+			thrust.smoke.Enabled = true
+			thrust.fire.Enabled = true
+			thrust.dust.Enabled = true
+			ctx.sound("LanceCharge", liftPos)
+			ctx.sound("WarnRumble", liftPos)
+			ctx.fx("Shake", { p = liftPos, mag = 1.1, r = 120 })
+			ctx.fx("Shockwave", { p = liftPos, r = 30 })
+			task.spawn(function()
+				local rng = ctx.rng
+				task.wait(0.5) -- the plume's fade-in tween owns Transparency until then
+				while thrusterLive and alive and ctx.alive() do
+					if thrust.plume.Parent then
+						thrust.plume.Transparency = 0.18 + rng:NextNumber() * 0.28
+					end
+					thrust.light.Brightness = 2.6 + rng:NextNumber() * 1.6
+					task.wait(0.07)
+				end
+			end)
+		end)
+		skyFlare(VOLATILE:Lerp(Carry.COLOR, 0.5), 4.2, 0.9, igniteAt)
+		skyFlare(Color3.fromRGB(255, 255, 255), 6.5, 1.2, igniteAt + 0.4)
+		task.delay(igniteAt + 0.4, function()
+			if alive and ctx.alive() then
+				ctx.sound("ExplosionSmall", liftPos)
+				ctx.fx("Shake", { p = liftPos, mag = 1.3, r = 140 })
+			end
+		end)
+		task.delay(CLIMB_DELAY, function()
+			if not alive or not ctx.alive() then
+				return
+			end
+			settleGlides()
+			local climbSecs = math.max(1, secs - CLIMB_DELAY)
+			for _, m in collectMovers() do
 				if m.Parent then
 					m.CanCollide = false -- troopers standing on the bed stay on the plaza
-					ctx.tween(m, climbSecs, { CFrame = m.CFrame + Vector3.new(0, 28, 0) }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+					glide(m, climbSecs, m.CFrame + Vector3.new(0, 28, 0), Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 				end
 			end
 		end)
@@ -1170,7 +1888,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 
 	local chargeGen = 0
 	load = function(cell: Cell, by: Player?)
-		if cell.state == "loaded" or finished then
+		if cell.state == "loaded" or cell.state == "overload" or cell.state == "gone" or finished then
 			return
 		end
 		delivered += 1
@@ -1187,7 +1905,25 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		if cell.cache then
 			refreshCacheMarker(cell.cache)
 		end
-		ctx.tween(cell.case, 0.5, { CFrame = bedSlot(idx) }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		-- slide into the slot, then the 3-beat sequence (clamp-down / steam + deck / sky flare); all moves go through glide
+		glide(cell.case, LOAD_SLIDE, bedSlot(idx), Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		updateDeck(idx)
+		loadSequence(idx, cell)
+		if cell.volatile then
+			-- overcharged delivery: amber-cyan core, shorter launch hold, pulse out from the lifter
+			retireVolatile(cell)
+			if cell.core then
+				cell.core.Color = VOLATILE:Lerp(Carry.COLOR, 0.5)
+			end
+			if cell.glow then
+				cell.glow.Color = VOLATILE:Lerp(Carry.COLOR, 0.5)
+				cell.glow.Brightness = 1.6
+			end
+			launchBonus = math.min(VOLATILE_MAX_BONUS, launchBonus + VOLATILE_LAUNCH_BONUS)
+			if S and S.State then
+				S.State.notify(nil, string.format("Volatile cell loaded: lifter OVERCHARGED (launch -%d s)", VOLATILE_LAUNCH_BONUS), VOLATILE)
+			end
+		end
 		local light = slotLights[idx]
 		if light then
 			light.Color = Carry.COLOR
@@ -1251,7 +1987,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			return true
 		end
 		for _, c in cells do
-			if c.state ~= "loaded" and c.state ~= "carried" then
+			if c.state ~= "loaded" and c.state ~= "carried" and not c.volatile then
 				if encounters then
 					encounters.forceUnlockCell(c)
 				end
@@ -1272,7 +2008,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	for _, cell in cells do
 		cell.prompt = ctx.prompt(cell.case, {
 			action = "Pick Up",
-			object = "Core Cell",
+			object = if cell.volatile then "Volatile Core Cell" else "Core Cell",
 			hold = PICK_HOLD,
 			distance = 8,
 			onTrigger = function(p: Player)
@@ -1302,6 +2038,17 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 	})
 	for _, cache in caches do
 		encounters.setupCache(cache)
+	end
+
+	-- volatile cells: gunfire and nearby blasts set them off (only while resting: see volatileLive)
+	for _, cell in volatiles do
+		if cell.hitbox then
+			encounters.addShootable(cell.hitbox, function(dmg: number, hitPos: Vector3, shooter: Player?): boolean?
+				return hitVolatile(cell, dmg, hitPos, shooter)
+			end, function(_pos: Vector3)
+				igniteVolatile(cell, nil)
+			end)
+		end
 	end
 
 	-- Line-of-sight helper for discovering hidden cell sites (~120 studs)
@@ -1484,6 +2231,8 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 		table.clear(carriers)
 		table.clear(picking)
+		table.clear(volatiles)
+		thrusterLive = false
 	end
 
 	return ctl

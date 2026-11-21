@@ -163,6 +163,9 @@ function HaulEncounters.new(ctx: any, opts: any): any
 	local states: { [any]: any } = {}
 	local rubbleById: { [number]: any } = {}
 	local pylonById: { [number]: any } = {}
+	-- shootables registered by other haul modules (volatile core cells): { id, part, onHit, onBlast }
+	local extraById: { [number]: any } = {}
+	local nextExtraId = 0
 	local shootParts: { BasePart } = {}
 	local nextRubbleId = 0
 	local nextPylonId = 0
@@ -918,6 +921,11 @@ function HaulEncounters.new(ctx: any, opts: any): any
 				end
 			end
 		end
+		for _, x in extraById do
+			if x.part.Parent then
+				table.insert(shootParts, x.part)
+			end
+		end
 	end
 
 	local function shatterMound(m: any, byBlast: boolean)
@@ -1097,7 +1105,9 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		local py = pid and pylonById[pid]
 		local mid = hit.Instance:GetAttribute("HaulRubble")
 		local m = mid and rubbleById[mid]
-		if (not py or py.broken) and (not m or m.broken) then
+		local xid = hit.Instance:GetAttribute("HaulShoot")
+		local ex = xid and extraById[xid]
+		if (not py or py.broken) and (not m or m.broken) and not ex then
 			return
 		end
 		-- Ensure no solid wall or hill blocks the shot before reaching the target
@@ -1125,6 +1135,12 @@ function HaulEncounters.new(ctx: any, opts: any): any
 			damagePylon(py, dmg, hit.Position, p, false)
 		elseif m and not m.broken then
 			damageMound(m, dmg, hit.Position, p, false)
+		elseif ex then
+			-- onHit returns nil when the target ignored the shot, else true when it was destroyed / set off
+			local res = ex.onHit(dmg, hit.Position, p)
+			if res ~= nil then
+				hitConfirmEv:FireClient(p, "pen", hit.Position, res == true, false, 0)
+			end
 		end
 	end)
 
@@ -1191,6 +1207,34 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		for _, py in hitPylons do
 			damagePylon(py, 999, py.corePos, nil, true)
 		end
+		-- registered shootables (volatile core cells) decide for themselves whether a blast sets them off
+		local hitExtras: { any } = {}
+		for _, x in extraById do
+			if x.part.Parent and x.onBlast and (x.part.Position - pos).Magnitude <= (radius or 8) + 2.5 then
+				table.insert(hitExtras, x)
+			end
+		end
+		for _, x in hitExtras do
+			x.onBlast(pos)
+		end
+	end
+
+	-- Make `part` (CanQuery on while it may be hit) shootable: gunfire calls onHit(damage, hitPos, shooter) -> boolean?
+	-- (nil = ignored, false = hit, true = destroyed / set off), blasts near it call onBlast(blastPos).
+	function mgr.addShootable(part: BasePart, onHit: (number, Vector3, Player?) -> boolean?, onBlast: ((Vector3) -> ())?)
+		nextExtraId += 1
+		part:SetAttribute("HaulShoot", nextExtraId)
+		extraById[nextExtraId] = { id = nextExtraId, part = part, onHit = onHit, onBlast = onBlast }
+		rebuildShootList()
+	end
+
+	function mgr.removeShootable(part: BasePart)
+		for id, x in extraById do
+			if x.part == part then
+				extraById[id] = nil
+			end
+		end
+		rebuildShootList()
 	end
 
 	-- Used by DebugHook "solve" so locked cells can always be solved cleanly
@@ -1268,6 +1312,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		end
 		table.clear(rubbleById)
 		table.clear(pylonById)
+		table.clear(extraById)
 		table.clear(shootParts)
 		table.clear(states)
 	end
