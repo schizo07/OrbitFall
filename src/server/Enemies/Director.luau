@@ -1182,6 +1182,14 @@ function Director.getThreat(): number
 	return threatLevel
 end
 
+function Director.getFaction(): string
+	return factionId
+end
+
+function Director.isRunning(): boolean
+	return running
+end
+
 function Director.setThreat(level: number)
 	local clamped = math.clamp(math.floor((tonumber(level) or 0) + 0.5), 0, 4)
 	if clamped ~= threatLevel then
@@ -1968,12 +1976,18 @@ function Director.start(m: any, faction: string, diff: number, opts: any?)
 	end)
 
 	task.spawn(loop, myGen)
+	if S.Hazards and S.Hazards.startArtillery then
+		pcall(S.Hazards.startArtillery, m, factionId)
+	end
 end
 
 function Director.stop(clearEnemies: boolean?)
 	local wasRunning = running
 	running = false
 	gen += 1
+	if S.Hazards and S.Hazards.stopArtillery then
+		pcall(S.Hazards.stopArtillery)
+	end
 	for k in pending do
 		pending[k] = 0
 	end

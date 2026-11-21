@@ -33,9 +33,8 @@ local Decoys = require(script.Parent.Parent.Decoys) -- Holo Decoy targets: shots
 
 local MAX_LIVE = 120
 
--- by spec.kind first, then spec.style. COG bolts: Tinker 110 -> 94, Rivet 120 -> 102, Gnat 95 -> 81 studs/s;
--- cannon shells: Bulwark 90 -> 72, Bastion 80 -> 64. Lumen needles and arcing shots (gravity) are untouched.
-local SPEED_MUL: { [string]: number } = { bolt = 0.85, cannon = 0.8 }
+-- by spec.kind first, then spec.style. High-velocity ballistic speeds: Tinker 155, Rivet 165, Bulwark 130, Bastion 125.
+local SPEED_MUL: { [string]: number } = { bolt = 1.0, cannon = 1.0 }
 local IS_STUDIO = RunService:IsStudio()
 
 local Projectiles = {}

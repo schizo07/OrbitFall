@@ -461,8 +461,8 @@ function CameraController.init()
 			rollT = -math.clamp(vx / 16, -1, 1) * rollMax * (1 - aimBlend * 0.6)
 			if not root.Anchored then
 				local accel = (vf - prevFwdSpeed) / math.max(dt, 1 / 120)
-				local lagT = math.clamp(accel / 95, -0.35, 0.35) * (1 - aimBlend * 0.7)
-				accelLag += (lagT - accelLag) * (1 - math.exp(-dt * 8))
+				local lagT = math.clamp(accel / 70, -0.46, 0.46) * (1 - aimBlend * 0.78)
+				accelLag += (lagT - accelLag) * (1 - math.exp(-dt * 6.5))
 			else
 				accelLag *= math.exp(-dt * 10)
 			end
@@ -485,7 +485,8 @@ function CameraController.init()
 			leanT = held - SHOULDER_LEAN * 1.6 * side * swapK
 		end
 		leanCur += (leanT - leanCur) * (1 - math.exp(-dt * 7))
-		bob = bob * CFrame.Angles(0, 0, rollCur + leanCur)
+		local inertiaPitch = math.rad(math.clamp(-accelLag * 2.2, -1.0, 1.0)) * (1 - aimBlend)
+		bob = bob * CFrame.Angles(inertiaPitch, 0, rollCur + leanCur)
 
 		local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
 		dist += (distTarget - dist) * math.min(1, dt * 8)

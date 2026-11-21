@@ -353,7 +353,271 @@ end
 
 function Hazards.stop()
 	token += 1
+	Hazards.stopArtillery()
 	Hazards.clearBarrels()
+end
+
+-- Hostile COG Artillery Barrage & Spotter Counterplay -------------------------------------------------------
+-- During active COG missions (and TestArena when Director is running), every 40-60 s during active combat a live
+-- COG ranged unit (or fallback off-map battery if none) becomes an Artillery Spotter for 3.0 s. Killing or stunning
+-- the spotter aborts the barrage; otherwise 3 heavy whistling shells bracket the locked position (staggered 0.9 s
+-- apart, 1.8 s lead warning ring + descending shell streak), detonating through S.Explosions.blast and hurting
+-- both careless troopers and enemies baited into the kill zone.
+local ART_GAP_MIN, ART_GAP_MAX = 40, 60
+local ART_FIRST_MIN, ART_FIRST_MAX = 24, 34
+local ART_SPOT_DUR = 3.0
+local ART_SHELL_COUNT = 3
+local ART_SHELL_STAGGER = 0.9
+local ART_SHELL_LEAD = 1.8
+local ART_SHELL_RADIUS = 16
+local ART_SHELL_CORE = 5.5
+local ART_SHELL_ENEMY_DMG = 45
+local ART_SHELL_PLAYER_DMG = 42
+local ART_SHELL_KNOCK = 62
+local ART_SPREAD_MIN, ART_SPREAD_MAX = 10, 22
+
+local artilleryGen = 0
+local activeSpotter: any = nil
+
+local function clearSpotterAttr(e: any?)
+	if e and e.model and e.model.Parent then
+		if e.model:GetAttribute("ArtillerySpot") then
+			e.model:SetAttribute("ArtillerySpot", nil)
+		end
+	end
+end
+
+function Hazards.stopArtillery()
+	artilleryGen += 1
+	if activeSpotter then
+		clearSpotterAttr(activeSpotter)
+		activeSpotter = nil
+	end
+	if S and S.Fx and S.Fx.play then
+		S.Fx.play("ArtilleryAlert", { phase = "clear" })
+	end
+end
+
+local function isSpotterStunned(e: any): boolean
+	local now = workspace:GetServerTimeNow()
+	if e.status then
+		if e.status.stun and e.status.stun.untilT > now then
+			return true
+		end
+		if e.status.confuse and e.status.confuse.untilT > now then
+			return true
+		end
+	end
+	if e.frozenUntil and e.frozenUntil > now then
+		return true
+	end
+	return false
+end
+
+local function findCogSpotter(victimPos: Vector3): any?
+	if not (S and S.Enemies and S.Enemies.getAll) then
+		return nil
+	end
+	local preferred: { any } = {}
+	local fallback: { any } = {}
+	for _, e in S.Enemies.getAll() do
+		if e.alive and e.faction == "COG" and e.def and e.def.keepDistance and not e.def.static and not e.def.loot and e.model and e.model.Parent then
+			if not isSpotterStunned(e) then
+				local ep = e.pos or (e.root and e.root.Position)
+				if ep then
+					local d = Vector3.new(ep.X - victimPos.X, 0, ep.Z - victimPos.Z).Magnitude
+					if d <= 145 then
+						if not e.fodder and (e.kind == "TINKER" or e.kind == "RIVET") then
+							table.insert(preferred, e)
+						else
+							table.insert(fallback, e)
+						end
+					end
+				end
+			end
+		end
+	end
+	if #preferred > 0 then
+		return preferred[rng:NextInteger(1, #preferred)]
+	end
+	if #fallback > 0 then
+		return fallback[rng:NextInteger(1, #fallback)]
+	end
+	return nil
+end
+
+local function inActiveCogCombat(): (boolean, { Player })
+	if not (S and S.Players and S.Players.getAlive) then
+		return false, {}
+	end
+	local alive = S.Players.getAlive()
+	if #alive == 0 then
+		return false, alive
+	end
+	if S.Director then
+		if S.Director.isRunning and not S.Director.isRunning() then
+			return false, alive
+		end
+		if S.Director.getFaction and S.Director.getFaction() ~= "COG" then
+			return false, alive
+		end
+		if S.Director.getThreat and S.Director.getThreat() >= 1 then
+			return true, alive
+		end
+	end
+	-- Also active when fighting COG units directly in a zone (or TestArena with Director enabled)
+	if S.Enemies and S.Enemies.getAll then
+		for _, e in S.Enemies.getAll() do
+			if e.alive and e.faction == "COG" and e.target ~= nil then
+				return true, alive
+			end
+		end
+	end
+	return false, alive
+end
+
+local function fireArtillerySalvo(myGen: number, lockPos: Vector3)
+	if artilleryGen ~= myGen then
+		return
+	end
+	if S and S.Fx and S.Fx.play then
+		S.Fx.play("ArtilleryAlert", { phase = "incoming", p = lockPos })
+	end
+	local half = Config.MapSize / 2 - 10
+	local baseAng = rng:NextNumber(0, math.pi * 2)
+	for i = 1, ART_SHELL_COUNT do
+		local stagger = (i - 1) * ART_SHELL_STAGGER
+		task.delay(stagger, function()
+			if artilleryGen ~= myGen then
+				return
+			end
+			local ang = baseAng + (i - 1) * (math.pi * 2 / ART_SHELL_COUNT) + rng:NextNumber(-0.4, 0.4)
+			local dist = rng:NextNumber(ART_SPREAD_MIN, ART_SPREAD_MAX)
+			local x = math.clamp(lockPos.X + math.cos(ang) * dist, -half, half)
+			local z = math.clamp(lockPos.Z + math.sin(ang) * dist, -half, half)
+			local y = groundAt(x, z, lockPos.Y - 3)
+			local impactPos = Vector3.new(x, y, z)
+			if S and S.Fx and S.Fx.play then
+				S.Fx.play("Telegraph", { shape = "circle", p = impactPos + Vector3.new(0, 0.15, 0), r = ART_SHELL_RADIUS, t = ART_SHELL_LEAD })
+				S.Fx.play("Shell", { p = impactPos, t = ART_SHELL_LEAD, s = 1.55, c = Color3.fromRGB(255, 76, 36) })
+			end
+			task.delay(ART_SHELL_LEAD, function()
+				if artilleryGen ~= myGen then
+					return
+				end
+				if S and S.Explosions and S.Explosions.blast then
+					S.Explosions.blast(impactPos, {
+						radius = ART_SHELL_RADIUS,
+						core = ART_SHELL_CORE,
+						damage = ART_SHELL_ENEMY_DMG,
+						ap = 4,
+						size = "XL",
+						style = "fire",
+						vis = 1.95,
+						knock = ART_SHELL_KNOCK,
+						power = 105,
+						shake = 1.65,
+						shakeRadius = 155,
+						playerDamage = ART_SHELL_PLAYER_DMG,
+						playerKind = "hazard",
+					}, { kind = "artillery", id = "COG_ARTILLERY" })
+				end
+			end)
+		end)
+	end
+end
+
+local function runArtilleryEvent(myGen: number, alive: { Player })
+	local victim = alive[rng:NextInteger(1, #alive)]
+	local vRoot = S.Players.getRoot(victim)
+	if not vRoot then
+		return
+	end
+	local lockPos = vRoot.Position
+	local spotter = findCogSpotter(lockPos)
+	if spotter then
+		activeSpotter = spotter
+		spotter.model:SetAttribute("ArtillerySpot", true)
+		if S.Fx and S.Fx.play then
+			S.Fx.play("ArtilleryAlert", { phase = "lock", p = spotter.pos or lockPos, id = spotter.id })
+		end
+		if S.State and S.State.notify then
+			S.State.notify(nil, "COG ARTILLERY LOCK — KILL SPOTTER OR MOVE!", Config.Colors.Danger, "warning")
+		end
+		local deadline = os.clock() + ART_SPOT_DUR
+		while os.clock() < deadline do
+			task.wait(0.1)
+			if artilleryGen ~= myGen then
+				clearSpotterAttr(spotter)
+				if activeSpotter == spotter then
+					activeSpotter = nil
+				end
+				return
+			end
+			if not spotter.alive or not spotter.model or not spotter.model.Parent or isSpotterStunned(spotter) then
+				clearSpotterAttr(spotter)
+				if activeSpotter == spotter then
+					activeSpotter = nil
+				end
+				if S.Fx and S.Fx.play then
+					S.Fx.play("ArtilleryAlert", { phase = "abort", p = spotter.pos or lockPos })
+				end
+				if S.State and S.State.notify then
+					S.State.notify(nil, "ARTILLERY ABORTED — SPOTTER NEUTRALIZED!", Config.Colors.Friendly)
+				end
+				return
+			end
+		end
+		clearSpotterAttr(spotter)
+		if activeSpotter == spotter then
+			activeSpotter = nil
+		end
+		-- Refresh lock position at completion of spotter lock-on
+		local rNow = if victim.Parent and S.Players.isAlive(victim) then S.Players.getRoot(victim) else nil
+		if rNow then
+			lockPos = rNow.Position
+		end
+		fireArtillerySalvo(myGen, lockPos)
+	else
+		-- Off-map battery fallback when no live COG spotter is available in range
+		if S.State and S.State.notify then
+			S.State.notify(nil, "COG ARTILLERY BARRAGE INBOUND — MOVE!", Config.Colors.Danger, "warning")
+		end
+		fireArtillerySalvo(myGen, lockPos)
+	end
+end
+
+function Hazards.startArtillery(_map: any?, faction: string?)
+	Hazards.stopArtillery()
+	if faction ~= "COG" then
+		return
+	end
+	local myGen = artilleryGen
+	task.spawn(function()
+		local nextAt = os.clock() + rng:NextNumber(ART_FIRST_MIN, ART_FIRST_MAX)
+		while artilleryGen == myGen do
+			task.wait(1)
+			if artilleryGen ~= myGen then
+				break
+			end
+			local active, alive = inActiveCogCombat()
+			if not active then
+				-- Keep countdown primed while out of combat so action resumes smoothly once engaged
+				nextAt = math.max(nextAt, os.clock() + 8)
+				continue
+			end
+			if os.clock() >= nextAt then
+				local ok, err = pcall(runArtilleryEvent, myGen, alive)
+				if not ok then
+					warn("[Hazards] artillery event failed:", err)
+				end
+				if artilleryGen ~= myGen then
+					break
+				end
+				nextAt = os.clock() + rng:NextNumber(ART_GAP_MIN, ART_GAP_MAX)
+			end
+		end
+	end)
 end
 
 function Hazards.start(_map: any?)

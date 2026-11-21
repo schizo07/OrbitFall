@@ -235,10 +235,22 @@ local function fireModeOf(w): string
 	return Weapons.validMode(w, modeById[w.id])
 end
 
+-- Tactical stance ballistics: crouching (-35%) and prone (-60%) dramatically stabilize recoil & spread
+local function stanceStabilize(): number
+	local st = Store.get("stance") or "stand"
+	if st == "prone" then
+		return 0.4
+	elseif st == "crouch" then
+		return 0.65
+	end
+	return 1
+end
+
 local function shoot(w, slot: number)
 	local mode = fireModeOf(w)
 	local aim = Input.isDown("Aim")
-	local spread = (w.spread or 1) * (aim and 0.45 or 1) * (1 + bloom) * (sprinting and 1.6 or 1)
+	local stanceMul = stanceStabilize()
+	local spread = (w.spread or 1) * (aim and 0.45 or 1) * stanceMul * (1 + bloom) * (sprinting and 1.6 or 1)
 	local mPos, mAtt = muzzle()
 	-- own shot sound first, before the traces and effects (SHOT SOUND PATH A/B: "old" = after them)
 	local soundFirst = workspace:GetAttribute("Feel_ShotSoundPath") ~= "old"
@@ -250,7 +262,7 @@ local function shoot(w, slot: number)
 		local centre = WeaponController.aimPoint(w.range or 120, 0, true)
 		fireEv:FireServer(slot, centre, seq, mode)
 		for i = 1, math.min(w.pellets, 6) do
-			local p, res = WeaponController.aimPoint(w.range or 120, w.spread * 1.0, true)
+			local p, res = WeaponController.aimPoint(w.range or 120, (w.spread or 1) * stanceMul, true)
 			p, res = barrelTrace(p, res, w.range or 400)
 			Fx.tracer(mPos, p, w.tracer or Color3.new(1, 0.8, 0.4), 0.12)
 			if res and i <= 3 then
@@ -272,13 +284,14 @@ local function shoot(w, slot: number)
 	if not soundFirst then
 		Audio.play(w.sound, mAtt or mPos, { source = "local" })
 	end
-	-- x2.2 camera kick: 2026-11-14 playtest pick (GUN FEEL D)
-	local kick = (w.recoil or 0.5) * (aim and 0.6 or 1) * 2.2 * feel("CamKick")
+	-- x2.2 camera kick: 2026-11-14 playtest pick (GUN FEEL D), stabilized by crouch/prone stance
+	local kick = (w.recoil or 0.5) * (aim and 0.6 or 1) * stanceMul * 2.2 * feel("CamKick")
 	Juice.kick(kick, (math.random() - 0.5) * kick * 0.6)
 	if w.kind == "rocket" or w.kind == "rail" then
 		Juice.shake(0.35, 0.25)
 	end
-	bloom = math.min(bloom + (w.kind == "auto" and 0.08 or 0.3), 1.2)
+	local bloomGain = (w.kind == "auto" and 0.08 or 0.3) * (0.45 + 0.55 * stanceMul)
+	bloom = math.min(bloom + bloomGain, 1.2)
 	localMag[slot] = math.max(0, (localMag[slot] or 0) - 1)
 	lastShotClock = os.clock()
 	if HUD and HUD.ammoShot then
@@ -522,7 +535,7 @@ function WeaponController.init()
 			end
 		end
 		if HUD and HUD.setSpread and w then
-			HUD.setSpread((w.spread or 1) * (Input.isDown("Aim") and 0.45 or 1) * (1 + bloom))
+			HUD.setSpread((w.spread or 1) * (Input.isDown("Aim") and 0.45 or 1) * stanceStabilize() * (1 + bloom) * (sprinting and 1.6 or 1))
 		end
 		-- barrel reticle: where the gun really hits (centre crosshair = where you look). Only differs from the centre
 		-- when cover sits between the barrel and what the crosshair is on.

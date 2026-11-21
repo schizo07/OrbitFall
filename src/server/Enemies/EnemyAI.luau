@@ -209,6 +209,19 @@ local function muzzleWorld(e: any, name: string?): Vector3
 	return e.pos + Vector3.new(0, e.def.size * 1.2, 0)
 end
 
+-- Replicate vertical aim elevation (degrees) on ranged units, throttled to >= 4 deg deltas or reset to 0.
+local function setAimPitch(e: any, pitchDeg: number)
+	if not e.def.keepDistance or not e.model then
+		return
+	end
+	local clamped = math.clamp(pitchDeg, -50, 55)
+	local prev = e.aimPitchSent or 0
+	if (clamped == 0 and prev ~= 0) or math.abs(clamped - prev) >= 4 then
+		e.aimPitchSent = clamped
+		e.model:SetAttribute("AimPitch", math.floor(clamped + 0.5))
+	end
+end
+
 local function spreadDir(dir: Vector3, deg: number): Vector3
 	if deg <= 0 then
 		return dir
@@ -292,6 +305,7 @@ function EnemyAI.register(e: any, cf: CFrame, opts: any)
 	e.stepT = 0
 	e.lastHitBy = nil
 	e.alerted = false
+	e.aimPitchSent = 0
 	e.reinforced = opts.reinforced == true -- delivered by a Director spotted call (see Director.onSpotted: chained calls are capped)
 	-- stop distance for melee-type units
 	local melee = math.huge
@@ -1125,7 +1139,11 @@ local function startAttack(e: any, idx: number, atk: any, now: number)
 		S.Fx.playU("EnemyAttack", { id = e.id, kind = atk.kind, e = e.kind, p = muzzleWorld(e), t = windup })
 	elseif e.class == "heavy" or e.class == "behemoth" then
 		if atk.kind ~= "melee" then
-			sendAttackFx(e, atk.kind, windup, { m = muzzleWorld(e) })
+			local extra: { [string]: any } = { m = muzzleWorld(e) }
+			if atk.kind == "cannon" and a.point then
+				extra.tp = a.point + Vector3.new(0, 1.2, 0)
+			end
+			sendAttackFx(e, atk.kind, windup, extra)
 		end
 	end
 end
@@ -1731,6 +1749,7 @@ local function think(e: any, now: number)
 		e.target = nil
 		e.aimAt = nil
 		e.seenT = 0
+		setAimPitch(e, 0)
 		if e.act and (e.act.phase == "windup") then
 			e.act = nil
 		end
@@ -1773,6 +1792,7 @@ local function think(e: any, now: number)
 	if useAware then
 		Awareness.sense(e, now)
 		if not Awareness.isAlert(e) then
+			setAimPitch(e, 0)
 			unawareThink(e, now)
 			return
 		end
@@ -1809,6 +1829,7 @@ local function think(e: any, now: number)
 		e.faceDir = nil
 		e.slot = nil
 		e.circling = nil
+		setAimPitch(e, 0)
 		-- alert with nobody in reach: a guard / patrol (or a unit that lost its target) heads for the last known spot and
 		-- gives up into a search after LOST_AFTER s; hunters (e.patrol) keep walking at the squad below
 		if useAware and (e.hadTarget or not e.patrol) then
@@ -1890,6 +1911,13 @@ local function think(e: any, now: number)
 	local dist = to.Magnitude
 	local dir = if dist > 0.01 then to / dist else heading(e.yaw)
 	e.faceDir = dir
+	-- 3D vertical aim pitch for ranged units so clients physically aim gun arm / head / torso up or down
+	if def.keepDistance then
+		local muzzle = muzzleWorld(e)
+		local dy = t.pos.Y - muzzle.Y
+		local flatD = math.max(Vector3.new(t.pos.X - muzzle.X, 0, t.pos.Z - muzzle.Z).Magnitude, 0.5)
+		setAimPitch(e, math.deg(math.atan2(dy, flatD)))
+	end
 
 	-- reinforcement call after seeing a player for a few seconds (static emplacements never call)
 	if e.class ~= "regular" and not def.static and not t.decoy then

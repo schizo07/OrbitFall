@@ -189,6 +189,7 @@ type Entry = {
 	dustT: number?,
 	-- legacy sway
 	legacyPhase: number,
+	aimPitch: number, -- smoothed vertical aim elevation (degrees, from model attribute AimPitch)
 }
 
 local entries: { [Model]: Entry } = {}
@@ -779,6 +780,7 @@ local function track(model: Instance)
 		hlToken = 0,
 		conns = {},
 		legacyPhase = math.random() * 6.28,
+		aimPitch = 0,
 	}
 	if e.rig then
 		local pv = e.rig.piv.Leg_L_Upper
@@ -887,6 +889,7 @@ type Ctx = {
 	fyaw: number, -- hit twist
 	stag: number, -- stagger envelope 0..1 (x stagK)
 	fs: number, -- flinch scale (big enemies barely react)
+	aimPitch: number, -- vertical aim elevation (radians, + = aiming upward)
 }
 
 -- Writes the Body motor (lean / bob / hit reaction) and returns its Transform for counter-rotations.
@@ -955,31 +958,33 @@ local function poseBiped(e: Entry, c: Ctx)
 
 	local idle = 1 - amp
 	local breath = sin(t * 1.7)
+	local ap = c.aimPitch
+	local aimActive = if abs(ap) > 0.04 then clamp(abs(ap) / rad(22), 0, 1) else 0
 	-- the body drops as the legs splay so the planted foot stays on the floor
 	local y = -e.hipH * (1 - cos(A * abs(s))) + breath * 0.02 * e.hipH * idle
 	local lean = rad(cfg.lean or 5) * amp * clamp(c.vf / 0.7, 0, 1)
-	local pitch = -lean + breath * rad(0.6) * idle - rad(2) * (c.pre + c.post) + rad(5) * c.kick
+	local pitch = -lean + breath * rad(0.6) * idle - rad(2) * (c.pre + c.post) + rad(5) * c.kick + ap * 0.35
 	local yaw = rad(5) * amp * s
 	local roll = rad(2.5) * amp * s + sin(t * 0.7) * rad(1.2) * idle
 	local tb = setBody(e, c, y, 0.12 * c.kick, pitch, yaw, roll)
 
-	local armSwing = rad(cfg.arm or 10) * amp * s
+	local armSwing = rad(cfg.arm or 10) * amp * s * (1 - aimActive * 0.6)
 	local aim = c.pre + c.post
-	local armR = armSwing + rad(16) * aim + rad(36) * c.kick -- gun-arm kick on every shot (decays in ~0.08 s)
+	local armR = armSwing + rad(16) * max(aim, aimActive * 0.75) + rad(36) * c.kick + ap * 0.72 -- gun arm pitches cleanly up/down at target
 	local armL = -armSwing + sin(t * 1.1) * rad(1.5) * idle
 	-- hit reaction: arms fly back with the jolt, flung wide on a stagger
 	local jolt = c.fsz * rad(16) + c.stag * rad(42)
 	armR -= jolt
 	armL -= jolt
 	if e.kind == "RIVET" then
-		armL += rad(10) * aim -- off-hand braces
+		armL += rad(10) * aim + ap * 0.35 -- off-hand shield braces & tracks elevation
 	end
 	setM(e, "Arm_R", rx(armR))
 	setM(e, "Arm_L", rx(armL))
 
-	local look = sin(t * 0.6) * rad(10) * idle * (1 - aim)
-	-- head snaps back on a hit (whiplash: lags the body)
-	setM(e, "Head", counter(e, "Head", tb, 0.65) * ry(look + c.fsx * rad(8)) * rx(c.fsz * rad(10) + c.stag * rad(24)))
+	local look = sin(t * 0.6) * rad(10) * idle * (1 - max(aim, aimActive))
+	-- head snaps back on a hit and pitches cleanly up/down toward elevated or valley targets
+	setM(e, "Head", counter(e, "Head", tb, 0.65) * ry(look + c.fsx * rad(8)) * rx(ap * 0.85 + c.fsz * rad(10) + c.stag * rad(24)))
 end
 
 local function poseQuad(e: Entry, c: Ctx)
@@ -1006,20 +1011,21 @@ local function poseQuad(e: Entry, c: Ctx)
 		local dip = 0.5 * amp * max(0, -sin(2 * ph))
 		local y = -dip + sin(t * 0.8) * 0.06 * idle - 1.3 * c.kick * (if c.ak == "stomp" then 1 else 0) - 0.35 * c.kick
 		local pitch = rad(1.3) * amp * sin(2 * ph) - rad(1.5) * amp - rad(2.5) * c.pre * (if c.ak == "stomp" then 0 else 1)
-			+ rad(3) * c.kick + sin(t * 0.5) * rad(0.4) * idle
+			+ rad(3) * c.kick + sin(t * 0.5) * rad(0.4) * idle + c.aimPitch * 0.25
 		local roll = rad(2.8) * amp * s + sin(t * 0.37) * rad(0.7) * idle
 		local yaw = rad(1.5) * amp * cos(ph) + (if c.ak == "sweep" then sin(c.t * 1.4) * rad(5) * aim else 0)
 		setBody(e, c, y, 0, pitch, yaw, roll)
 		return
 	end
 
-	-- BULWARK: crab walk, alternating diagonal pairs
+	-- BULWARK: crab walk, alternating diagonal pairs + 3D pitch aiming on upper hull and cannon arms
 	gaitLegs(e, c, nil)
+	local ap = c.aimPitch
 	local y = cos(2 * ph) * (cfg.bob or 0.06) * amp + sin(t * 1.3) * 0.02 * idle
-	local pitch = -rad(1.5) * amp * clamp(c.vf / 0.7, 0, 1) - rad(2) * c.pre + rad(4) * c.kick
+	local pitch = -rad(1.5) * amp * clamp(c.vf / 0.7, 0, 1) - rad(2) * c.pre + rad(4) * c.kick + ap * 0.35
 	local roll = rad(1.4) * amp * s + sin(t * 0.6) * rad(0.6) * idle
 	local tb = setBody(e, c, y, 0.5 * c.kick, pitch, rad(1.5) * amp * s, roll)
-	local armKick = rad(10) * aim + rad(14) * c.kick
+	local armKick = rad(10) * aim + rad(14) * c.kick + ap * 0.75
 	setM(e, "Arm_L", rx(rad(6) * amp * s + armKick))
 	setM(e, "Arm_R", rx(-rad(6) * amp * s + armKick))
 	setM(e, "Shield", counter(e, "Shield", tb, 1)) -- the shield stays steady
@@ -1175,7 +1181,7 @@ local function poseLegacy(e: Entry, t: number, dt: number)
 end
 
 -- Main loop -------------------------------------------------------------------------
-local poseCtx: Ctx = { t = 0, dt = 0, amp = 0, ph = 0, vf = 0, fw = 1, pre = 0, kick = 0, post = 0, ak = nil, fsx = 0, fsz = 0, fyaw = 0, stag = 0, fs = 1 }
+local poseCtx: Ctx = { t = 0, dt = 0, amp = 0, ph = 0, vf = 0, fw = 1, pre = 0, kick = 0, post = 0, ak = nil, fsx = 0, fsz = 0, fyaw = 0, stag = 0, fs = 1, aimPitch = 0 }
 local function stepBody()
 	frame += 1
 	local cam = Workspace.CurrentCamera
@@ -1352,6 +1358,9 @@ local function stepBody()
 			-- fast snap in (first 15 %), eased recovery
 			stag = (if u < 0.15 then u / 0.15 else (1 - (u - 0.15) / 0.85) ^ 2) * e.stagK
 		end
+		local rawAim = model:GetAttribute("AimPitch")
+		local targetAim = if type(rawAim) == "number" then clamp(rawAim, -50, 55) else 0
+		e.aimPitch += (targetAim - e.aimPitch) * min(1, dt * 9)
 		local sp = max(e.speed, 0.01)
 		-- one shared context, refilled per enemy (the pose functions only read it, within this call): no table per enemy per frame
 		local c = poseCtx
@@ -1370,6 +1379,7 @@ local function stepBody()
 		c.fyaw = e.syaw * fsc
 		c.stag = stag
 		c.fs = fsc
+		c.aimPitch = rad(e.aimPitch)
 		if cfg.type == "biped" then
 			poseBiped(e, c)
 		elseif cfg.type == "quad" then
@@ -1385,7 +1395,7 @@ end
 -- C0 to the model attribute TurretYaw at think rate (hit boxes); here the turret eases toward the same yaw every frame through
 -- Transform = (smoothed yaw) - (yaw already in C0), so it sweeps instead of stepping. Within 220 studs, on-screen or not
 -- (cheap: one CFrame per Bastion).
-type TurretEntry = { model: Model, root: BasePart?, motor: Motor6D?, baseInv: CFrame, yaw: number?, nextTry: number }
+type TurretEntry = { model: Model, root: BasePart?, motor: Motor6D?, baseInv: CFrame, yaw: number?, pitch: number, nextTry: number }
 local turrets: { [Model]: TurretEntry } = {}
 local TURRET_RANGE = 220
 local TURRET_EASE = 7 -- 1/s exponential ease toward the server yaw (the server already limits the turn rate)
@@ -1394,7 +1404,7 @@ local function trackTurret(model: Instance)
 	if not model:IsA("Model") or turrets[model] or model:GetAttribute("Kind") ~= "BASTION" then
 		return
 	end
-	turrets[model] = { model = model, root = nil, motor = nil, baseInv = IDENT, yaw = nil, nextTry = 0 }
+	turrets[model] = { model = model, root = nil, motor = nil, baseInv = IDENT, yaw = nil, pitch = 0, nextTry = 0 }
 end
 
 local function stepTurrets(dt: number, now: number)
@@ -1441,8 +1451,11 @@ local function stepTurrets(dt: number, now: number)
 		local cur = te.yaw or want
 		cur = wrapPi(cur + wrapPi(want - cur) * min(1, dt * TURRET_EASE))
 		te.yaw = cur
+		local rawPitch = model:GetAttribute("AimPitch")
+		local wantPitch = if type(rawPitch) == "number" then clamp(rawPitch, -28, 36) else 0
+		te.pitch += (wantPitch - te.pitch) * min(1, dt * TURRET_EASE)
 		local _, inC0 = (te.baseInv * mm.C0.Rotation):ToEulerAnglesYXZ()
-		mm.Transform = ry(wrapPi(cur - inC0))
+		mm.Transform = ry(wrapPi(cur - inC0)) * rx(rad(te.pitch) * 0.45)
 	end
 end
 

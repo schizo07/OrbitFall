@@ -43,9 +43,11 @@ local MAX_BOLTS = 140
 local MAX_TELEGRAPHS = 48
 local MAX_LIT_BOLTS = 8 -- bolts that carry a PointLight at once
 local litBolts = 0
-local BOLT_CORE = C3(255, 42, 20) -- #FF2A14 wide crimson-orange enemy fire bloom
-local BOLT_ORANGE = C3(255, 85, 0) -- #FF5500 heavy bolt bloom accent
-local BOLT_HOT = C3(255, 244, 210) -- #FFF4D2 unmistakable white-yellow core inside crimson bloom
+local BOLT_CORE = C3(255, 168, 62) -- incandescent amber ballistic tracer sheath
+local BOLT_ORANGE = C3(240, 88, 34) -- fiery amber-crimson heavy cannon tracer sheath
+local BOLT_HOT = C3(255, 250, 232) -- razor-sharp white-hot ballistic tracer core
+local LASER_CRIMSON = C3(255, 28, 22) -- sharp heavy cannon targeting laser sight
+local SMOKE_WAKE = ColorSequence.new(C3(86, 78, 70), C3(46, 42, 40))
 
 -- Every instance we create gets a hard deadline. A sweeper on its own thread (independent of RenderStepped, Debris and
 -- any per-effect task.delay) destroys anything past its deadline, so no code path can leave a glowing part behind.
@@ -409,9 +411,9 @@ local function stepBolt(b: any, now: number, camPos: Vector3?, viewPos: Vector3?
 	if not skipRay then
 		b.prev = pos
 	end
-	-- far bolts get a fatter shell / tail so enemy fire reads across 100+ studs of desert haze
+	-- subtle distance scaling so razor-thin ballistic tracers still read through desert haze without ballooning
 	if viewPos and (b.halo or b.tail) then
-		local k = math.clamp((pos - viewPos).Magnitude / 52, 1, 2.35)
+		local k = math.clamp((pos - viewPos).Magnitude / 85, 1, 1.55)
 		if math.abs(k - b.k) > 0.1 then
 			b.k = k
 			if b.halo then
@@ -638,18 +640,17 @@ local function onBolt(d: any)
 	local streakBeam: Beam? = nil
 	local beamW0, beamW1 = 0, 0
 	local isOrb = false
-	-- Unmistakable enemy fire lane: white-yellow core (#FFF4D2) inside wide crimson-orange bloom (#FF2A14 / #FF5500).
-	-- Straight camera-facing tapered Beam ribbon attached rigidly along local -X (cylinder flight tail) never kinks and
-	-- gives ~80-120 ms visual streak dwell across 100+ studs of haze.
-	local function attachStreakBeam(host: Part, length: number, w0: number, w1: number, coreC: Color3, bloomC: Color3)
+	-- High-velocity ballistic tracer streaks: thin white-hot core inside an incandescent amber-crimson sheath + thin
+	-- camera-facing streak Beam + subtle dark smoke wake. High contrast through golden desert haze without cartoon pills.
+	local function attachStreakBeam(host: Part, length: number, w0: number, w1: number, coreC: Color3, bloomC: Color3, smokeLen: number?, smokeW0: number?, smokeW1: number?, smokeAlpha: number?)
 		if hq < 0.45 then
 			return
 		end
 		local a0 = Instance.new("Attachment")
-		a0.Position = Vector3.new(length * 0.15, 0, 0) -- head end (+X along CYL_ALONG_Z)
+		a0.Position = Vector3.new(length * 0.18, 0, 0) -- head end (+X along CYL_ALONG_Z)
 		a0.Parent = host
 		local a1 = Instance.new("Attachment")
-		a1.Position = Vector3.new(-length, 0, 0) -- tapered crimson tail behind head
+		a1.Position = Vector3.new(-length, 0, 0) -- tapered incandescent tail behind head
 		a1.Parent = host
 		local bm = Instance.new("Beam")
 		bm.Attachment0 = a0
@@ -658,80 +659,93 @@ local function onBolt(d: any)
 		bm.Segments = 1
 		bm.LightEmission = 1
 		bm.LightInfluence = 0
-		bm.Brightness = 2.2
+		bm.Brightness = 2.6
 		bm.Width0 = w0
 		bm.Width1 = w1
 		bm.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0, coreC),
-			ColorSequenceKeypoint.new(0.22, bloomC),
+			ColorSequenceKeypoint.new(0.28, bloomC),
 			ColorSequenceKeypoint.new(1, bloomC),
 		})
 		bm.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.08),
-			NumberSequenceKeypoint.new(0.45, 0.32),
+			NumberSequenceKeypoint.new(0, 0.05),
+			NumberSequenceKeypoint.new(0.45, 0.35),
 			NumberSequenceKeypoint.new(1, 1),
 		})
 		bm.Parent = host
 		streakBeam = bm
 		beamW0, beamW1 = w0, w1
+		if smokeLen and smokeLen > 0 and hq >= 0.55 then
+			local s0 = Instance.new("Attachment")
+			s0.Position = Vector3.new(-length * 0.12, 0, 0)
+			s0.Parent = host
+			local s1 = Instance.new("Attachment")
+			s1.Position = Vector3.new(-smokeLen, 0, 0)
+			s1.Parent = host
+			local sb = Instance.new("Beam")
+			sb.Attachment0 = s0
+			sb.Attachment1 = s1
+			sb.FaceCamera = true
+			sb.Segments = 1
+			sb.LightEmission = 0
+			sb.LightInfluence = 0.7
+			sb.Width0 = smokeW0 or 0.16
+			sb.Width1 = smokeW1 or 0.45
+			sb.Color = SMOKE_WAKE
+			local sa = smokeAlpha or 0.66
+			sb.Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, sa),
+				NumberSequenceKeypoint.new(0.55, math.min(1, sa + 0.16)),
+				NumberSequenceKeypoint.new(1, 1),
+			})
+			sb.Parent = host
+		end
 	end
-	local function slug(coreLen: number, coreW: number, shellLen: number, shellW: number, tailLen: number, bloomCol: Color3, coreCol: Color3)
+	local function ballisticTracer(coreLen: number, coreW: number, shellLen: number, shellW: number, streakLen: number, bloomCol: Color3, coreCol: Color3, heavyShell: boolean?)
 		part = mk(Vector3.new(coreLen, coreW, coreW), coreCol, start, Enum.PartType.Cylinder, nil, 0, partLife)
 		if hq >= 0.4 then
-			halo = mk(Vector3.new(shellLen, shellW, shellW), bloomCol, start, Enum.PartType.Cylinder, nil, 0.34, partLife)
+			halo = mk(Vector3.new(shellLen, shellW, shellW), bloomCol, start, Enum.PartType.Cylinder, nil, if heavyShell then 0.42 else 0.56, partLife)
 		else
 			part.Color = bloomCol
-			part.Size = Vector3.new(coreLen, shellW * 0.78, shellW * 0.78)
+			part.Size = Vector3.new(coreLen, shellW * 0.85, shellW * 0.85)
 		end
-		if hq >= 0.6 then
-			tail = mk(Vector3.new(tailLen, shellW * 0.46, shellW * 0.46), bloomCol, start, Enum.PartType.Cylinder, nil, 0.58, partLife)
+		if heavyShell then
+			attachStreakBeam(part, streakLen, shellW * 1.25, 0.12, coreCol, bloomCol, streakLen * 1.55, 0.38, 1.3, 0.46)
+		else
+			attachStreakBeam(part, streakLen, shellW * 1.05, 0.04, coreCol, bloomCol, streakLen * 1.35, 0.14, 0.4, 0.68)
 		end
-		attachStreakBeam(part, math.max(tailLen * 1.45, 9), shellW * 1.35, 0.14, coreCol, bloomCol)
 		oriented = v0.Magnitude > 0.1
-		back = shellLen * 0.42
-		tailBack = shellLen * 0.5 + tailLen * 0.5
-	end
-	local function heavyOrb(coreD: number, haloD: number, tailLen: number, bloomCol: Color3, coreCol: Color3)
-		isOrb = true
-		part = mk(Vector3.one * coreD, coreCol, start, Enum.PartType.Ball, nil, 0, partLife)
-		halo = mk(Vector3.one * haloD, bloomCol, start, Enum.PartType.Ball, nil, 0.36, partLife)
-		if hq >= 0.55 then
-			tail = mk(Vector3.new(tailLen, haloD * 0.42, haloD * 0.42), bloomCol, start, Enum.PartType.Cylinder, nil, 0.55, partLife)
-		end
-		attachStreakBeam(part, math.max(tailLen * 1.4, 11), haloD * 1.15, 0.22, coreCol, bloomCol)
-		oriented = v0.Magnitude > 0.1
-		back = 0
-		tailBack = haloD * 0.35 + tailLen * 0.5
+		back = coreLen * 0.46
 	end
 	local rawCol: Color3? = if typeof(d.c) == "Color3" then d.c else nil
 	local isCoolEnemy = rawCol ~= nil and rawCol.B > rawCol.R * 1.15 -- Lumen violet/cyan keeps its cool hue
 	local col: Color3 = if isCoolEnemy then rawCol :: Color3 else BOLT_CORE
-	local coreCol: Color3 = if isCoolEnemy then (rawCol :: Color3):Lerp(Color3.new(1, 1, 1), 0.75) else BOLT_HOT
+	local coreCol: Color3 = if isCoolEnemy then (rawCol :: Color3):Lerp(Color3.new(1, 1, 1), 0.78) else BOLT_HOT
 	local cls = d.cls
 	local ek = d.ek
 	local isHeavy = d.hv == true or style == "cannon" or style == "mortar" or cls == "heavy" or cls == "behemoth"
 	local isFodder = ek == "TINKER_SWARM" or ek == "DRONE_COG"
 	local speedMag = v0.Magnitude
-	-- ~80-120 ms visual streak length scaled by projectile speed (clamped for readability)
-	local dwellLen = math.clamp(speedMag * 0.10, 7.5, 16.5)
+	-- Razor-thin high-velocity tracer length (8-14 studs for rifle bolts, longer incandescent wake for heavy shells)
+	local boltLen = math.clamp(speedMag * 0.072, 8.0, 14.0)
 	if style == "bolt" then
 		if isFodder then
-			slug(2.6, 0.42, 4.2, 1.2, dwellLen * 0.75, col, coreCol)
+			ballisticTracer(boltLen * 0.82, 0.14, boltLen * 0.92, 0.26, boltLen * 1.1, col, coreCol, false)
 		elseif isHeavy then
-			heavyOrb(1.65, 3.4, dwellLen * 1.1, if isCoolEnemy then col else BOLT_CORE, coreCol)
+			ballisticTracer(boltLen, 0.20, boltLen * 1.1, 0.38, boltLen * 1.25, if isCoolEnemy then col else BOLT_ORANGE, coreCol, false)
 		else
-			slug(4.2, 0.56, 6.8, 1.65, dwellLen, col, coreCol)
+			ballisticTracer(boltLen, 0.16, boltLen * 1.08, 0.30, boltLen * 1.25, col, coreCol, false)
 		end
 		if camDist < 170 then
 			lightColor = col
 		end
 	elseif style == "cannon" then
 		col = if isCoolEnemy then col else BOLT_ORANGE
-		heavyOrb(2.2, 4.6, dwellLen * 1.2, col, coreCol)
+		ballisticTracer(6.8, 0.32, 8.8, 0.68, 15.5, col, coreCol, true)
 		lightColor = col
 	elseif style == "mortar" then
 		col = if isCoolEnemy then col else BOLT_ORANGE
-		heavyOrb(2.0, 4.2, dwellLen * 0.95, col, coreCol)
+		ballisticTracer(6.2, 0.36, 8.2, 0.74, 14.0, col, coreCol, true)
 		lightColor = col
 	else -- acid: green-yellow blob (wobbles in stepBolts), arcs with the projectile's gravity
 		col = ACID
@@ -1485,6 +1499,18 @@ local function chargeUp(d: any)
 	end
 	local t0 = os.clock()
 	local finished = false
+	-- Heavy cannon targeting laser lock sight (Bulwark / Bastion): razor-thin crimson beam from muzzle to locked target
+	local laserCore: Part? = nil
+	local laserGlow: Part? = nil
+	local laserDot: Part? = nil
+	local targetPt: Vector3? = if d.kind == "cannon" and typeof(d.tp) == "Vector3" then d.tp else nil
+	if targetPt then
+		laserCore = mk(Vector3.new(0.08, 0.08, 1), LASER_CRIMSON, CFrame.new(start), nil, Enum.Material.Neon, 0.25, life)
+		if hq >= 0.45 then
+			laserGlow = mk(Vector3.new(0.24, 0.24, 1), LASER_CRIMSON, CFrame.new(start), nil, Enum.Material.Neon, 0.72, life)
+		end
+		laserDot = mk(Vector3.one * 0.6, BOLT_HOT, CFrame.new(targetPt), Enum.PartType.Ball, Enum.Material.Neon, 0.15, life)
+	end
 	local function done()
 		if finished then
 			return
@@ -1497,6 +1523,15 @@ local function chargeUp(d: any)
 		releaseCharge(core)
 		if shell then
 			releaseCharge(shell)
+		end
+		if laserCore and laserCore.Parent then
+			laserCore:Destroy()
+		end
+		if laserGlow and laserGlow.Parent then
+			laserGlow:Destroy()
+		end
+		if laserDot and laserDot.Parent then
+			laserDot:Destroy()
 		end
 	end
 	addActor(function()
@@ -1517,6 +1552,31 @@ local function chargeUp(d: any)
 			shell.Size = Vector3.one * (0.3 + (shellMax - 0.3) * e) * flick
 			shell.Transparency = 0.85 - 0.4 * e
 			shell.CFrame = cf
+		end
+		if laserCore and targetPt and laserCore.Parent then
+			local seg = targetPt - pos
+			local len = seg.Magnitude
+			if len > 0.5 then
+				local mid = pos + seg * 0.5
+				local lcf = CFrame.lookAt(mid, targetPt)
+				local lockFlick = if u > 0.78 then (0.5 + 0.5 * math.sin(os.clock() * 55)) else 1
+				local w = 0.06 + 0.07 * e
+				laserCore.Size = Vector3.new(w, w, len)
+				laserCore.CFrame = lcf
+				laserCore.Transparency = math.clamp(0.45 - 0.42 * e + (1 - lockFlick) * 0.28, 0, 0.9)
+				if laserGlow and laserGlow.Parent then
+					local gw = 0.18 + 0.16 * e
+					laserGlow.Size = Vector3.new(gw, gw, len)
+					laserGlow.CFrame = lcf
+					laserGlow.Transparency = math.clamp(0.84 - 0.24 * e + (1 - lockFlick) * 0.15, 0.45, 0.95)
+				end
+				if laserDot and laserDot.Parent then
+					local ds = (0.45 + 0.75 * e) * (0.85 + 0.3 * lockFlick)
+					laserDot.Size = Vector3.one * ds
+					laserDot.CFrame = CFrame.new(targetPt)
+					laserDot.Color = if u > 0.78 then BOLT_HOT else LASER_CRIMSON
+				end
+			end
 		end
 		if lit then
 			local l = core:FindFirstChildOfClass("PointLight")
@@ -2888,6 +2948,172 @@ local function onBarrelIgnite(d: any)
 	tween(host, dur, { Size = Vector3.one * 2.2, Transparency = 0.5 })
 end
 
+-- Hostile COG Artillery Spotter sky-beam + AlertBar hook ---------------------------------------------------------
+local alertBarMod: any = nil
+local alertBarTried = false
+local function getAlertBar(): any
+	if not alertBarTried then
+		alertBarTried = true
+		local ui = script.Parent.Parent:FindFirstChild("UI")
+		local mod = ui and ui:FindFirstChild("AlertBar")
+		if mod and mod:IsA("ModuleScript") then
+			local ok, res = pcall(require, mod)
+			if ok then
+				alertBarMod = res
+			end
+		end
+	end
+	return alertBarMod
+end
+
+local function onArtilleryAlert(d: any)
+	if type(d) ~= "table" then
+		return
+	end
+	local ab = getAlertBar()
+	local phase = d.phase
+	if phase == "lock" then
+		if ab and ab.set then
+			ab.set("artillery", "COG ARTILLERY LOCK — KILL SPOTTER OR MOVE!", { color = LASER_CRIMSON, priority = 90, seconds = 3.2 })
+		end
+		if Audio and Audio.play2D then
+			pcall(Audio.play2D, "HeavyContact", { volume = 0.85, pitch = 1.05, priority = 5 })
+		end
+	elseif phase == "abort" then
+		if ab then
+			if ab.clear then
+				ab.clear("artillery")
+			end
+			if ab.callout then
+				ab.callout("ARTILLERY ABORTED", C3(96, 232, 130), 2.8, false)
+			end
+		end
+		if Audio and Audio.play2D then
+			pcall(Audio.play2D, "ObjectiveDone", { volume = 0.65, pitch = 1.12, priority = 4 })
+		end
+	elseif phase == "incoming" then
+		if ab and ab.set then
+			ab.set("artillery", "INCOMING COG ARTILLERY — TAKE COVER!", { color = BOLT_ORANGE, priority = 90, seconds = 4.0 })
+		end
+		if Audio and Audio.play2D then
+			pcall(Audio.play2D, "Klaxon", { volume = 0.55, pitch = 1.08, priority = 5 })
+		end
+	elseif phase == "clear" then
+		if ab and ab.clear then
+			ab.clear("artillery")
+		end
+	end
+end
+
+local spotterBeams: { [Model]: boolean } = {}
+local function attachSpotterBeam(m: Model)
+	if spotterBeams[m] or not m.Parent or m:GetAttribute("ArtillerySpot") ~= true then
+		return
+	end
+	local root = m.PrimaryPart or m:FindFirstChild("Root")
+	if not (root and root:IsA("BasePart")) then
+		return
+	end
+	spotterBeams[m] = true
+	local h = 260
+	local core = mk(Vector3.new(h, 0.42, 0.42), BOLT_HOT, CFrame.new(root.Position + Vector3.new(0, h * 0.5, 0)) * CFrame.Angles(0, 0, math.pi / 2), Enum.PartType.Cylinder, Enum.Material.Neon, 0.08, 6)
+	local outer = mk(Vector3.new(h, 1.85, 1.85), LASER_CRIMSON, core.CFrame, Enum.PartType.Cylinder, Enum.Material.Neon, 0.52, 6)
+	local ring = mk(Vector3.new(0.22, 7.5, 7.5), LASER_CRIMSON, CFrame.new(root.Position + Vector3.new(0, 0.35, 0)) * CFrame.Angles(0, 0, math.pi / 2), Enum.PartType.Cylinder, Enum.Material.Neon, 0.3, 6)
+	local tag = Instance.new("BillboardGui")
+	tag.Name = "ArtillerySpotTag"
+	tag.AlwaysOnTop = true
+	tag.LightInfluence = 0
+	tag.MaxDistance = 260
+	tag.Size = UDim2.fromOffset(150, 28)
+	tag.StudsOffset = Vector3.new(0, 5.5, 0)
+	tag.Adornee = root
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundColor3 = C3(26, 8, 8)
+	lbl.BackgroundTransparency = 0.25
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.Font = Enum.Font.GothamBlack
+	lbl.Text = "ARTILLERY SPOTTER"
+	lbl.TextColor3 = C3(255, 72, 56)
+	lbl.TextSize = 12
+	lbl.TextStrokeTransparency = 0.35
+	lbl.Parent = tag
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = lbl
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = LASER_CRIMSON
+	stroke.Thickness = 1.5
+	stroke.Parent = lbl
+	tag.Parent = root
+	if Audio and Audio.play then
+		pcall(Audio.play, "Telegraph", root.Position, { volume = 1.0, pitch = 1.15, priority = 4 })
+	end
+	local t0 = os.clock()
+	local function cleanup()
+		spotterBeams[m] = nil
+		if core.Parent then
+			core:Destroy()
+		end
+		if outer.Parent then
+			outer:Destroy()
+		end
+		if ring.Parent then
+			ring:Destroy()
+		end
+		if tag.Parent then
+			tag:Destroy()
+		end
+	end
+	addActor(function()
+		local elapsed = os.clock() - t0
+		if elapsed > 5.0 or not m.Parent or not root.Parent or m:GetAttribute("ArtillerySpot") ~= true then
+			cleanup()
+			return true
+		end
+		local p = root.Position
+		local pulse = 0.5 + 0.5 * math.sin(elapsed * 16)
+		local cf = CFrame.new(p + Vector3.new(0, h * 0.5, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+		core.CFrame = cf
+		core.Size = Vector3.new(h, 0.34 + 0.22 * pulse, 0.34 + 0.22 * pulse)
+		outer.CFrame = cf
+		outer.Size = Vector3.new(h, 1.5 + 0.9 * pulse, 1.5 + 0.9 * pulse)
+		outer.Transparency = 0.44 + 0.2 * (1 - pulse)
+		local rDiam = 6.2 + 3.2 * ((elapsed * 1.8) % 1)
+		ring.CFrame = CFrame.new(p + Vector3.new(0, 0.35, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+		ring.Size = Vector3.new(0.22, rDiam, rDiam)
+		ring.Transparency = 0.25 + 0.65 * ((elapsed * 1.8) % 1)
+		return false
+	end, cleanup)
+end
+
+local function startArtillerySpotters()
+	task.spawn(function()
+		local folder = workspace:WaitForChild("Enemies", 120)
+		if not folder then
+			return
+		end
+		local function watch(m: Instance)
+			if not m:IsA("Model") then
+				return
+			end
+			if m:GetAttribute("ArtillerySpot") == true then
+				attachSpotterBeam(m)
+			end
+			m:GetAttributeChangedSignal("ArtillerySpot"):Connect(function()
+				if m:GetAttribute("ArtillerySpot") == true then
+					attachSpotterBeam(m)
+				end
+			end)
+		end
+		for _, m in folder:GetChildren() do
+			watch(m)
+		end
+		folder.ChildAdded:Connect(function(m)
+			task.defer(watch, m)
+		end)
+	end)
+end
+
 -- Init -------------------------------------------------------------------------------
 function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx = fx
@@ -2903,12 +3129,14 @@ function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx.register("CookOff", onCookOff)
 	Fx.register("CookOffBoom", onCookOffBoom)
 	Fx.register("BarrelIgnite", onBarrelIgnite)
+	Fx.register("ArtilleryAlert", onArtilleryAlert)
 	Fx.register("LootBurst", onLootBurst)
 	Fx.register("LootEscape", onLootEscape)
 	startStaged()
 	startDrones() -- foundry drones: rotor blur / wing flutter
 	startLoot()
 	startElites()
+	startArtillerySpotters()
 end
 
 return EnemyFx

@@ -147,6 +147,10 @@ local landDip, landVel = 0, 0
 local minVy = 0
 local sprintBlend = 0
 local bobPhase, bobAmp, limpAmp = 0, 0, 0
+local prevBobSin = 0
+local bootDip = 0
+local bootRoll = 0
+local prevSprintApplied = false
 
 -- ── helpers ────────────────────────────────────────────────────────────────────────────────────────────────────
 local function chr(): (Model?, Humanoid?, BasePart?)
@@ -207,8 +211,26 @@ local function setStance(s: string)
 	if stance == s then
 		return
 	end
+	local prev: string = stance
 	stance = s
 	Store.set("stance", s)
+	-- Heavy armored stance drop/rise weight feel (skip dive->prone since dive landing already has its own impact dip)
+	if mode == "none" or mode == "recover" then
+		local _, hum, root = chr()
+		local grounded = hum ~= nil and hum.FloorMaterial ~= Enum.Material.Air
+		if grounded then
+			if s == "crouch" and prev == "stand" then
+				landVel -= 3.2
+			elseif s == "prone" then
+				landVel -= 6.0
+				if root and Audio and Audio.play then
+					Audio.play("Footstep", root.Position, { volume = 0.5, pitch = 0.72 })
+				end
+			elseif s == "stand" then
+				landVel += 1.6
+			end
+		end
+	end
 end
 
 local function setMode(m: string)
@@ -907,6 +929,17 @@ local function step(dt: number)
 	-- Grounded physical movement weight: accel/decel ramp, sprint ramp-up, sprint turn drag, backpedal & ADS penalties
 	local finalSpeed = speed
 	if mode == "none" and not isDowned() then
+		-- Brief heavy gear inertia pulse on sprint start/stop (grounded, responsive, never sluggish)
+		if sprintApplied ~= prevSprintApplied then
+			if grounded then
+				if sprintApplied then
+					landVel -= 1.35 -- armored boot plant into sprint push-off
+				elseif sprintRamp > 0.4 then
+					landVel -= 1.85 * sprintRamp -- heavy armored braking settle
+				end
+			end
+			prevSprintApplied = sprintApplied
+		end
 		-- Sprint ramp-up + subtle turn drag while sprinting
 		if sprintApplied and grounded then
 			if prevMoveDir.Magnitude > 0.1 and mdLen > 0.1 then
@@ -1503,12 +1536,23 @@ function Movement.cameraStep(dt: number, rawFocusY: number): (number, CFrame, nu
 	local mT = if grounded then math.clamp(speed / Config.SprintSpeed, 0, 1) else 0
 	bobAmp += (mT - bobAmp) * (1 - math.exp(-dt * 6))
 	bobPhase = (bobPhase + dt * speed * 0.75) % (math.pi * 2)
+	local bobSin = math.sin(bobPhase)
 	local fatigueBoost = if not boosted and stamina < 0.25 and sprintApplied then 1.25 else 1
+	-- Rhythmic armored boot-fall micro-bob on each sprint stride footplant
+	if grounded and sprintBlend > 0.3 and ((prevBobSin <= 0 and bobSin > 0) or (prevBobSin >= 0 and bobSin < 0)) then
+		local footSign = if bobSin >= 0 then 1 else -1
+		bootDip = -0.15 * sprintBlend * fatigueBoost
+		bootRoll = footSign * 0.0065 * sprintBlend * fatigueBoost
+	end
+	prevBobSin = bobSin
+	bootDip *= math.exp(-dt * 16)
+	bootRoll *= math.exp(-dt * 12)
 	local limpWeight = 0.095
-	local a = 0.11 * sprintBlend * bobAmp * fatigueBoost + limpWeight * limpAmp
-	local bx = math.sin(bobPhase) * a * 0.8
-	local by = -math.abs(math.sin(bobPhase)) * a * 1.1 - limpAmp * limpWeight * math.max(0, math.sin(bobPhase))
-	local roll = math.sin(bobPhase) * 0.01 * (sprintBlend * fatigueBoost + limpAmp * 0.9)
+	local a = 0.135 * sprintBlend * bobAmp * fatigueBoost + limpWeight * limpAmp
+	local bx = bobSin * a * 0.78
+	local by = -math.abs(bobSin) * a * 1.15 + bootDip - limpAmp * limpWeight * math.max(0, bobSin)
+	local roll = bobSin * 0.0115 * (sprintBlend * fatigueBoost + limpAmp * 0.9) + bootRoll
+	local stepPitch = bootDip * 0.045
 	local cbx, cby, croll = CellCarry.cameraBob(grounded)
 	bx += cbx
 	by += cby
@@ -1518,7 +1562,7 @@ function Movement.cameraStep(dt: number, rawFocusY: number): (number, CFrame, nu
 	local dT = if mode == "down" and getupFrom == nil then 1 else 0
 	downBlend += (dT - downBlend) * (1 - math.exp(-dt * (if dT > downBlend then 9 else 4)))
 	return fy - rawFocusY + camDrop + landDip - 0.5 * downBlend,
-		CFrame.new(bx, by, 0) * CFrame.Angles(0, 0, roll),
+		CFrame.new(bx, by, 0) * CFrame.Angles(stepPitch, 0, roll),
 		M.SprintFov * sprintBlend + tuneNum("KnockCamFov", 8) * downBlend
 end
 
@@ -1578,6 +1622,7 @@ local function resetLocal()
 	sprintRamp = 0
 	prevMoveDir = Vector3.zero
 	turnDrag = 0
+	prevBobSin, bootDip, bootRoll, prevSprintApplied = 0, 0, 0, false
 	kneeling = false
 	getUpToken += 1
 end

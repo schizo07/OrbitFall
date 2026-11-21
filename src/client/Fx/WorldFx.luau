@@ -1594,6 +1594,133 @@ local function startHorizon()
 		tl:Play()
 	end
 
+	-- Live planetary warzone sky: distant anti-air tracer streams rising from beyond canyon ridges toward the orbital
+	-- cruisers overhead, bursting high in the sky into brief white-amber flak flashes + dark charcoal smoke puffs + subtle
+	-- muffled artillery thumps. Strictly pooled inside `folder` so map unload tears everything down cleanly.
+	local AA_MAX = 8
+	local FLAK_POOL = 6
+	local flakPool: { { part: Part, smoke: ParticleEmitter, tween: Tween? } } = {}
+	for i = 1, FLAK_POOL do
+		local fp = anchorPart(Vector3.new(0, -500, 0), Vector3.new(8, 8, 8))
+		fp.Name = "SkyFlak" .. i
+		fp.Shape = Enum.PartType.Ball
+		fp.Material = Enum.Material.Neon
+		fp.Color = Color3.fromRGB(255, 240, 198)
+		fp.Transparency = 1
+		fp.Parent = folder
+		local sm = Instance.new("ParticleEmitter")
+		sm.Texture = SMOKE
+		sm.Rate = 0
+		sm.Lifetime = NumberRange.new(3.4, 5.4)
+		sm.Speed = NumberRange.new(5, 13)
+		sm.SpreadAngle = Vector2.new(180, 180)
+		sm.Drag = 2.6
+		sm.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 7),
+			NumberSequenceKeypoint.new(0.4, 16),
+			NumberSequenceKeypoint.new(1, 24),
+		})
+		sm.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.32),
+			NumberSequenceKeypoint.new(0.55, 0.58),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		sm.Color = ColorSequence.new(Color3.fromRGB(58, 52, 48), Color3.fromRGB(28, 26, 28))
+		sm.Rotation = NumberRange.new(0, 360)
+		sm.RotSpeed = NumberRange.new(-10, 10)
+		sm.Acceleration = Vector3.new(2.2, 0.4, 1.0)
+		sm.LightInfluence = 0.55
+		sm.Parent = fp
+		flakPool[i] = { part = fp, smoke = sm, tween = nil }
+	end
+	local flakIdx = 0
+	local lastFlakThump = 0
+	local function popFlak(pos: Vector3, playAudio: boolean)
+		flakIdx = flakIdx % FLAK_POOL + 1
+		local fl = flakPool[flakIdx]
+		if fl.tween then
+			fl.tween:Cancel()
+		end
+		local d = rnd:NextNumber(8, 14)
+		fl.part.Position = pos
+		fl.part.Size = Vector3.new(d, d, d)
+		fl.part.Color = Color3.fromRGB(255, 244, 210)
+		fl.part.Transparency = 0.08
+		fl.smoke:Emit(if q < 0.6 then 3 else 5)
+		local tw = TweenService:Create(fl.part, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(d * 2.1, d * 2.1, d * 2.1),
+			Color = Color3.fromRGB(255, 165, 76),
+			Transparency = 1,
+		})
+		fl.tween = tw
+		tw:Play()
+		if playAudio and Audio and Audio.play2D then
+			local nowT = os.clock()
+			if nowT - lastFlakThump >= 4.8 then
+				lastFlakThump = nowT
+				local dist = distanceToCamera(pos)
+				local vol = math.clamp(0.18 * (1 - dist / 2200), 0.09, 0.18)
+				local pitch = rnd:NextNumber(0.54, 0.72)
+				task.delay(math.clamp(dist / 1200, 0.18, 0.9), function()
+					if state.alive and folder.Parent and Audio and Audio.play2D then
+						pcall(Audio.play2D, "Explosion", { volume = vol, pitch = pitch, priority = 1 })
+					end
+				end)
+			end
+		end
+	end
+
+	type AATracer = { part: Part, from: Vector3, target: Vector3, t: number, life: number, delay: number, audio: boolean }
+	local aaTracers: { AATracer } = {}
+	local function spawnAAVolley()
+		local shots = rnd:NextInteger(2, if q < 0.6 then 3 else 4)
+		local baseAng = lookAngle() + rnd:NextNumber(-1.25, 1.25)
+		local baseR = rnd:NextNumber(420, 600)
+		local origin = ringPoint(baseAng, baseR, rnd:NextNumber(18, 52))
+		-- Aim high toward one of the drifting orbital cruisers overhead (offset so flak bursts frame the hull)
+		local aimPt: Vector3
+		if #cruisers > 0 and rnd:NextNumber() < 0.78 then
+			local cr = cruisers[rnd:NextInteger(1, #cruisers)]
+			local cp = if cr.model.Parent then cr.model:GetPivot().Position else cr.basePos
+			aimPt = cp + Vector3.new(rnd:NextNumber(-75, 75), rnd:NextNumber(-45, 25), rnd:NextNumber(-75, 75))
+		else
+			aimPt = ringPoint(baseAng + rnd:NextNumber(-0.35, 0.35), rnd:NextNumber(290, 440), rnd:NextNumber(230, 340))
+		end
+		local warmCol = if rnd:NextNumber() < 0.65 then Color3.fromRGB(255, 198, 118) else Color3.fromRGB(255, 128, 76)
+		for k = 1, shots do
+			if #aaTracers >= AA_MAX then
+				break
+			end
+			local from = origin + Vector3.new(rnd:NextNumber(-12, 12), rnd:NextNumber(-4, 4), rnd:NextNumber(-12, 12))
+			local target = aimPt + Vector3.new(rnd:NextNumber(-26, 26), rnd:NextNumber(-18, 18), rnd:NextNumber(-26, 26))
+			local dist = (target - from).Magnitude
+			local speed = rnd:NextNumber(340, 440)
+			local life = math.clamp(dist / speed, 0.75, 1.7)
+			local p = Instance.new("Part")
+			p.Name = "SkyAATracer"
+			p.Anchored = true
+			p.CanCollide = false
+			p.CanQuery = false
+			p.CanTouch = false
+			p.CastShadow = false
+			p.Material = Enum.Material.Neon
+			p.Color = warmCol
+			p.Transparency = 1
+			p.Size = Vector3.new(0.45, 0.45, 22)
+			p.CFrame = CFrame.lookAt(from, target)
+			p.Parent = folder
+			aaTracers[#aaTracers + 1] = {
+				part = p,
+				from = from,
+				target = target,
+				t = 0,
+				life = life,
+				delay = (k - 1) * rnd:NextNumber(0.12, 0.22),
+				audio = k == 1,
+			}
+		end
+	end
+
 	-- tracer arcs: short neon bars flying a shallow parabola far away, oriented along their velocity every frame
 	local tracers: { { part: Part, from: Vector3, vel: Vector3, t: number, life: number, delay: number } } = {}
 	local function spawnTracers()
@@ -1661,6 +1788,24 @@ local function startHorizon()
 				end
 			end
 		end
+		for i = #aaTracers, 1, -1 do
+			local tr = aaTracers[i]
+			if tr.delay > 0 then
+				tr.delay -= dt
+			else
+				tr.t += dt
+				if tr.t >= tr.life then
+					tr.part:Destroy()
+					table.remove(aaTracers, i)
+					popFlak(tr.target, tr.audio)
+				else
+					local u = tr.t / tr.life
+					local pos = tr.from:Lerp(tr.target, u)
+					tr.part.CFrame = CFrame.lookAt(pos, tr.target)
+					tr.part.Transparency = if u < 0.08 then 1 - (u / 0.08) * 0.78 else 0.22 + 0.48 * (u * u)
+				end
+			end
+		end
 		for i = #tracers, 1, -1 do
 			local tr = tracers[i]
 			if tr.delay > 0 then
@@ -1684,6 +1829,7 @@ local function startHorizon()
 	task.spawn(function()
 		local nextFlash = os.clock() + rnd:NextNumber(1.5, 4)
 		local nextTracer = os.clock() + rnd:NextNumber(3, 7)
+		local nextAA = os.clock() + rnd:NextNumber(2.2, 4.5)
 		while state.alive and folder.Parent do
 			local now = os.clock()
 			if now >= nextFlash then
@@ -1693,6 +1839,10 @@ local function startHorizon()
 			if now >= nextTracer and q >= 0.45 then
 				nextTracer = now + rnd:NextNumber(6, 12)
 				spawnTracers()
+			end
+			if now >= nextAA and q >= 0.4 then
+				nextAA = now + rnd:NextNumber(3.5, 7.0)
+				spawnAAVolley()
 			end
 			task.wait(0.25)
 		end

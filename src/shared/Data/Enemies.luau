@@ -108,7 +108,7 @@ local E: { [string]: Enemy } = {
 			body = { armor = 1, mult = 1 },
 			eye = { armor = 0, mult = 2, fatal = 40 },
 		},
-		attacks = { { kind = "bolt", damage = 17, range = 70, cooldown = 0.85, speed = 110 } },
+		attacks = { { kind = "bolt", damage = 9, range = 70, cooldown = 0.85, speed = 155 } },
 		aim = { base = 9, min = 2.2, tighten = 2.5, rangeMul = 0.5, moveMul = 0.6, warnShots = 2 },
 		keepDistance = 30, salvage = 2, xp = 2,
 		desc = "Cheap biped bot. Eye pops with one good shot.",
@@ -123,7 +123,7 @@ local E: { [string]: Enemy } = {
 			pack = { armor = 1, mult = 2 },
 			shield = { armor = 3, mult = 0, blocks = true },
 		},
-		attacks = { { kind = "burst", damage = 28, range = 80, cooldown = 2.2, speed = 120, count = 3 } },
+		attacks = { { kind = "burst", damage = 11, range = 80, cooldown = 2.2, speed = 165, count = 3 } },
 		aim = { base = 7, min = 1.8, tighten = 2.0, rangeMul = 0.4, moveMul = 0.5, warnShots = 2 },
 		keepDistance = 35, salvage = 6, xp = 6,
 		desc = "Front riot shield. Flank it or shoot the eye over the rim.",
@@ -139,14 +139,14 @@ local E: { [string]: Enemy } = {
 			vent = { armor = 2, mult = 2 },
 			arm = { armor = 4, mult = 0.5, blocks = true },
 		},
-		attacks = { { kind = "cannon", damage = 60, range = 90, cooldown = 3.0, speed = 90, radius = 5, windup = 0.6 } },
+		attacks = { { kind = "cannon", damage = 34, range = 90, cooldown = 3.0, speed = 130, radius = 5, windup = 0.95 } },
 		keepDistance = 30, salvage = 20, xp = 20,
 		desc = "Armoured tank-bot. A rocket in the eye turns it into scrap.",
 		stages = true, wreck = true,
 		tactics = { hold = { 0.5, 0.95 }, push = 0.6, callout = 80 },
 	},
-	-- Fortified gun block (footage spec §3.3 turret siege): never moves, two red cannon eyes flare 0.8 s before each slow heavy
-	-- shot at a trooper in line of sight. Body armour 5: support weapons, explosives or call-ins. Rear heat vent is the soft spot.
+	-- Fortified gun block (footage spec §3.3 turret siege): never moves, laser sight locks 1.1 s before each heavy
+	-- cannon shot at a trooper in line of sight. Body armour 5: support weapons, explosives or call-ins. Rear heat vent is the soft spot.
 	-- Placed 1-3 per COG mission at outposts by the Director (Director.placeBastions).
 	BASTION = {
 		id = "BASTION", name = "Bastion Emplacement", faction = "COG", class = "heavy",
@@ -156,7 +156,7 @@ local E: { [string]: Enemy } = {
 			eye = { armor = 3, mult = 1.5 }, -- Medium weak spot (matches other tank enemies); rear vent stays Light
 			vent = { armor = 1, mult = 2.5 }, -- armour 1: a Light-AP (AP 2) weapon fully pens it, so flanking pays off
 		},
-		attacks = { { kind = "cannon", damage = 65, range = 120, cooldown = 3.4, speed = 80, radius = 6, windup = 0.8 } },
+		attacks = { { kind = "cannon", damage = 38, range = 120, cooldown = 3.4, speed = 125, radius = 6, windup = 1.1 } },
 		keepDistance = 120, salvage = 30, xp = 30,
 		desc = "Fortified gun block. Bring anti-armour or a call-in, or flank it and hit the heat vent on its back.",
 		stages = true, wreck = true, static = true, turn = 0.75, cost = 0,
