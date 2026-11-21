@@ -752,7 +752,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 				l.Text = cap
 			end
 		elseif cache.anchor then
-			cache.marker = billboard(cache.anchor, "CacheMarker", cap, Vector3.new(0, 2.6, 0), 1200, 12)
+			cache.marker = billboard(cache.anchor, "CacheMarker", cap, Vector3.new(0, 2.6, 0), 75, 12)
 		end
 	end
 
@@ -868,7 +868,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			local cradle, at = buildCradle(vf, spot, VOLATILE)
 			local cell = buildCell(at * CFrame.new(0, PAD_H + Carry.SIZE.Y / 2 + 0.03, 0), #cells + 1, true)
 			cell.cradle = cradle
-			cell.tag = billboard(cell.case, "VolatileTag", "[VOLATILE]", Vector3.new(0, 3.2, 0), 85, 12, VOLATILE)
+			cell.tag = billboard(cell.case, "VolatileTag", "[VOLATILE]", Vector3.new(0, 3.2, 0), 75, 12, VOLATILE)
 			table.insert(cells, cell)
 			table.insert(volatiles, cell)
 		end
@@ -934,7 +934,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 				c1.weld.C0 = Carry.HOLD_ONE
 			end
 			if not c1.above and p.Parent then
-				local above = billboard(c1.case, "CarrierIcon", nil, Vector3.new(0, 3.6, 0), 1000, 12)
+				local above = billboard(c1.case, "CarrierIcon", nil, Vector3.new(0, 3.6, 0), 85, 12)
 				above.PlayerToHideFrom = p
 				c1.above = above
 			end
@@ -993,7 +993,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 		local hide = (not on) or cell.state == "carried" or cell.state == "picking" or cell.state == "loaded"
 		if not hide and not cell.marker then
-			cell.marker = billboard(cell.case, "DroppedMarker", "CORE CELL", Vector3.new(0, 2.4, 0), 800, 10)
+			cell.marker = billboard(cell.case, "DroppedMarker", "CORE CELL", Vector3.new(0, 2.4, 0), 75, 10)
 		elseif hide and cell.marker then
 			cell.marker:Destroy()
 			cell.marker = nil
@@ -1188,7 +1188,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		end
 		if logPart then
 			flightLogPos = logPart.Position
-			local bb = billboard(logPart, "FlightLogMarker", "FLIGHT LOG", Vector3.new(0, 2.4, 0), 220, 10)
+			local bb = billboard(logPart, "FlightLogMarker", "FLIGHT LOG", Vector3.new(0, 2.4, 0), 75, 10)
 			local g = bb:FindFirstChild("Glyph") :: Frame?
 			if g then
 				g.BackgroundColor3 = LOG_AMBER

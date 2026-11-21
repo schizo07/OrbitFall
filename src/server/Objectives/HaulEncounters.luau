@@ -376,7 +376,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 					opts.onReveal(cache)
 				end
 				if e.root and e.root.Parent then
-					local bb = makeBanner(e.root, "CourierTag", "CELL COURIER — CHASE!", AMBER, Vector3.new(0, 4.4, 0), 900, false)
+					local bb = makeBanner(e.root, "CourierTag", "CELL COURIER — CHASE!", AMBER, Vector3.new(0, 4.4, 0), 85, false)
 					st.bb = bb
 				end
 				ctx.sound("Alarm", ePos)
@@ -415,7 +415,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		local post = ctx.part(model, Vector3.new(1.1, 3.6, 0.9), consoleBase * CFrame.new(0, 1.8, 0), DARK, Enum.Material.Metal, { Name = "CradleConsole" })
 		local scr = ctx.glow(model, Vector3.new(0.85, 0.95, 0.18), consoleBase * CFrame.new(0, 2.7, -0.45), AMBER, { Name = "CradleScreen" })
 		table.insert(lights, scr)
-		local bb, lbl, fill = makeBanner(post, "CradleBanner", "LOCKED CRADLE", AMBER, Vector3.new(0, 3.2, 0), 160, true)
+		local bb, lbl, fill = makeBanner(post, "CradleBanner", "LOCKED CRADLE", AMBER, Vector3.new(0, 3.2, 0), 75, true)
 		if fill then
 			fill.Size = UDim2.fromScale(0, 1)
 		end
@@ -741,7 +741,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 		})
 
 		local spots = pickPylonPositions(fieldCenter)
-		local _, fieldLabel = makeBanner(fieldRing, "FieldTag", string.format("LOCKDOWN FIELD — %d PYLONS LEFT", #spots), FIELD_CYAN, Vector3.new(0, 4.6, 0), 170, false)
+		local _, fieldLabel = makeBanner(fieldRing, "FieldTag", string.format("LOCKDOWN FIELD — %d PYLONS LEFT", #spots), FIELD_CYAN, Vector3.new(0, 4.6, 0), 80, false)
 
 		local st: any = {
 			kind = "pylons",
@@ -788,7 +788,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 				CastShadow = false,
 			})
 
-			local bb, lbl, fill = makeBanner(cap, "PylonTag", "COG PYLON — SHOOT / BLAST", AMBER, Vector3.new(0, 2.2, 0), 170, true)
+			local bb, lbl, fill = makeBanner(cap, "PylonTag", "COG PYLON — SHOOT / BLAST", AMBER, Vector3.new(0, 2.2, 0), 75, true)
 
 			local py = {
 				id = pid,
@@ -847,7 +847,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 			e.nextThink = DORMANT_OFF
 			st.enemy = e
 			if e.root and e.root.Parent then
-				local bb = makeBanner(e.root, "DormantTag", "DORMANT HEAVY", AMBER, Vector3.new(0, 5.2, 0), 90, false)
+				local bb = makeBanner(e.root, "DormantTag", "DORMANT HEAVY", AMBER, Vector3.new(0, 5.2, 0), 75, false)
 				st.bb = bb
 			end
 		end
@@ -1024,7 +1024,7 @@ function HaulEncounters.new(ctx: any, opts: any): any
 			-- Small cyan energy glint peeking through the rubble so players immediately spot the buried cell
 			ctx.glow(model, Vector3.new(0.7, 0.4, 0.7), CFrame.new(base + Vector3.new(0, 1.18, 0.35)), Carry.COLOR, { Name = "CellGlint" })
 
-			local bb, lbl, fill = makeBanner(core, "BuriedTag", "BURIED CELL — SHOOT / BLAST", AMBER, Vector3.new(0, 2.5, 0), 130, true)
+			local bb, lbl, fill = makeBanner(core, "BuriedTag", "BURIED CELL — SHOOT / BLAST", AMBER, Vector3.new(0, 2.5, 0), 75, true)
 
 			local m: any = {
 				id = mid,

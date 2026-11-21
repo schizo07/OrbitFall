@@ -2390,6 +2390,7 @@ local function lootAdd(m: Instance)
 	gui.Name = "LootMark"
 	gui.AlwaysOnTop = true
 	gui.LightInfluence = 0
+	gui.MaxDistance = 85
 	gui.ResetOnSpawn = false
 	gui.Size = UDim2.fromOffset(150, 36)
 	gui.StudsOffset = Vector3.new(0, 5.5, 0)
@@ -2543,7 +2544,7 @@ local function eliteMark(m: Instance)
 	gui.Name = "EliteIcon"
 	gui.AlwaysOnTop = false
 	gui.LightInfluence = 0
-	gui.MaxDistance = 130
+	gui.MaxDistance = 85
 	gui.Size = UDim2.fromOffset(80, 44)
 	gui.StudsOffset = Vector3.new(0, up, 0)
 	gui.Adornee = root
