@@ -868,7 +868,7 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 			local cradle, at = buildCradle(vf, spot, VOLATILE)
 			local cell = buildCell(at * CFrame.new(0, PAD_H + Carry.SIZE.Y / 2 + 0.03, 0), #cells + 1, true)
 			cell.cradle = cradle
-			cell.tag = billboard(cell.case, "VolatileTag", "[VOLATILE]", Vector3.new(0, 3.2, 0), 700, 12, VOLATILE)
+			cell.tag = billboard(cell.case, "VolatileTag", "[VOLATILE]", Vector3.new(0, 3.2, 0), 85, 12, VOLATILE)
 			table.insert(cells, cell)
 			table.insert(volatiles, cell)
 		end
@@ -991,9 +991,10 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		if cell.volatile then
 			return -- volatile cells carry their own [VOLATILE] tag
 		end
-		if on and not cell.marker then
+		local hide = (not on) or cell.state == "carried" or cell.state == "picking" or cell.state == "loaded"
+		if not hide and not cell.marker then
 			cell.marker = billboard(cell.case, "DroppedMarker", "CORE CELL", Vector3.new(0, 2.4, 0), 800, 10)
-		elseif not on and cell.marker then
+		elseif hide and cell.marker then
 			cell.marker:Destroy()
 			cell.marker = nil
 		end
@@ -1274,6 +1275,10 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		cell.weld = w
 		cell.carrier = p
 		cell.state = "carried"
+		setDroppedMarker(cell, false)
+		if cell.tag then
+			cell.tag.Enabled = false
+		end
 		local light = cell.case:FindFirstChild("CarryLight")
 		if light and light:IsA("PointLight") then
 			light.Enabled = true
@@ -1328,6 +1333,9 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 
 		cell.prompt.Enabled = false
 		setDroppedMarker(cell, false)
+		if cell.tag then
+			cell.tag.Enabled = false
+		end
 
 		if not fromCradle then
 			completeAttach(cell, p, torso, fromCache)
@@ -1902,6 +1910,9 @@ function HaulCells.start(ctx: any, onComplete: () -> ()): any
 		cell.state = "loaded"
 		cell.prompt.Enabled = false
 		setDroppedMarker(cell, false)
+		if cell.tag then
+			cell.tag.Enabled = false
+		end
 		if cell.cache then
 			refreshCacheMarker(cell.cache)
 		end

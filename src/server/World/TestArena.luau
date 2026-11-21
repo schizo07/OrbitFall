@@ -24,6 +24,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local EnemyData = require(Shared.Data.Enemies)
 local CallInData = require(Shared.Data.CallIns)
+local Assets = require(script.Parent.Assets)
 
 local TestArena = {}
 local S: any = nil
@@ -160,17 +161,21 @@ local function buildFolder()
 		stripe.Parent = props
 	end
 
-	-- ribbed metallic grating deck under player spawn
-	local pad = prop(props, "SpawnGratePad", Vector3.new(18, 0.35, 14), Vector3.new(0, -0.1, SPAWN_Z), 0, steelDark, Enum.Material.DiamondPlate)
+	-- ribbed metallic grating deck under player spawn on a deep-skirted concrete curb plinth
+	local plinth = prop(props, "SpawnConcretePlinth", Vector3.new(19.4, 3.2, 15.4), Vector3.new(0, -3.05, SPAWN_Z), 0, concreteDark, Enum.Material.Concrete)
+	plinth.CanCollide = false
+	plinth.CanQuery = false
+	plinth.CastShadow = false
+	local pad = prop(props, "SpawnGratePad", Vector3.new(18, 0.35, 14), Vector3.new(0, -0.05, SPAWN_Z), 0, steelDark, Enum.Material.DiamondPlate)
 	pad.CanCollide = false
 	pad.CanQuery = false
 	for _, xOff in { -8.6, 8.6 } do
-		local rail = prop(props, "SpawnGrateEdge", Vector3.new(0.6, 0.45, 14.2), Vector3.new(xOff, -0.05, SPAWN_Z), 0, steelLight, Enum.Material.Metal)
+		local rail = prop(props, "SpawnGrateEdge", Vector3.new(0.6, 0.45, 14.2), Vector3.new(xOff, 0.0, SPAWN_Z), 0, steelLight, Enum.Material.Metal)
 		rail.CanCollide = false
 		rail.CanQuery = false
 	end
 	for _, zOff in { -4.5, 0, 4.5 } do
-		local rib = prop(props, "SpawnGrateRib", Vector3.new(16.6, 0.4, 0.45), Vector3.new(0, -0.06, SPAWN_Z + zOff), 0, steelLight, Enum.Material.Metal)
+		local rib = prop(props, "SpawnGrateRib", Vector3.new(16.6, 0.4, 0.45), Vector3.new(0, -0.01, SPAWN_Z + zOff), 0, steelLight, Enum.Material.Metal)
 		rib.CanCollide = false
 		rib.CanQuery = false
 	end
@@ -195,19 +200,100 @@ local function buildFolder()
 	-- 6: angled far modular barrier
 	jerseyBarrier(Vector3.new(-8, 0, 76), 18, 14)
 
-	-- outer brutalist skyline silhouettes outside the walls (Band 2 landmarks against pale sky)
-	for _, s in {
-		{ x = -72, z = 158, w = 22, h = 92, d = 22 },
-		{ x = -46, z = 166, w = 16, h = 118, d = 16 },
-		{ x = 86, z = 162, w = 26, h = 104, d = 24 },
-		{ x = 164, z = 36, w = 22, h = 88, d = 44 },
-		{ x = -164, z = -22, w = 24, h = 96, d = 38 },
-	} do
-		local sil = prop(props, "HorizonSilhouette", Vector3.new(s.w, s.h, s.d), Vector3.new(s.x, -4, s.z), 0, steelDark, Enum.Material.SmoothPlastic)
-		sil.CanCollide = false
-		sil.CanQuery = false
-		sil.CastShadow = false
+	-- outer skyline silhouettes outside the walls using real uploaded meshes on sandstone shoulders
+	local horizonRock = Color3.fromRGB(76, 68, 60)
+	local function placeHorizonMesh(key: string, cf: CFrame, scale: number, rockTint: Color3?): boolean
+		local m = Assets.get(key, { anchored = true })
+		if not m then
+			return false
+		end
+		if scale ~= 1 then
+			m:ScaleTo(scale)
+		end
+		m:PivotTo(cf)
+		for _, d in m:GetDescendants() do
+			if d:IsA("BasePart") then
+				d.Anchored = true
+				d.CanCollide = false
+				d.CanQuery = false
+				d.CanTouch = false
+				d.CastShadow = false
+				if d.Name == "Glow" or d:GetAttribute("Role") == "glow" then
+					d.Material = Enum.Material.SmoothPlastic
+					d.Color = Color3.fromRGB(52, 46, 48)
+				elseif rockTint then
+					d.Color = rockTint
+					d.Material = Enum.Material.Sandstone
+					d:SetAttribute("KeepMat", true)
+				else
+					d:SetAttribute("KeepMat", true)
+				end
+			end
+		end
+		m.Parent = props
+		return true
 	end
+
+	local function fallbackTaperedStack(x: number, z: number, dia: number, h: number)
+		local loH = h * 0.6
+		local c1 = Instance.new("Part")
+		c1.Name = "HorizonStackLower"
+		c1.Shape = Enum.PartType.Cylinder
+		c1.Anchored = true
+		c1.CanCollide = false
+		c1.CanQuery = false
+		c1.CastShadow = false
+		c1.Size = Vector3.new(loH, dia, dia)
+		c1.CFrame = CFrame.new(x, Y0 + loH * 0.5 - 4, z) * CFrame.Angles(0, 0, math.pi / 2)
+		c1.Color = steelDark
+		c1.Material = Enum.Material.SmoothPlastic
+		c1.Parent = props
+		local hiH = h - loH
+		local c2 = Instance.new("Part")
+		c2.Name = "HorizonStackUpper"
+		c2.Shape = Enum.PartType.Cylinder
+		c2.Anchored = true
+		c2.CanCollide = false
+		c2.CanQuery = false
+		c2.CastShadow = false
+		c2.Size = Vector3.new(hiH, dia * 0.72, dia * 0.72)
+		c2.CFrame = CFrame.new(x, Y0 + loH + hiH * 0.5 - 4, z) * CFrame.Angles(0, 0, math.pi / 2)
+		c2.Color = concreteDark
+		c2.Material = Enum.Material.SmoothPlastic
+		c2.Parent = props
+	end
+
+	-- NW far refinery cluster
+	placeHorizonMesh("desert_cliff", CFrame.new(-74, Y0 - 5, 174) * CFrame.Angles(0, math.rad(16), 0), 2.1, horizonRock)
+	if not placeHorizonMesh("cog_smokestack", CFrame.new(-68, Y0 - 2, 168) * CFrame.Angles(0, math.rad(25), 0), 2.0, nil) then
+		fallbackTaperedStack(-68, 168, 18, 108)
+	end
+	placeHorizonMesh("cog_tank_a", CFrame.new(-42, Y0 - 2, 172) * CFrame.Angles(0, math.rad(-20), 0), 2.4, nil)
+
+	-- Center far sandstone mesa silhouette
+	placeHorizonMesh("desert_cliff", CFrame.new(-4, Y0 - 6, 204) * CFrame.Angles(0, math.rad(-8), 0), 2.5, horizonRock)
+	placeHorizonMesh("desert_butte", CFrame.new(26, Y0 - 5, 196) * CFrame.Angles(0, math.rad(32), 0), 5.4, horizonRock)
+
+	-- NE far crane & relay complex
+	placeHorizonMesh("desert_butte", CFrame.new(96, Y0 - 5, 178) * CFrame.Angles(0, math.rad(-40), 0), 4.8, horizonRock)
+	if not placeHorizonMesh("cog_crane", CFrame.new(82, Y0 - 2, 164) * CFrame.Angles(0, math.rad(-148), 0), 2.7, nil) then
+		fallbackTaperedStack(82, 164, 16, 94)
+	end
+	placeHorizonMesh("cog_relay_mast", CFrame.new(108, Y0 - 2, 170) * CFrame.Angles(0, math.rad(12), 0), 1.35, nil)
+
+	-- East industrial ridge
+	placeHorizonMesh("desert_cliff", CFrame.new(176, Y0 - 5, 42) * CFrame.Angles(0, math.rad(82), 0), 2.2, horizonRock)
+	if not placeHorizonMesh("cog_smokestack", CFrame.new(168, Y0 - 2, 34) * CFrame.Angles(0, math.rad(95), 0), 1.75, nil) then
+		fallbackTaperedStack(168, 34, 16, 92)
+	end
+	placeHorizonMesh("cog_tank_b", CFrame.new(166, Y0 - 2, 64) * CFrame.Angles(0, math.rad(45), 0), 2.3, nil)
+
+	-- West fallen walker ribs & butte
+	placeHorizonMesh("desert_butte", CFrame.new(-174, Y0 - 5, -34) * CFrame.Angles(0, math.rad(68), 0), 5.0, horizonRock)
+	if not placeHorizonMesh("cog_walker_rib", CFrame.new(-168, Y0 - 4, -14) * CFrame.Angles(math.rad(-10), math.rad(78), math.rad(12)), 2.5, nil) then
+		fallbackTaperedStack(-168, -14, 18, 86)
+	end
+	placeHorizonMesh("cog_walker_rib_half", CFrame.new(-166, Y0 - 4, 12) * CFrame.Angles(math.rad(-8), math.rad(88), math.rad(-10)), 2.2, nil)
 
 	folder.Parent = Workspace
 	return folder, props

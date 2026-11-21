@@ -1659,7 +1659,21 @@ local function cover(parent: Instance, x: number, z: number, yaw: number, factio
 		crystals(parent, x + rng:NextNumber(-1.5, 1.5), z + rng:NextNumber(-1.5, 1.5), rng:NextNumber(0.5, 0.8), nil, true)
 		return
 	else
-		local m, skipped = placeMesh(parent, "env_cog_barricade", x, z, { scale = rng:NextNumber(1, 1.3), yaw = yaw, sink = 0.06, collide = true, align = 0.5 })
+		local m, skipped = placeMesh(parent, "env_cog_barricade", x, z, {
+			scale = rng:NextNumber(1, 1.3),
+			yaw = yaw,
+			sink = 0.06,
+			collide = true,
+			align = 0.5,
+			paint = if biomeName == "desert" then function(p: BasePart)
+				if p.Name == "Eye" or p:GetAttribute("Role") == "glow" then
+					p.Material = Enum.Material.SmoothPlastic
+					p.Color = RGB(96, 36, 32)
+				else
+					keepMat(p)
+				end
+			end else nil,
+		})
 		if m or skipped then
 			return
 		end
@@ -2289,8 +2303,11 @@ local function tuskCluster(parent: Instance, x: number, z: number)
 	maybeYield()
 end
 
--- COG maps: industrial bits on the lane edges
+-- COG maps: industrial bits on the lane edges (skipped on desert: cohesive checkpoints & compounds replace loose clutter)
 local function industrialSet(parent: Instance)
+	if biomeName == "desert" then
+		return
+	end
 	local made = 0
 	for _ = 1, 10 do
 		if made >= 3 then
@@ -2803,8 +2820,8 @@ local function dressCog(parent: Instance)
 	local rust = RGB(108, 72, 54)
 	local red = RGB(255, 50, 50)
 	local isDesert = biomeName == "desert"
-	-- robot pylons, grouped near sites and away from the lanes (disciplined on desert)
-	local pylonCount = if isDesert then 6 else 12
+	-- robot pylons, grouped near sites and away from the lanes (skipped on desert to eliminate pole & red-Neon dot spam)
+	local pylonCount = if isDesert then 0 else 12
 	for i = 1, pylonCount do
 		local c = LAYOUT[({ "codes", "generator", "console", "silo", "uplink", "nest1", "nest2", "nest3", "nest4", "samples1", "samples2", "samples3" })[i]]
 		local a = rng:NextNumber(0, TAU)
@@ -2831,8 +2848,8 @@ local function dressCog(parent: Instance)
 		end
 		maybeYield()
 	end
-	-- barricade nests off the lanes (fewer on desert since desertSightlines builds intentional road-edge Jersey barrier lanes)
-	for _ = 1, if isDesert then 4 else 9 do
+	-- barricade nests off the lanes (desert uses deliberate fortified route checkpoints instead of random hill scatter)
+	for _ = 1, if isDesert then 0 else 9 do
 		local x, z = wildSpot(50, 24, 240)
 		local yaw = rng:NextNumber(0, TAU)
 		for k = 1, rng:NextInteger(2, 3) do
@@ -2952,222 +2969,294 @@ local function dressLumen(parent: Instance)
 	end
 end
 
--- Desert leading lines & tactical sightlines: waist-high modular Jersey barriers along main routes (clean 20-24 stud
--- flanking gaps), chunky overhead steel road gantries & walker-rib cover arch framing key lane entrances, plus sparse
--- tall industrial lamp posts (single crimson/amber beacons) and vertical sector banners at junctions.
-local function desertSightlines(props: Instance, dressing: Instance)
-	local concrete = RGB(82, 78, 74)
+-- Desert tactical route checkpoints: 3 memorable fortified roadblocks / canyon choke beats along the main haul
+-- corridors back to the Refinery. Grounded deep-skirted concrete bunker walls, corner pillbox fighting positions,
+-- sandbag/crate pockets, real uploaded walker-rib & hauler-wreck centerpieces, and framing sandstone rock shoulders.
+-- Zero loose barrier spam, zero banners/lamps/Tetris gantries, zero decorative red Neon dots; open sightlines stay crisp.
+local function desertCheckpoints(props: Instance, dressing: Instance)
+	local concrete = RGB(96, 92, 84)
+	local concreteDark = RGB(66, 64, 60)
 	local steelDark = RGB(44, 48, 56)
-	local steelMid = RGB(66, 72, 82)
-	local steelTrim = RGB(126, 132, 142)
 	local haz = RGB(224, 174, 42)
-	local crimson = RGB(255, 52, 42)
-	local amber = RGB(255, 172, 54)
-	local bannerCrimson = RGB(132, 42, 38)
-	local bannerAmber = RGB(150, 108, 42)
 
-	local function flatEnough(x: number, z: number, r: number): (boolean, number)
+	local function groundRange(x: number, z: number, r: number): (number, number, Vector3)
 		local pos, n = surfaceAt(x, z)
-		if n.Y < 0.90 then
-			return false, pos.Y
+		local lo, hi = pos.Y, pos.Y
+		for _, o in { { r, 0 }, { -r, 0 }, { 0, r }, { 0, -r } } do
+			local py = (surfaceAt(x + o[1], z + o[2])).Y
+			if py < lo then
+				lo = py
+			end
+			if py > hi then
+				hi = py
+			end
 		end
-		local lo = lowestGround(x, z, r)
-		if pos.Y - lo > 2.2 then
-			return false, lo
-		end
-		return true, lo
+		return lo, hi, n
 	end
 
-	-- Modular waist-high Jersey barrier (4.8 studs tall, simple box collider + bright metallic top rib)
-	local function jerseyBarrier(x: number, z: number, dir2: Vector2, len: number)
-		local ok, lo = flatEnough(x, z, len * 0.4)
-		if not ok then
+	-- Deep-sunk battered concrete bunker wall (single clean box collider, zero hill floating, zero red Neon)
+	local function bunkerWall(x: number, z: number, dir2: Vector2, len: number, h: number)
+		local lo, hi, n = groundRange(x, z, len * 0.45)
+		if n.Y < 0.85 or hi - lo > 4.2 then
 			return
 		end
-		local base = Vector3.new(x, lo, z)
-		local cf = CFrame.lookAt(base, base + Vector3.new(dir2.X, 0, dir2.Y))
-		local h = 4.8
-		local body = part(props, Vector3.new(2.4, h + 1.4, len), cf * CFrame.new(0, (h - 1.4) / 2, 0), jitter(concrete, 0.05), Enum.Material.Concrete, { CanCollide = true })
-		body.Name = "JerseyBarrier"
-		local plinth = decor(dressing, Vector3.new(2.9, 1.3, len + 0.2), cf * CFrame.new(0, 0.45, 0), steelDark, Enum.Material.Metal, { CastShadow = false })
-		keepMat(plinth)
-		local cap = decor(dressing, Vector3.new(1.9, 0.45, len + 0.15), cf * CFrame.new(0, h + 0.1, 0), steelTrim, Enum.Material.Metal, { CastShadow = false })
+		local topY = math.min(hi + h, lo + h + 2.6)
+		local wallH = (topY - lo) + 9
+		local cf = CFrame.lookAt(Vector3.new(x, topY, z), Vector3.new(x + dir2.X, topY, z + dir2.Y))
+		local body = part(props, Vector3.new(2.4, wallH, len), cf * CFrame.new(0, -wallH / 2, 0), jitter(concrete, 0.05), Enum.Material.Concrete, { CanCollide = true })
+		body.Name = "CheckpointWall"
+		keepMat(body)
+		local skirtH = math.max(wallH - h * 0.62, 2.5)
+		local skirt = decor(dressing, Vector3.new(3.4, skirtH, len + 0.5), cf * CFrame.new(0, -h * 0.62 - skirtH / 2, 0), concreteDark, Enum.Material.Concrete, { CastShadow = false })
+		keepMat(skirt)
+		local cap = decor(dressing, Vector3.new(2.75, 0.5, len + 0.25), cf * CFrame.new(0, 0.12, 0), steelDark, Enum.Material.Metal, { CastShadow = false })
 		keepMat(cap)
-		decor(dressing, Vector3.new(2.52, 0.7, len * 0.26), cf * CFrame.new(0, h * 0.65, 0), haz, Enum.Material.SmoothPlastic, { CastShadow = false })
+		decor(dressing, Vector3.new(2.52, 0.65, math.min(len * 0.4, 4.6)), cf * CFrame.new(0, -h * 0.28, 0), haz, Enum.Material.SmoothPlastic, { CastShadow = false })
 	end
 
-	-- Tall industrial lamp post with a single crimson or amber sector beacon
-	local lampLights = 0
-	local function sectorLamp(x: number, z: number, faceDir2: Vector2, isCrimson: boolean)
-		local ok, lo = flatEnough(x, z, 2)
-		if not ok then
+	-- Grounded concrete checkpoint pillbox: deep-sunk slab, waist-high firing parapet, sloped roof, wide open rear/flanks
+	local function checkpointPillbox(x: number, z: number, faceDir2: Vector2)
+		local lo, hi, n = groundRange(x, z, 5.4)
+		if n.Y < 0.86 or hi - lo > 4.0 then
 			return
 		end
-		local base = Vector3.new(x, lo, z)
-		local cf = CFrame.lookAt(base, base + Vector3.new(faceDir2.X, 0, faceDir2.Y))
-		local h = 21
-		part(props, Vector3.new(2.4, 2.0, 2.4), cf * CFrame.new(0, 0.6, 0), steelDark, Enum.Material.Metal, { CanCollide = true })
-		cyl(dressing, 0.85, h, cf * CFrame.new(0, h / 2, 0), steelMid, Enum.Material.Metal, NOCOL)
-		beam(dressing, (cf * CFrame.new(0, h - 1.5, 0)).Position, (cf * CFrame.new(0, h + 1.2, -5.5)).Position, 0.7, steelDark, Enum.Material.Metal, NOCOL)
-		decor(dressing, Vector3.new(2.2, 0.8, 3.0), cf * CFrame.new(0, h + 1.35, -5.8), steelDark, Enum.Material.Metal, { CastShadow = false })
-		local col = if isCrimson then crimson else amber
-		local bulb = decor(dressing, Vector3.new(1.2, 0.8, 1.2), cf * CFrame.new(0, h + 0.65, -5.8), col, Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
-		if lampLights < 3 then
-			lampLights += 1
-			pointLight(bulb, col, 34, 1.5)
+		local floorY = hi + 0.26
+		local fr = CFrame.lookAt(Vector3.new(x, floorY, z), Vector3.new(x + faceDir2.X, floorY, z + faceDir2.Y))
+		local plinthH = (floorY - lo) + 10
+		local plinth = part(props, Vector3.new(10.4, plinthH, 9.4), fr * CFrame.new(0, -plinthH / 2, 0), concreteDark, Enum.Material.Concrete, { CanCollide = true })
+		keepMat(plinth)
+		local ramp = part(props, Vector3.new(8.2, 1.3, 3.2), fr * CFrame.new(0, -0.78, 5.7) * CFrame.Angles(math.rad(-15), 0, 0), concrete, Enum.Material.Concrete, { CanCollide = true, CastShadow = false })
+		keepMat(ramp)
+		local parapet = part(props, Vector3.new(9.6, 3.5, 1.6), fr * CFrame.new(0, 1.75, -3.8), concrete, Enum.Material.Concrete, { CanCollide = true })
+		keepMat(parapet)
+		local sill = decor(dressing, Vector3.new(9.75, 0.34, 1.78), fr * CFrame.new(0, 3.58, -3.8), steelDark, Enum.Material.Metal, { CastShadow = false })
+		keepMat(sill)
+		decor(dressing, Vector3.new(4.2, 0.55, 1.7), fr * CFrame.new(0, 2.35, -3.82), haz, Enum.Material.SmoothPlastic, { CastShadow = false })
+		for _, sx in { -3.95, 3.95 } do
+			local fp = part(props, Vector3.new(2.0, 7.6, 2.1), fr * CFrame.new(sx, 3.8, -3.5), concreteDark, Enum.Material.Concrete, { CanCollide = true })
+			keepMat(fp)
+			local rp = part(props, Vector3.new(1.6, 7.2, 1.6), fr * CFrame.new(sx, 3.6, 3.5), concreteDark, Enum.Material.Concrete, { CanCollide = true })
+			keepMat(rp)
+		end
+		local roof = part(props, Vector3.new(11.4, 1.5, 10.4), fr * CFrame.new(0, 8.0, -0.3) * CFrame.Angles(math.rad(-6), 0, 0), concreteDark, Enum.Material.Concrete, { CanCollide = true })
+		keepMat(roof)
+		local brow = decor(dressing, Vector3.new(11.55, 0.45, 0.85), fr * CFrame.new(0, 7.65, -5.45), steelDark, Enum.Material.Metal, { CastShadow = false })
+		keepMat(brow)
+	end
+
+	-- Flanking sandbag / supply crate tactical cover pocket
+	local function coverPocket(x: number, z: number, yaw: number, withCrates: boolean)
+		placeMesh(props, "env_sandbags", x, z, {
+			scale = 1.18,
+			yaw = yaw,
+			sink = 0.1,
+			collide = true,
+			align = 0.65,
+			maxSlope = 32,
+			tint = RGB(132, 118, 96),
+			material = Enum.Material.SmoothPlastic,
+		})
+		if withCrates then
+			local sx, sz = x + math.cos(yaw) * 4.8, z - math.sin(yaw) * 4.8
+			placeMesh(props, "env_supply_crate", sx, sz, {
+				scale = 1.15,
+				yaw = yaw + 0.15,
+				sink = 0.05,
+				collide = true,
+				align = 0.5,
+				maxSlope = 30,
+				paint = keepMat,
+			})
 		end
 	end
 
-	-- Tall vertical sector banner marking a lane junction or enemy/objective approach
-	local function sectorBanner(x: number, z: number, faceDir2: Vector2, isCrimson: boolean)
-		local ok, lo = flatEnough(x, z, 2)
-		if not ok then
-			return
+	-- Grounded industrial setpiece (hauler wreck, walker rib arch, tank) with Glow dimmed off Neon
+	local function placeCheckpointSetpiece(key: string, cf: CFrame, scale: number, collideBody: boolean): boolean
+		local m = Assets.get(key, { anchored = true })
+		if not m then
+			return false
 		end
-		local base = Vector3.new(x, lo, z)
-		local cf = CFrame.lookAt(base, base + Vector3.new(faceDir2.X, 0, faceDir2.Y))
-		local h = 17.5
-		cyl(dressing, 0.7, h, cf * CFrame.new(-1.8, h / 2 - 0.5, 0), steelDark, Enum.Material.Metal, NOCOL)
-		part(dressing, Vector3.new(3.8, 0.45, 0.5), cf * CFrame.new(0, h - 1.2, 0), steelMid, Enum.Material.Metal, NOCOL_NS)
-		part(dressing, Vector3.new(3.8, 0.4, 0.45), cf * CFrame.new(0, h - 10.6, 0), steelMid, Enum.Material.Metal, NOCOL_NS)
-		local cloth = if isCrimson then bannerCrimson else bannerAmber
-		decor(dressing, Vector3.new(2.7, 9.2, 0.25), cf * CFrame.new(0.2, h - 5.9, 0), cloth, Enum.Material.SmoothPlastic, { CastShadow = false })
-		decor(dressing, Vector3.new(2.74, 1.1, 0.3), cf * CFrame.new(0.2, h - 3.6, 0), if isCrimson then RGB(228, 214, 194) else haz, Enum.Material.SmoothPlastic, { CastShadow = false })
-		decor(dressing, Vector3.new(0.9, 0.9, 0.9), cf * CFrame.new(-1.8, h + 0.1, 0), if isCrimson then crimson else amber, Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
+		if scale ~= 1 then
+			m:ScaleTo(scale)
+		end
+		m:PivotTo(cf)
+		for _, d in m:GetDescendants() do
+			if d:IsA("BasePart") then
+				d.Anchored = true
+				local isBody = d.Name == "Body"
+				d.CanCollide = collideBody and isBody
+				d.CanQuery = collideBody and isBody
+				d.CanTouch = false
+				if d.Name == "Glow" or d:GetAttribute("Role") == "glow" then
+					d.Material = Enum.Material.SmoothPlastic
+					d.Color = RGB(74, 34, 30)
+				else
+					keepMat(d)
+				end
+				partCount += 1
+			end
+		end
+		m.Parent = if collideBody then props else dressing
+		return true
 	end
 
-	-- Chunky overhead steel road gantry framing a lane entrance (clear 24-stud span, 17-stud overhead clearance)
-	local function roadGantry(x: number, z: number, dir2: Vector2, isCrimson: boolean)
-		local perp2 = Vector2.new(-dir2.Y, dir2.X)
-		local halfSpan = 13.5
-		local lx, lz = x - perp2.X * halfSpan, z - perp2.Y * halfSpan
-		local rx, rz = x + perp2.X * halfSpan, z + perp2.Y * halfSpan
-		local loL, nL = lowestGround(lx, lz, 2.5)
-		local loR, nR = lowestGround(rx, rz, 2.5)
-		if nL.Y < 0.86 or nR.Y < 0.86 or math.abs(loL - loR) > 5.5 then
+	-- Framing sandstone rock shoulder (desert_cliff / desert_butte / desert_boulder_a/b)
+	local function rockShoulder(x: number, z: number, yaw: number, scale: number, key: string)
+		local sz = Assets.size(key)
+		local r = math.min((if sz then math.max(sz.X, sz.Z) else 10) * scale * 0.3, 12)
+		local lo = lowestGround(x, z, r)
+		local m = Assets.get(key, { anchored = true })
+		if not m then
+			rock(props, x, z, scale * 1.4, true)
 			return
 		end
-		local deckY = math.max(loL, loR)
-		local topY = deckY + 18.5
-		local cf = CFrame.lookAt(Vector3.new(x, deckY, z), Vector3.new(x + dir2.X, deckY, z + dir2.Y))
-		for _, s in { -1, 1 } do
-			local px, pz = x + perp2.X * halfSpan * s, z + perp2.Y * halfSpan * s
-			local gY = if s < 0 then loL else loR
-			local colH = topY - gY + 2
-			local pcf = CFrame.lookAt(Vector3.new(px, gY + colH / 2 - 1.5, pz), Vector3.new(px + dir2.X, gY + colH / 2 - 1.5, pz + dir2.Y))
-			part(props, Vector3.new(3.2, colH, 3.6), pcf, steelDark, Enum.Material.Metal, { CanCollide = true })
-			decor(dressing, Vector3.new(3.5, 1.3, 3.9), pcf * CFrame.new(0, -colH / 2 + 4.5, 0), haz, Enum.Material.SmoothPlastic, { CastShadow = false })
+		if scale ~= 1 then
+			m:ScaleTo(scale)
 		end
-		-- heavy cross-truss girder overhead (walk-through / high above players)
-		local girder = decor(dressing, Vector3.new(halfSpan * 2 + 5.5, 2.6, 2.8), cf * CFrame.new(0, 18.5, 0), steelMid, Enum.Material.Metal, { CastShadow = true })
-		keepMat(girder)
-		decor(dressing, Vector3.new(halfSpan * 2 + 3.5, 0.7, 3.0), cf * CFrame.new(0, 17.0, 0), haz, Enum.Material.SmoothPlastic, { CastShadow = false })
-		for _, sx in { -7.5, 0, 7.5 } do
-			decor(dressing, Vector3.new(1.0, 2.2, 3.1), cf * CFrame.new(sx, 20.6, 0), steelDark, Enum.Material.Metal, { CastShadow = false })
+		local h = (if sz then sz.Y else 10) * scale
+		m:PivotTo(CFrame.new(x, lo - h * 0.24, z) * CFrame.Angles(0, yaw, 0))
+		local col = spireShade(rockTint())
+		for _, d in m:GetDescendants() do
+			if d:IsA("BasePart") then
+				d.Anchored = true
+				d.CanCollide = true
+				d.CanQuery = true
+				d.CanTouch = false
+				d.Color = col
+				d.Material = B.rockMat
+				keepMat(d)
+				partCount += 1
+			end
 		end
-		decor(dressing, Vector3.new(halfSpan * 2 + 1, 0.7, 1.4), cf * CFrame.new(0, 21.8, 0), steelDark, Enum.Material.Metal, { CastShadow = false })
-		-- single disciplined corner beacon
-		local col = if isCrimson then crimson else amber
-		decor(dressing, Vector3.new(1.3, 1.3, 1.3), cf * CFrame.new(halfSpan, 22.8, 0), col, Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
+		m.Parent = props
 	end
 
-	-- Tilted dark walker-rib cover arch framing the Walker Graveyard approach lane
-	local function ribCoverArch(x: number, z: number, dir2: Vector2)
-		local perp2 = Vector2.new(-dir2.Y, dir2.X)
-		local halfSpan = 14
-		local loL, nL = lowestGround(x - perp2.X * halfSpan, z - perp2.Y * halfSpan, 3)
-		local loR, nR = lowestGround(x + perp2.X * halfSpan, z + perp2.Y * halfSpan, 3)
-		if nL.Y < 0.85 or nR.Y < 0.85 then
-			return
+	-- Pick the flattest saddle along a route near `tTarget` that stays well clear of POIs & side objectives
+	local function pickCheckpointSpot(a: Vector2, b: Vector2, tTarget: number): (Vector2?, Vector2?)
+		local delta = b - a
+		if delta.Magnitude < 90 then
+			return nil, nil
 		end
-		local baseY = math.min(loL, loR) - 1.5
-		local cf = CFrame.lookAt(Vector3.new(x, baseY, z), Vector3.new(x + dir2.X, baseY, z + dir2.Y)) * CFrame.Angles(math.rad(8), 0, 0)
-		local pts: { Vector3 } = {}
-		for k = 0, 6 do
-			local th = math.pi * k / 6
-			pts[k + 1] = (cf * CFrame.new(math.cos(th) * halfSpan, math.sin(th) * 21, 0)).Position
+		local dir2 = delta.Unit
+		for _, dt in { 0, 0.05, -0.05, 0.10, -0.10 } do
+			local p = a:Lerp(b, math.clamp(tTarget + dt, 0.30, 0.68))
+			if math.max(math.abs(p.X), math.abs(p.Y)) < 218 and farFromSites(p.X, p.Y, 36) then
+				local lo, hi, n = groundRange(p.X, p.Y, 10)
+				if n.Y >= 0.88 and hi - lo <= 5.0 then
+					return p, dir2
+				end
+			end
 		end
-		for k = 1, 6 do
-			local solid = k == 1 or k == 6
-			pipeSeg(if solid then props else dressing, pts[k], pts[k + 1], 2.8, steelDark, Enum.Material.Metal, { CanCollide = solid })
-		end
-		decor(dressing, Vector3.new(3.4, 3.4, 3.4), CFrame.new(pts[4]), steelMid, Enum.Material.Metal, { Shape = Enum.PartType.Ball, CastShadow = false })
+		return nil, nil
 	end
 
 	local ref = MapPlan.places.refinery.at
 	local quarryAt = MapPlan.places.quarry.at
-	local mesaAt = MapPlan.places.mesa.at
 	local graveAt = MapPlan.places.graveyard.at
-	local saltAt = MapPlan.places.saltpan.at
-	local radarAt = MapPlan.sideSpot("radar") and MapPlan.sideSpot("radar").at or Vector2.new(-100, -20)
-	local spilledAt = LAYOUT.codes
+	local mesaAt = MapPlan.places.mesa.at
 
-	local routes = {
-		{ a = ref, b = quarryAt, off = 13.5, step = 34, gantryT = 0.42, crimson = true, kind = "gantry" },
-		{ a = ref, b = radarAt, off = 12.5, step = 34, gantryT = 0.48, crimson = false, kind = "gantry" },
-		{ a = ref, b = saltAt, off = 13.5, step = 36, gantryT = 0.46, crimson = false, kind = "gantry" },
-		{ a = ref, b = graveAt, off = 14.0, step = 38, gantryT = 0.50, crimson = true, kind = "rib" },
-		{ a = ref, b = mesaAt, off = 14.0, step = 40, gantryT = 0.46, crimson = true, kind = "gantry" },
-		{ a = spilledAt, b = ref, off = 13.5, step = 38, gantryT = -1, crimson = false, kind = "none" },
-	}
-
-	for rIdx, rt in routes do
-		local delta = rt.b - rt.a
-		local dist = delta.Magnitude
-		if dist < 50 then
-			continue
-		end
-		local dir2 = delta.Unit
-		local perp2 = Vector2.new(-dir2.Y, dir2.X)
-		-- Overhead gantry / rib arch at mid-route checkpoint
-		if rt.gantryT > 0 then
-			local gp = rt.a:Lerp(rt.b, rt.gantryT)
-			if farFromSites(gp.X, gp.Y, 34) then
-				if rt.kind == "rib" then
-					ribCoverArch(gp.X, gp.Y, dir2)
-				else
-					roadGantry(gp.X, gp.Y, dir2, rt.crimson)
-				end
-				-- disciplined lamp post + vertical sector banner flanking the checkpoint
-				local lp = gp + perp2 * (rt.off + 3.5) - dir2 * 10
-				if farFromSites(lp.X, lp.Y, 26) then
-					sectorLamp(lp.X, lp.Y, -perp2, rt.crimson)
-				end
-				local bp = gp - perp2 * (rt.off + 3.5) + dir2 * 10
-				if farFromSites(bp.X, bp.Y, 26) then
-					sectorBanner(bp.X, bp.Y, perp2, rt.crimson)
-				end
-			end
-		end
-
-		-- Modular waist-high Jersey barriers along lane edges: 12-stud wall + 22-26 stud open gap between units
-		local sideSign = if rIdx % 2 == 0 then 1 else -1
-		local d = 56
-		while d < dist - 54 do
-			local p = rt.a + dir2 * d + perp2 * (rt.off * sideSign)
-			if math.max(math.abs(p.X), math.abs(p.Y)) < 232 and farFromSites(p.X, p.Y, 30) and not inLane(p.X, p.Y, 8.5) then
-				jerseyBarrier(p.X, p.Y, dir2, rng:NextNumber(10.5, 13.5))
-			end
-			sideSign = -sideSign
-			d += rt.step
-		end
-		maybeYield()
-	end
-
-	-- Extra sparse junction lamps & vertical sector banners near key side-objective approaches
-	for i, s in MapPlan.sides do
-		local toRef = (ref - s.at)
-		if toRef.Magnitude > 10 then
-			local dir2 = toRef.Unit
+	-- 1. Quarry Haul-Road Roadblock: chevron concrete bunker walls + jackknifed cog_hauler_wreck + sandbag pockets + cliff shoulders
+	do
+		local cp, dir2 = pickCheckpointSpot(ref, quarryAt, 0.44)
+		if cp and dir2 then
 			local perp2 = Vector2.new(-dir2.Y, dir2.X)
-			local anchor = s.at + dir2 * 24 + perp2 * (if i % 2 == 0 then 11 else -11)
-			if farFromSites(anchor.X, anchor.Y, 20) then
-				if i % 2 == 1 then
-					sectorLamp(anchor.X, anchor.Y, -perp2, true)
-				else
-					sectorBanner(anchor.X, anchor.Y, -dir2, true)
+			local yaw = math.atan2(dir2.X, dir2.Y)
+			-- 18+ stud open road center; angled concrete walls on left & right shoulders
+			local wl = cp - perp2 * 13.5 - dir2 * 3
+			local wr = cp + perp2 * 14.0 + dir2 * 4
+			bunkerWall(wl.X, wl.Y, (dir2 + perp2 * 0.32).Unit, 12.0, 4.8)
+			bunkerWall(wr.X, wr.Y, (dir2 - perp2 * 0.28).Unit, 11.5, 4.8)
+			-- cover pockets tucked right behind the bunker walls
+			local sl = wl - dir2 * 6.5 - perp2 * 2.5
+			local sr = wr + dir2 * 6.0 + perp2 * 2.5
+			coverPocket(sl.X, sl.Y, yaw + math.rad(16), true)
+			coverPocket(sr.X, sr.Y, yaw - math.rad(18), false)
+			-- jackknifed dead cog_hauler_wreck hull anchoring the right outer flank (clear of road throat)
+			local hp = cp + perp2 * 23.5 - dir2 * 5
+			if farFromSites(hp.X, hp.Y, 30) then
+				local hlo = lowestGround(hp.X, hp.Y, 8)
+				local hcf = CFrame.new(hp.X, hlo - 0.4, hp.Y) * CFrame.Angles(math.rad(3), yaw + math.rad(58), math.rad(-5))
+				placeCheckpointSetpiece("cog_hauler_wreck", hcf, 1.0, true)
+			end
+			-- framing sandstone canyon shoulders
+			local rl = cp - perp2 * 26 + dir2 * 4
+			local rr = cp + perp2 * 29 + dir2 * 12
+			rockShoulder(rl.X, rl.Y, yaw + math.rad(78), 0.72, "desert_cliff")
+			rockShoulder(rr.X, rr.Y, yaw - math.rad(40), 1.65, "desert_boulder_a")
+		end
+	end
+	maybeYield()
+
+	-- 2. Walker Graveyard Canyon Arch: real cog_walker_rib arch spanning the corridor + bunker cheeks + sandbags + rock shoulders
+	do
+		local cp, dir2 = pickCheckpointSpot(ref, graveAt, 0.50)
+		if cp and dir2 then
+			local perp2 = Vector2.new(-dir2.Y, dir2.X)
+			local yaw = math.atan2(dir2.X, dir2.Y)
+			local loL = lowestGround(cp.X - perp2.X * 14, cp.Y - perp2.Y * 14, 3)
+			local loR = lowestGround(cp.X + perp2.X * 14, cp.Y + perp2.Y * 14, 3)
+			local baseY = math.min(loL, loR) - 1.2
+			local right3 = Vector3.new(perp2.X, 0, perp2.Y)
+			local archCF = CFrame.fromMatrix(Vector3.new(cp.X, baseY, cp.Y), right3, Vector3.yAxis) * CFrame.Angles(math.rad(7), 0, 0)
+			if placeCheckpointSetpiece("cog_walker_rib", archCF, 1.08, false) then
+				-- grounded concrete footing piers under the two arch legs (22-stud center wide open!)
+				for _, s in { -1, 1 } do
+					local fx, fz = cp.X + perp2.X * 14.8 * s, cp.Y + perp2.Y * 14.8 * s
+					local fy = if s < 0 then loL else loR
+					local pier = part(props, Vector3.new(4.2, 11, 5.2), CFrame.lookAt(Vector3.new(fx, fy + 0.5, fz), Vector3.new(fx + dir2.X, fy + 0.5, fz + dir2.Y)), concreteDark, Enum.Material.Concrete, { CanCollide = true })
+					keepMat(pier)
 				end
 			end
+			-- staggered concrete cheek walls & sandbag pockets framing the canyon choke
+			local wl = cp - perp2 * 14.5 - dir2 * 12
+			local wr = cp + perp2 * 14.5 + dir2 * 11
+			bunkerWall(wl.X, wl.Y, (dir2 + perp2 * 0.25).Unit, 11.0, 4.6)
+			bunkerWall(wr.X, wr.Y, (dir2 - perp2 * 0.25).Unit, 11.0, 4.6)
+			local sl = cp - perp2 * 12.5 + dir2 * 10
+			local sr = cp + perp2 * 12.5 - dir2 * 10
+			coverPocket(sl.X, sl.Y, yaw - math.rad(14), true)
+			coverPocket(sr.X, sr.Y, yaw + math.rad(14), false)
+			-- bold sandstone rock shoulders embracing the arch
+			local rl = cp - perp2 * 27 - dir2 * 2
+			local rr = cp + perp2 * 27 + dir2 * 4
+			rockShoulder(rl.X, rl.Y, yaw + math.rad(82), 0.74, "desert_cliff")
+			rockShoulder(rr.X, rr.Y, yaw - math.rad(68), 1.45, "desert_butte")
+		end
+	end
+	maybeYield()
+
+	-- 3. Signal Mesa Approach Outpost: grounded concrete pillbox + opposing bunker wall + supply bay/tank + butte shoulders
+	do
+		local cp, dir2 = pickCheckpointSpot(ref, mesaAt, 0.46)
+		if cp and dir2 then
+			local perp2 = Vector2.new(-dir2.Y, dir2.X)
+			local yaw = math.atan2(dir2.X, dir2.Y)
+			-- pillbox guarding the left shoulder, facing toward Signal Mesa
+			local pb = cp - perp2 * 16.5
+			if farFromSites(pb.X, pb.Y, 32) then
+				checkpointPillbox(pb.X, pb.Y, (dir2 + perp2 * 0.2).Unit)
+			end
+			-- opposing angled bunker wall + sandbag/crate pocket on right shoulder (18+ stud clear road center)
+			local wr = cp + perp2 * 14.5 + dir2 * 3
+			bunkerWall(wr.X, wr.Y, (dir2 - perp2 * 0.34).Unit, 12.5, 4.8)
+			local sr = wr - dir2 * 6.5 + perp2 * 2.5
+			coverPocket(sr.X, sr.Y, yaw - math.rad(22), true)
+			-- anchored cog_tank_a on concrete plinth beside the outpost flank
+			local tp = cp - perp2 * 27.5 - dir2 * 6
+			if farFromSites(tp.X, tp.Y, 32) then
+				local tlo, thi, tn = groundRange(tp.X, tp.Y, 5)
+				if tn.Y >= 0.88 and thi - tlo <= 4.0 then
+					local tPlinthH = (thi - tlo) + 9
+					local tPlinth = part(props, Vector3.new(12.2, tPlinthH, 11.4), CFrame.new(tp.X, thi + 0.15 - tPlinthH / 2, tp.Y) * CFrame.Angles(0, yaw, 0), concreteDark, Enum.Material.Concrete, { CanCollide = true, CastShadow = false })
+					keepMat(tPlinth)
+					placeCheckpointSetpiece("cog_tank_a", CFrame.new(tp.X, thi + 0.15, tp.Y) * CFrame.Angles(0, yaw + 0.3, 0), 1.0, true)
+				end
+			end
+			-- framing sandstone shoulders
+			local rl = cp - perp2 * 26 + dir2 * 14
+			local rr = cp + perp2 * 26 - dir2 * 4
+			rockShoulder(rl.X, rl.Y, yaw + math.rad(35), 1.45, "desert_butte")
+			rockShoulder(rr.X, rr.Y, yaw - math.rad(82), 0.68, "desert_cliff")
 		end
 	end
 end
@@ -3294,8 +3383,10 @@ local function foundryTower(parent: Instance, x: number, z: number, yaw: number)
 	local hook = hookTop - Vector3.new(0, 38, 0)
 	beam(parent, hookTop, hook, 0.5, soot, Enum.Material.Metal, { CanCollide = false })
 	part(parent, Vector3.new(3, 4, 3), CFrame.new(hook - Vector3.new(0, 2, 0)), RGB(190, 150, 40), Enum.Material.Metal, { CanCollide = false })
-	local beacon = decor(parent, Vector3.new(4, 4, 4), CFrame.new(mastTop + Vector3.new(0, 3, 0)), RGB(255, 60, 40), Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
-	pointLight(beacon, RGB(255, 60, 40), 80, 2.5)
+	if not isDesert then
+		local beacon = decor(parent, Vector3.new(4, 4, 4), CFrame.new(mastTop + Vector3.new(0, 3, 0)), RGB(255, 60, 40), Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
+		pointLight(beacon, RGB(255, 60, 40), 80, 2.5)
+	end
 	maybeYield()
 end
 
@@ -3638,113 +3729,185 @@ local function crystalSpire(parent: Instance, x: number, z: number, yaw: number)
 	maybeYield()
 end
 
--- Desert 360-degree brutalist perimeter silhouettes (Band 2 dark slate/iron towers visible through the pale haze)
+-- Helper: place a real uploaded industrial or sandstone mesh on the 360-degree horizon with Glow parts dimmed off Neon
+local function placeHorizonSetpiece(parent: Instance, key: string, cf: CFrame, scale: number, rockTintCol: Color3?): boolean
+	local m = Assets.get(key, { anchored = true })
+	if not m then
+		return false
+	end
+	if scale ~= 1 then
+		m:ScaleTo(scale)
+	end
+	m:PivotTo(cf)
+	for _, d in m:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanCollide = false
+			d.CanQuery = false
+			d.CanTouch = false
+			d.CastShadow = false
+			if d.Name == "Glow" or d:GetAttribute("Role") == "glow" then
+				d.Material = Enum.Material.SmoothPlastic
+				d.Color = RGB(52, 46, 48)
+			elseif rockTintCol then
+				d.Color = rockTintCol
+				d.Material = B.rockMat
+				keepMat(d)
+			else
+				keepMat(d)
+			end
+			partCount += 1
+		end
+	end
+	m.Parent = parent
+	return true
+end
+
+-- Deep-sunk sandstone rock shoulder foundation for horizon industrial complexes (never a raw floating box plinth)
+local function horizonRockFoundation(parent: Instance, base: CFrame, g: Vector3)
+	local tint = spireShade(rockTint())
+	local placed = false
+	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(0, -14, 6) * CFrame.Angles(0, math.rad(8), 0), 2.35, tint) then
+		placed = true
+	end
+	if placeHorizonSetpiece(parent, "desert_butte", base * CFrame.new(-34, -12, 12) * CFrame.Angles(0, math.rad(-28), 0), 4.2, jitter(tint, 0.06)) then
+		placed = true
+	end
+	if placeHorizonSetpiece(parent, "desert_butte", base * CFrame.new(34, -14, 10) * CFrame.Angles(0, math.rad(36), 0), 3.6, jitter(tint, 0.06)) then
+		placed = true
+	end
+	if not placed then
+		rockSkirt(parent, g, 14, 52, 22, 8, tint, B.rockMat)
+	end
+end
+
+-- Desert 360-degree skyline landmarks built from oversized real uploaded Blender meshes on sandstone shoulders (zero Neon dot spam)
 local function desertSiloCluster(parent: Instance, x: number, z: number, yaw: number)
 	local g = surfaceAt(x, z)
-	local base = CFrame.new(g.X, g.Y - 12, g.Z) * CFrame.Angles(0, yaw, 0)
-	local dark = RGB(48, 52, 58)
-	local mid = RGB(64, 68, 74)
-	local soot = RGB(34, 36, 42)
-	local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
-	-- plinth + 3 tapered oversized silos
-	part(parent, Vector3.new(76, 34, 46), base * CFrame.new(0, 6, 0), soot, Enum.Material.Basalt, nc)
-	local specs = {
-		{ ox = -24, oz = 0, d = 26, h = 138, col = dark },
-		{ ox = 0, oz = -4, d = 32, h = 172, col = mid },
-		{ ox = 25, oz = 2, d = 22, h = 116, col = dark },
-	}
-	for _, s in specs do
-		local lowH = s.h * 0.65
-		cyl(parent, s.d, lowH, base * CFrame.new(s.ox, lowH / 2 + 18, s.oz), s.col, Enum.Material.Metal, nc)
-		cyl(parent, s.d * 0.78, s.h - lowH, base * CFrame.new(s.ox, lowH + (s.h - lowH) / 2 + 18, s.oz), dark, Enum.Material.Metal, nc)
-		cyl(parent, s.d + 4, 3.2, base * CFrame.new(s.ox, lowH + 18, s.oz), soot, Enum.Material.Metal, nc)
+	local base = CFrame.new(g.X, g.Y - 6, g.Z) * CFrame.Angles(0, yaw, 0)
+	horizonRockFoundation(parent, base, g)
+	local ok = false
+	if placeHorizonSetpiece(parent, "cog_tank_b", base * CFrame.new(0, 12, -2) * CFrame.Angles(0, math.rad(18), 0), 5.2, nil) then
+		ok = true
 	end
-	-- high catwalk bridge tying silos together + crimson aviation beacon
-	decor(parent, Vector3.new(54, 4.5, 7), base * CFrame.new(0, 126, 0), soot, Enum.Material.Metal, nc)
-	decor(parent, Vector3.new(4.2, 4.2, 4.2), base * CFrame.new(0, 194, -4), RGB(255, 56, 44), Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
+	if placeHorizonSetpiece(parent, "cog_tank_a", base * CFrame.new(-42, 8, 8) * CFrame.Angles(0, math.rad(-32), 0), 4.5, nil) then
+		ok = true
+	end
+	if placeHorizonSetpiece(parent, "cog_tank_a", base * CFrame.new(40, 10, 6) * CFrame.Angles(0, math.rad(42), 0), 3.8, nil) then
+		ok = true
+	end
+	if placeHorizonSetpiece(parent, "cog_relay_mast", base * CFrame.new(22, 12, -16) * CFrame.Angles(0, math.rad(-14), 0), 2.15, nil) then
+		ok = true
+	end
+	if not ok then
+		-- tapered cylindrical fallback if assets are unavailable
+		local dark, mid, soot = RGB(48, 52, 58), RGB(64, 68, 74), RGB(34, 36, 42)
+		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
+		for _, s in { { ox = -24, d = 24, h = 128, col = dark }, { ox = 0, d = 30, h = 162, col = mid }, { ox = 24, d = 20, h = 110, col = dark } } do
+			local lowH = s.h * 0.62
+			cyl(parent, s.d, lowH, base * CFrame.new(s.ox, lowH / 2 + 8, 0), s.col, Enum.Material.Metal, nc)
+			cyl(parent, s.d * 0.74, s.h - lowH, base * CFrame.new(s.ox, lowH + (s.h - lowH) / 2 + 8, 0), dark, Enum.Material.Metal, nc)
+			cyl(parent, s.d + 3, 3, base * CFrame.new(s.ox, lowH + 8, 0), soot, Enum.Material.Metal, nc)
+		end
+	end
 	maybeYield()
 end
 
 local function desertGantryCrane(parent: Instance, x: number, z: number, yaw: number)
 	local g = surfaceAt(x, z)
-	local base = CFrame.new(g.X, g.Y - 10, g.Z) * CFrame.Angles(0, yaw, 0)
-	local dark = RGB(44, 48, 56)
-	local mid = RGB(62, 66, 74)
-	local haz = RGB(176, 132, 42)
-	local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
-	-- heavy A-frame legs rising 160 studs, leaning slightly inward toward the map
-	for _, sx in { -22, 22 } do
-		beam(parent, (base * CFrame.new(sx, -10, 18)).Position, (base * CFrame.new(sx * 0.55, 152, 0)).Position, 7.5, dark, Enum.Material.Metal, nc)
-		beam(parent, (base * CFrame.new(sx, -10, -16)).Position, (base * CFrame.new(sx * 0.55, 152, 0)).Position, 7.5, dark, Enum.Material.Metal, nc)
+	local base = CFrame.new(g.X, g.Y - 6, g.Z) * CFrame.Angles(0, yaw, 0)
+	horizonRockFoundation(parent, base, g)
+	local ok = false
+	-- primary oversized cog_crane overhanging inward toward the playable basin
+	if placeHorizonSetpiece(parent, "cog_crane", base * CFrame.new(-8, 12, 0) * CFrame.Angles(0, math.rad(12), 0), 4.7, nil) then
+		ok = true
 	end
-	-- cross-braces + operator bridge
-	decor(parent, Vector3.new(42, 7, 16), base * CFrame.new(0, 82, 0), mid, Enum.Material.Metal, nc)
-	decor(parent, Vector3.new(36, 11, 22), base * CFrame.new(0, 148, 0), dark, Enum.Material.Metal, nc)
-	-- long angled cantilevered truss jib overhanging toward map centre (-Z)
-	local jibStart = (base * CFrame.new(0, 156, 38)).Position
-	local jibTip = (base * CFrame.new(0, 174, -84)).Position
-	beam(parent, jibStart, jibTip, 6.2, mid, Enum.Material.Metal, nc)
-	beam(parent, (base * CFrame.new(0, 186, 4)).Position, jibTip, 2.2, dark, Enum.Material.Metal, nc)
-	beam(parent, (base * CFrame.new(0, 186, 4)).Position, jibStart, 2.2, dark, Enum.Material.Metal, nc)
-	decor(parent, Vector3.new(18, 12, 16), base * CFrame.new(0, 148, 36), haz, Enum.Material.Metal, nc) -- counterweight
-	-- cable & hanging industrial grapple silhouette
-	beam(parent, jibTip, jibTip - Vector3.new(0, 56, 0), 1.2, dark, Enum.Material.Metal, nc)
-	decor(parent, Vector3.new(9, 10, 9), CFrame.new(jibTip - Vector3.new(0, 61, 0)), dark, Enum.Material.Metal, nc)
-	decor(parent, Vector3.new(4.2, 4.2, 4.2), CFrame.new(jibTip + Vector3.new(0, 4.5, 0)), RGB(255, 56, 44), Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
+	-- secondary flanking crane + relay mast + tank silhouette
+	if placeHorizonSetpiece(parent, "cog_crane", base * CFrame.new(44, 10, 14) * CFrame.Angles(0, math.rad(-34), 0), 3.4, nil) then
+		ok = true
+	end
+	if placeHorizonSetpiece(parent, "cog_tank_b", base * CFrame.new(-44, 10, 12) * CFrame.Angles(0, math.rad(25), 0), 3.8, nil) then
+		ok = true
+	end
+	placeHorizonSetpiece(parent, "cog_relay_mast", base * CFrame.new(18, 12, 22) * CFrame.Angles(0, math.rad(-10), 0), 1.9, nil)
+	if not ok then
+		local dark, mid = RGB(44, 48, 56), RGB(62, 66, 74)
+		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
+		for _, sx in { -20, 20 } do
+			beam(parent, (base * CFrame.new(sx, -8, 16)).Position, (base * CFrame.new(sx * 0.55, 144, 0)).Position, 7, dark, Enum.Material.Metal, nc)
+			beam(parent, (base * CFrame.new(sx, -8, -14)).Position, (base * CFrame.new(sx * 0.55, 144, 0)).Position, 7, dark, Enum.Material.Metal, nc)
+		end
+		beam(parent, (base * CFrame.new(0, 148, 34)).Position, (base * CFrame.new(0, 166, -78)).Position, 5.8, mid, Enum.Material.Metal, nc)
+	end
 	maybeYield()
 end
 
 local function desertRefineryStacks(parent: Instance, x: number, z: number, yaw: number)
 	local g = surfaceAt(x, z)
-	local base = CFrame.new(g.X, g.Y - 12, g.Z) * CFrame.Angles(0, yaw, 0)
-	local dark = RGB(46, 50, 56)
-	local mid = RGB(62, 64, 70)
-	local soot = RGB(30, 30, 34)
-	local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
-	-- stepped brutalist furnace hall
-	part(parent, Vector3.new(78, 42, 52), base * CFrame.new(0, 12, 0), dark, Enum.Material.Basalt, nc)
-	part(parent, Vector3.new(54, 24, 38), base * CFrame.new(-6, 42, 0), mid, Enum.Material.Metal, nc)
-	-- twin monumental stepped smokestacks + dark soot columns against the bright sky
-	for i, st in { { ox = -20, h = 188, d = 16 }, { ox = 18, h = 154, d = 14 } } do
-		local loH = st.h * 0.58
-		cyl(parent, st.d, loH, base * CFrame.new(st.ox, loH / 2 + 24, 0), dark, Enum.Material.Metal, nc)
-		cyl(parent, st.d * 0.72, st.h - loH, base * CFrame.new(st.ox, loH + (st.h - loH) / 2 + 24, 0), mid, Enum.Material.Metal, nc)
-		cyl(parent, st.d * 0.84, 7, base * CFrame.new(st.ox, st.h + 21, 0), soot, Enum.Material.Metal, nc)
-		beam(parent, (base * CFrame.new(st.ox, 48, 0)).Position, (base * CFrame.new(st.ox * 0.2, 36, -12)).Position, 5.2, soot, Enum.Material.Metal, nc)
-		local top = emitterHost(parent, (base * CFrame.new(st.ox, st.h + 28, 0)).Position)
-		smokeEmitter(top, RGB(38, 35, 34), 22, if i == 1 then 3.2 else 2.2, 15)
+	local base = CFrame.new(g.X, g.Y - 6, g.Z) * CFrame.Angles(0, yaw, 0)
+	horizonRockFoundation(parent, base, g)
+	local ok = false
+	if placeHorizonSetpiece(parent, "cog_smokestack", base * CFrame.new(-22, 10, 0) * CFrame.Angles(0, math.rad(14), 0), 3.0, nil) then
+		ok = true
+		local top = emitterHost(parent, (base * CFrame.new(-22, 192, 0)).Position)
+		smokeEmitter(top, RGB(38, 35, 34), 22, 3.0, 15)
 	end
-	decor(parent, Vector3.new(4, 4, 4), base * CFrame.new(-20, 214, 0), RGB(255, 140, 42), Enum.Material.Neon, { Shape = Enum.PartType.Ball, CastShadow = false })
+	if placeHorizonSetpiece(parent, "cog_smokestack", base * CFrame.new(26, 8, 8) * CFrame.Angles(0, math.rad(-22), 0), 2.4, nil) then
+		ok = true
+		local top = emitterHost(parent, (base * CFrame.new(26, 154, 8)).Position)
+		smokeEmitter(top, RGB(38, 35, 34), 18, 2.0, 14)
+	end
+	placeHorizonSetpiece(parent, "cog_tank_b", base * CFrame.new(2, 10, -18) * CFrame.Angles(0, math.rad(30), 0), 4.2, nil)
+	placeHorizonSetpiece(parent, "cog_tank_a", base * CFrame.new(-52, 8, 12) * CFrame.Angles(0, math.rad(-18), 0), 3.8, nil)
+	if not ok then
+		local dark, mid, soot = RGB(46, 50, 56), RGB(62, 64, 70), RGB(30, 30, 34)
+		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
+		for i, st in { { ox = -20, h = 178, d = 16 }, { ox = 18, h = 144, d = 14 } } do
+			local loH = st.h * 0.58
+			cyl(parent, st.d, loH, base * CFrame.new(st.ox, loH / 2 + 12, 0), dark, Enum.Material.Metal, nc)
+			cyl(parent, st.d * 0.72, st.h - loH, base * CFrame.new(st.ox, loH + (st.h - loH) / 2 + 12, 0), mid, Enum.Material.Metal, nc)
+			cyl(parent, st.d * 0.84, 7, base * CFrame.new(st.ox, st.h + 10, 0), soot, Enum.Material.Metal, nc)
+			local top = emitterHost(parent, (base * CFrame.new(st.ox, st.h + 16, 0)).Position)
+			smokeEmitter(top, RGB(38, 35, 34), 22, if i == 1 then 3.0 else 2.0, 15)
+		end
+	end
 	maybeYield()
 end
 
 local function desertWalkerFrame(parent: Instance, x: number, z: number, yaw: number)
 	local g = surfaceAt(x, z)
-	local base = CFrame.new(g.X, g.Y - 12, g.Z) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(math.rad(-14), 0, math.rad(12))
-	local dark = RGB(44, 48, 54)
-	local mid = RGB(60, 64, 72)
-	local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
-	-- 3 colossal half-buried dark-iron walker rib frames + broken dorsal spine
-	local crowns: { Vector3 } = {}
-	for i = 0, 2 do
-		local s = (i - 1) * 34
-		local rx = 38 + (if i == 1 then 10 else 0)
-		local ry = 92 + (if i == 1 then 24 else 0)
-		local prev: Vector3? = nil
-		for k = 0, 4 do
-			local th = math.pi * k / 4
-			local p = (base * CFrame.new(math.cos(th) * rx, math.sin(th) * ry, s)).Position
-			if prev then
-				beam(parent, prev, p, 8.5, if i == 1 then dark else mid, Enum.Material.Metal, nc)
-			end
-			if k == 2 then
-				crowns[i + 1] = p
-			end
-			prev = p
+	local base = CFrame.new(g.X, g.Y - 8, g.Z) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(math.rad(-10), 0, math.rad(10))
+	horizonRockFoundation(parent, CFrame.new(g.X, g.Y - 6, g.Z) * CFrame.Angles(0, yaw, 0), g)
+	local ok = false
+	for i, spec in {
+		{ s = -40, key = "cog_walker_rib_half", sc = 3.2, roll = -8 },
+		{ s = -6, key = "cog_walker_rib", sc = 3.9, roll = 5 },
+		{ s = 28, key = "cog_walker_rib", sc = 3.5, roll = -4 },
+		{ s = 58, key = "cog_walker_rib_half", sc = 3.0, roll = 12 },
+	} do
+		if placeHorizonSetpiece(parent, spec.key, base * CFrame.new(0, 6, spec.s) * CFrame.Angles(0, math.rad((i - 2) * 6), math.rad(spec.roll)), spec.sc, nil) then
+			ok = true
 		end
 	end
-	beam(parent, crowns[1], crowns[2], 9.5, dark, Enum.Material.Metal, nc)
-	beam(parent, crowns[2], crowns[3], 9.5, dark, Enum.Material.Metal, nc)
+	placeHorizonSetpiece(parent, "cog_walker_skull", base * CFrame.new(6, 16, 92) * CFrame.Angles(math.rad(-16), math.rad(18), math.rad(22)), 2.7, nil)
+	if not ok then
+		local dark, mid = RGB(44, 48, 54), RGB(60, 64, 72)
+		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
+		for i = 0, 2 do
+			local s = (i - 1) * 34
+			local rx = 38 + (if i == 1 then 10 else 0)
+			local ry = 92 + (if i == 1 then 24 else 0)
+			local prev: Vector3? = nil
+			for k = 0, 4 do
+				local th = math.pi * k / 4
+				local p = (base * CFrame.new(math.cos(th) * rx, math.sin(th) * ry, s)).Position
+				if prev then
+					beam(parent, prev, p, 8.5, if i == 1 then dark else mid, Enum.Material.Metal, nc)
+				end
+				prev = p
+			end
+		end
+	end
 	maybeYield()
 end
 
@@ -3909,27 +4072,31 @@ local function farMountains(parent: Instance)
 		end
 		maybeYield()
 	end
-	-- massifs: on desert, bold stepped flat-topped dark sandstone mesa walls (Band 2 graphic silhouettes);
+	-- massifs: on desert, layered real desert_cliff & desert_butte sandstone formations (zero raw rectangular Part slabs);
 	-- other biomes keep overlapping rounded domes
 	if biomeName == "desert" then
-		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
 		for i = 1, 18 do
-			local a = (i + rng:NextNumber(-0.35, 0.35)) / 18 * TAU
-			local d = rng:NextNumber(355, 510)
-			local w = rng:NextNumber(115, 200)
-			local hgt = rng:NextNumber(88, 165)
-			local depth = rng:NextNumber(52, 90)
+			local a = (i + rng:NextNumber(-0.32, 0.32)) / 18 * TAU
+			local d = rng:NextNumber(360, 520)
+			local cx, cz = math.cos(a) * d, math.sin(a) * d
+			local hgt = rng:NextNumber(88, 150)
 			local tint = spireShade(rockTint())
 			local spanYaw = a + math.pi / 2 + rng:NextNumber(-0.25, 0.25)
-			local baseCF = CFrame.new(math.cos(a) * d, 0, math.sin(a) * d) * CFrame.Angles(0, spanYaw, 0)
-			local lowerH = hgt * 0.62
-			local s1 = part(parent, Vector3.new(w, lowerH, depth), baseCF * CFrame.new(0, lowerH / 2 - 4, 0), tint, B.rockMat, nc)
-			keepMat(s1)
-			local s2 = part(parent, Vector3.new(w * rng:NextNumber(0.62, 0.78), hgt - lowerH + 6, depth * 0.72), baseCF * CFrame.new(rng:NextNumber(-w * 0.12, w * 0.12), lowerH + (hgt - lowerH) / 2 - 4, 0), jitter(tint, 0.06), B.rockMat, nc)
-			keepMat(s2)
-			if i % 3 == 0 then
-				local s3 = part(parent, Vector3.new(w * 0.36, hgt * 0.24, depth * 0.52), baseCF * CFrame.new(rng:NextNumber(-w * 0.16, w * 0.16), hgt + hgt * 0.08, 0), jitter(tint, 0.08), B.rockMat, nc)
-				keepMat(s3)
+			local placed = false
+			local cliffSz = Assets.size("desert_cliff")
+			local cliffScale = hgt / (if cliffSz then cliffSz.Y else 22.4)
+			if placeHorizonSetpiece(parent, "desert_cliff", CFrame.new(cx, -10, cz) * CFrame.Angles(0, spanYaw, 0), cliffScale, tint) then
+				placed = true
+			end
+			local butteSz = Assets.size("desert_butte")
+			local bScale = (hgt * rng:NextNumber(0.68, 0.96)) / (if butteSz then butteSz.Y else 10.3)
+			local sideDir = Vector3.new(math.cos(spanYaw), 0, -math.sin(spanYaw))
+			local off = sideDir * rng:NextNumber(46, 84) * (if i % 2 == 0 then 1 else -1)
+			if placeHorizonSetpiece(parent, "desert_butte", CFrame.new(cx + off.X, -8, cz + off.Z) * CFrame.Angles(0, spanYaw + rng:NextNumber(-0.6, 0.6), 0), bScale, jitter(tint, 0.06)) then
+				placed = true
+			end
+			if not placed then
+				desertSkylineBlobs(parent, cx, cz, hgt * 0.85, tint, 24)
 			end
 			maybeYield()
 		end
@@ -4423,7 +4590,7 @@ function MapBuilder.build(faction: string?, biome: string?): any
 		dressCog(dressing)
 	end
 	if isDesert then
-		desertSightlines(props, dressing)
+		desertCheckpoints(props, dressing)
 	end
 
 	-- environmental storytelling: wreck fields, lane-edge rock clusters + shrub clumps, biome extras, rim smoke, dust devils
