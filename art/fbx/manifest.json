@@ -10057,5 +10057,135 @@
     "weak_spots": [],
     "attachments": [],
     "assetId": ""
+  },
+  "cog_drop_pod": {
+    "fbx": "art/fbx/cog_drop_pod.fbx",
+    "texture": "art/fbx/palette_cogwork.png",
+    "size_studs_roblox_xyz": [
+      7.637,
+      12.31,
+      8.141
+    ],
+    "bbox_center_roblox": [
+      0.0,
+      6.155,
+      0.252
+    ],
+    "palette": "cogwork",
+    "parts": [
+      {
+        "name": "Body",
+        "role": "body",
+        "parent": null,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 8668,
+        "rgb": null
+      },
+      {
+        "name": "Glow",
+        "role": "glow",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 176,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      },
+      {
+        "name": "Door",
+        "role": "limb",
+        "parent": "Body",
+        "pivot": [
+          0.0,
+          0.66,
+          -2.96
+        ],
+        "material": "Metal",
+        "textured": true,
+        "triangles": 1088,
+        "rgb": null
+      },
+      {
+        "name": "DoorGlow",
+        "role": "glow",
+        "parent": "Door",
+        "pivot": [
+          0.0,
+          0.66,
+          -2.96
+        ],
+        "material": "Neon",
+        "textured": false,
+        "triangles": 36,
+        "rgb": [
+          255,
+          74,
+          26
+        ]
+      }
+    ],
+    "weak_spots": [],
+    "attachments": [
+      {
+        "name": "DoorHinge",
+        "part": "Body",
+        "pos": [
+          0.0,
+          0.66,
+          -2.96
+        ]
+      },
+      {
+        "name": "Beacon",
+        "part": "Body",
+        "pos": [
+          0.0,
+          11.74,
+          0.0
+        ]
+      },
+      {
+        "name": "StackL",
+        "part": "Body",
+        "pos": [
+          1.18,
+          12.05,
+          2.72
+        ]
+      },
+      {
+        "name": "StackR",
+        "part": "Body",
+        "pos": [
+          -1.18,
+          12.05,
+          2.72
+        ]
+      },
+      {
+        "name": "DeployExit",
+        "part": "Body",
+        "pos": [
+          0.0,
+          1.35,
+          -4.35
+        ]
+      }
+    ],
+    "assetId": ""
   }
 }
