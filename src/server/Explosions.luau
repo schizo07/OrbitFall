@@ -286,6 +286,11 @@ function Explosions.blast(pos: Vector3, spec: any, source: any?): { killed: numb
 		})
 	end
 
+	-- 3b. world hazards (shootable COG fuel barrels chain-detonate from any nearby explosion, enemy shells included)
+	if s.Hazards and s.Hazards.onBlast then
+		pcall(s.Hazards.onBlast, pos, radius, source)
+	end
+
 	-- 4. listeners
 	if #listeners > 0 and not spec.noEmit then
 		Explosions.emit({

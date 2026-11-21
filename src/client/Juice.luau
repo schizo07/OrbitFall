@@ -9,6 +9,8 @@
 --   Juice.hitstop(t)                     freezes shake/kick progression and holds the camera for t seconds
 --   Juice.flash(color, alpha, dur)       full-screen colour flash
 --   Juice.vignette(color, alpha, dur)    edge vignette (damage)
+--   Juice.suppress(strength, dirSign?, heavy?) peripheral suppression darkening + directional roll flinch + micro-trauma
+--   Juice.recoilRoll(rollDeg)            brief roll jitter pulse on shots without re-triggering pitch floor
 --   Juice.colorPunch(tint, s, dur, sat?) short colour-grade hit (tint + contrast + saturation) easing back to neutral
 --   Juice.step(dt) -> CFrame             combined offset: camera.CFrame = camera.CFrame * Juice.step(dt)
 --   Juice.punchFov(deg)                  optional FOV punch; read the current offset with Juice.getFov()
@@ -182,6 +184,16 @@ function Juice.kick(pitchDeg: number, yawDeg: number, rollDeg: number?)
 	kickBack = math.clamp(kickBack + math.abs(p) * 0.045, 0, 0.65)
 end
 
+function Juice.recoilRoll(rollDeg: number)
+	local i = Juice.intensity
+	if i <= 0 then
+		return
+	end
+	local r = rollDeg * i
+	kickR = math.clamp(kickR + r * 0.65, -4.8, 4.8)
+	kickRV += r * 15
+end
+
 -- Direct hit flinch kick: unmistakable 4-7 deg pitch/roll punch over 120-180 ms, capped so aim stays recoverable.
 function Juice.flinch(pitchDeg: number, yawDeg: number, rollDeg: number?)
 	local i = Juice.intensity
@@ -238,7 +250,10 @@ function Juice.kill(weight: number, mine: boolean?, pos: Vector3?)
 end
 
 function Juice.punchFov(deg: number)
-	fovVel += deg * 25 * Juice.intensity
+	local s = deg * Juice.intensity
+	-- instant shock snap + spring recovery (~0.25 s) so blasts and heavy shots feel punchy on frame 1
+	fovOff = math.clamp(fovOff + s * 0.36, -8, 12)
+	fovVel += s * 24
 end
 
 function Juice.getFov(): number
@@ -282,17 +297,17 @@ function Juice.step(dt: number): CFrame
 		if e <= 0 then
 			table.remove(shakes, i)
 		elseif s.kind == "trauma" then
-			local snap = math.exp(-s.t / 0.055)
-			local tail = math.exp(-s.t / math.max(s.dur * 0.42, 0.08)) * e
+			local snap = math.exp(-s.t / 0.06)
+			local tail = math.exp(-s.t / math.max(s.dur * 0.44, 0.09)) * e
 			local nh = s.t * s.freq
 			local nl = s.t * (s.lowFreq or 8.5)
-			local aH = s.mag * 0.72 * snap
-			local aL = s.mag * 0.58 * tail
-			sp += math.noise(nh, s.seed, 0.5) * 2.2 * aH + math.noise(nl, s.seed, 5.5) * 1.9 * aL
-			sy += math.noise(nh, s.seed, 1.5) * 2.0 * aH + math.noise(nl, s.seed, 6.5) * 1.7 * aL
-			sr += math.noise(nh, s.seed, 2.5) * 1.8 * aH + math.noise(nl, s.seed, 7.5) * 1.5 * aL
-			sx += (math.noise(nh, s.seed, 3.5) * aH + math.noise(nl, s.seed, 8.5) * aL) * 0.1
-			sv += (math.noise(nh, s.seed, 4.5) * aH + math.noise(nl, s.seed, 9.5) * aL) * 0.1
+			local aH = s.mag * 0.88 * snap
+			local aL = s.mag * 0.64 * tail
+			sp += math.noise(nh, s.seed, 0.5) * 2.35 * aH + math.noise(nl, s.seed, 5.5) * 2.0 * aL
+			sy += math.noise(nh, s.seed, 1.5) * 2.15 * aH + math.noise(nl, s.seed, 6.5) * 1.8 * aL
+			sr += math.noise(nh, s.seed, 2.5) * 1.95 * aH + math.noise(nl, s.seed, 7.5) * 1.6 * aL
+			sx += (math.noise(nh, s.seed, 3.5) * aH + math.noise(nl, s.seed, 8.5) * aL) * 0.11
+			sv += (math.noise(nh, s.seed, 4.5) * aH + math.noise(nl, s.seed, 9.5) * aL) * 0.11
 		else
 			local amp = s.mag * e * e
 			local n = s.t * s.freq
@@ -323,6 +338,9 @@ local flashFrame: Frame? = nil
 local flashTween: Tween? = nil
 local edges: { Frame } = {}
 local vigTweens: { Tween } = {}
+local suppEdges: { Frame } = {}
+local suppTweens: { Tween } = {}
+local SUPP_COLOR = Color3.fromRGB(16, 12, 14)
 
 local function ensureGui(): boolean
 	if gui and gui.Parent then
@@ -379,6 +397,36 @@ local function ensureGui(): boolean
 		gr.Parent = e
 		e.Parent = g
 		edges[i] = e
+	end
+
+	-- peripheral-only suppression darkening rim (strictly outer 14-16%, stacks cleanly with damage splatter)
+	table.clear(suppEdges)
+	local suppDefs = {
+		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.16), rot = 90 },
+		{ pos = UDim2.fromScale(0, 0.84), size = UDim2.fromScale(1, 0.16), rot = 270 },
+		{ pos = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.14, 1), rot = 0 },
+		{ pos = UDim2.fromScale(0.86, 0), size = UDim2.fromScale(0.14, 1), rot = 180 },
+	}
+	for i, d in suppDefs do
+		local e = Instance.new("Frame")
+		e.Name = "SuppressionRim" .. i
+		e.Position = d.pos
+		e.Size = d.size
+		e.BackgroundColor3 = SUPP_COLOR
+		e.BackgroundTransparency = 1
+		e.BorderSizePixel = 0
+		e.Active = false
+		e.ZIndex = 0
+		local gr = Instance.new("UIGradient")
+		gr.Rotation = d.rot
+		gr.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.45, 0.58),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		gr.Parent = e
+		e.Parent = g
+		suppEdges[i] = e
 	end
 
 	g.Parent = pg
@@ -450,9 +498,9 @@ function Juice.colorPunch(tint: Color3, strength: number, dur: number, sat: numb
 	end
 	cc.Enabled = true
 	cc.TintColor = Color3.new(1, 1, 1):Lerp(tint, math.clamp(0.45 * s, 0, 0.7))
-	cc.Contrast = 0.3 * s
+	cc.Contrast = 0.34 * s
 	cc.Saturation = (sat or 0.4) * s
-	cc.Brightness = 0.06 * s
+	cc.Brightness = 0.09 * s
 	punchTween = TweenService:Create(cc, TweenInfo.new(math.max(dur, 0.1), Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		TintColor = Color3.new(1, 1, 1),
 		Contrast = 0,
@@ -479,6 +527,49 @@ function Juice.vignette(color: Color3, alpha: number, dur: number)
 		})
 		tw:Play()
 		table.insert(vigTweens, tw)
+	end
+end
+
+-- Under-fire suppression: directional roll flinch + micro-trauma + peripheral darkening pulse (0.32-0.48 s decay,
+-- border-only, stacks cleanly with damage splatter without blinding center aim).
+function Juice.suppress(strength: number, dirSign: number?, heavy: boolean?)
+	local i = Juice.intensity
+	if i <= 0 then
+		return
+	end
+	local s = math.clamp(strength, 0.15, 1.35)
+	local sign = if dirSign and dirSign ~= 0 then math.sign(dirSign) else (if rng:NextNumber() < 0.5 then -1 else 1)
+	-- directional roll flinch + tiny pitch duck
+	local roll = sign * (if heavy then 2.3 else 1.25) * s
+	local pitch = -(if heavy then 0.65 else 0.32) * s
+	flinchP = math.clamp(flinchP + pitch * 0.65 * i, -MAX_FLINCH_DEG, MAX_FLINCH_DEG)
+	flinchR = math.clamp(flinchR + roll * 0.7 * i, -MAX_FLINCH_DEG, MAX_FLINCH_DEG)
+	flinchPV += pitch * 14 * i
+	flinchRV += roll * 16 * i
+	-- micro-trauma shake + slight FOV tension pinch on heavy suppression
+	Juice.shake((if heavy then 0.95 else 0.44) * s, if heavy then 0.25 else 0.16)
+	if heavy or s >= 0.75 then
+		Juice.punchFov(-(if heavy then 1.35 else 0.65) * s)
+	end
+	-- border-only transient peripheral darkening pulse
+	if not ensureGui() then
+		return
+	end
+	for _, tw in suppTweens do
+		tw:Cancel()
+	end
+	table.clear(suppTweens)
+	local peakAlpha = math.clamp((if heavy then 0.46 else 0.30) * s * i, 0.12, 0.52)
+	local targetT = 1 - peakAlpha
+	local dur = if heavy then 0.48 else 0.34
+	for _, e in suppEdges do
+		-- stack cleanly with active suppression without popping brighter
+		e.BackgroundTransparency = math.min(e.BackgroundTransparency, targetT)
+		local tw = TweenService:Create(e, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 1,
+		})
+		tw:Play()
+		table.insert(suppTweens, tw)
 	end
 end
 

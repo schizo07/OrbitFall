@@ -352,7 +352,9 @@ end
 local sparkEm: { ParticleEmitter } = {}
 local emberEm: { ParticleEmitter } = {}
 local sandEm: { ParticleEmitter } = {}
-local sparkIdx, emberIdx, sandIdx = 0, 0, 0
+local dustRingEm: { ParticleEmitter } = {}
+local emberRingEm: { ParticleEmitter } = {}
+local sparkIdx, emberIdx, sandIdx, dustRingIdx, emberRingIdx = 0, 0, 0, 0, 0
 
 local function buildBurstEmitters()
 	for i = 1, 3 do
@@ -412,6 +414,70 @@ local function buildBurstEmitters()
 		em.Transparency = seqT({ { 0, 0.16 }, { 0.55, 0.42 }, { 1, 1 } })
 		em.Parent = part
 		sandEm[i] = em
+	end
+	-- Horizontal ground dust + ember shockwave ring emitters (radial blast sweep along the deck)
+	for i = 1, 3 do
+		local part = newPart(Enum.PartType.Block, Enum.Material.SmoothPlastic)
+		part.Size = Vector3.one
+		local em = Instance.new("ParticleEmitter")
+		em.Enabled = false
+		em.Rate = 0
+		em.Texture = TEX_SMOKE
+		em.LightEmission = 0
+		em.LightInfluence = 0.65
+		em.Color = ColorSequence.new(SAND_BASE, SAND_EDGE)
+		em.EmissionDirection = Enum.NormalId.Top
+		em.SpreadAngle = Vector2.new(84, 84)
+		em.Rotation = NumberRange.new(0, 360)
+		em.RotSpeed = NumberRange.new(-90, 90)
+		em.Drag = 3.2
+		em.Acceleration = V3(0, 1.5, 0)
+		em.Transparency = seqT({ { 0, 0.14 }, { 0.5, 0.45 }, { 1, 1 } })
+		em.Parent = part
+		dustRingEm[i] = em
+	end
+	for i = 1, 3 do
+		local part = newPart(Enum.PartType.Block, Enum.Material.SmoothPlastic)
+		part.Size = Vector3.one
+		local em = Instance.new("ParticleEmitter")
+		em.Enabled = false
+		em.Rate = 0
+		em.Texture = TEX_SPARK
+		em.LightEmission = 1
+		em.LightInfluence = 0
+		em.EmissionDirection = Enum.NormalId.Top
+		em.SpreadAngle = Vector2.new(84, 84)
+		em.Drag = 2.6
+		em.Acceleration = V3(0, -14, 0)
+		em.Transparency = seqT({ { 0, 0 }, { 0.65, 0.25 }, { 1, 1 } })
+		em.Parent = part
+		emberRingEm[i] = em
+	end
+end
+
+local function groundShockRingAt(at: Vector3, n: Vector3, K: number, sparkCol: Color3)
+	if #dustRingEm > 0 then
+		dustRingIdx = dustRingIdx % #dustRingEm + 1
+		local em = dustRingEm[dustRingIdx]
+		local part = em.Parent :: Part
+		part.CFrame = upCF(at + n * 0.5, n)
+		local sz = math.clamp(1.6 + 1.45 * K, 1.8, 7.5)
+		em.Size = seqT({ { 0, sz * 0.55 }, { 0.45, sz * 1.25 }, { 1, sz * 1.9 } })
+		em.Lifetime = NumberRange.new(0.45 + 0.12 * K, 0.85 + 0.22 * K)
+		em.Speed = NumberRange.new(26 + 12 * K, 48 + 20 * K)
+		em:Emit(q(12 + 8 * K))
+	end
+	if #emberRingEm > 0 then
+		emberRingIdx = emberRingIdx % #emberRingEm + 1
+		local em = emberRingEm[emberRingIdx]
+		local part = em.Parent :: Part
+		part.CFrame = upCF(at + n * 0.6, n)
+		em.Color = ColorSequence.new(FLASH_WHITE_GOLD, sparkCol)
+		local sz = math.clamp(0.24 + 0.1 * K, 0.24, 0.65)
+		em.Size = seq(sz, sz * 0.2)
+		em.Lifetime = NumberRange.new(0.35, 0.75)
+		em.Speed = NumberRange.new(32 + 14 * K, 62 + 22 * K)
+		em:Emit(q(10 + 8 * K))
 	end
 end
 
@@ -573,16 +639,25 @@ local function camera(p: Vector3, K: number, R: number, st: any, opts: any)
 	end
 	local d = (camPos() - p).Magnitude
 	local range = opts.shr or (55 + 35 * K)
-	-- shake: ~1/distance trauma, full strength inside 14 studs
-	Juice.trauma(1.5 * K ^ 0.8 * mult, 0.35 + 0.25 * K, p, range)
-	-- FOV punch and screen flash only when close (rate limited: a cluster drop is 30 blasts in 1.1 s)
-	local near = math.clamp(1 - d / (R * 2.5 + 20), 0, 1)
+	-- shake: ~1/distance trauma, strong 100 ms initial snap + low-frequency rumble settle
+	Juice.trauma(1.65 * K ^ 0.82 * mult, 0.38 + 0.25 * K, p, range)
+	-- FOV shock-punch (+3-5 deg snap-back over ~0.25 s) + warm exposure/contrast blast flash on nearby heavy impacts (<= 55 studs)
+	local nearRange = math.max(55, R * 2.5 + 20)
+	local near = math.clamp(1 - d / nearRange, 0, 1)
+	local shockNear = math.clamp(1 - d / 55, 0, 1)
 	local now = os.clock()
-	if near > 0 and (now - lastPunch > 0.15 or K >= 2.5) then
+	if near > 0 and (now - lastPunch > 0.12 or K >= 2.2) then
 		lastPunch = now
-		Juice.punchFov((1.2 + 1.6 * K) * near * mult)
-		if d < R * 1.6 + 8 then
-			Juice.flash(st.core, math.clamp((0.18 + 0.12 * K) * near, 0, 0.6), 0.22 + 0.08 * K)
+		local fovKick = if shockNear > 0 and K >= 1.0
+			then math.clamp((3.0 + 1.5 * K) * shockNear, 1.2, 5.4)
+			else math.clamp((1.4 + 1.6 * K) * near * mult * 0.65, 0.4, 4.5)
+		Juice.punchFov(fovKick)
+		if shockNear > 0 and K >= 0.95 then
+			-- brief 0.12 s warm exposure/contrast blast flash on ColorCorrection + subtle screen edge
+			Juice.colorPunch(st.hot, math.clamp((0.45 + 0.22 * K) * shockNear, 0.2, 1.05), 0.12, 0.22)
+			Juice.flash(st.core:Lerp(st.hot, 0.25), math.clamp((0.2 + 0.1 * K) * shockNear, 0.08, 0.48), 0.12)
+		elseif d < R * 1.6 + 8 then
+			Juice.flash(st.core, math.clamp((0.18 + 0.12 * K) * near, 0, 0.55), 0.18 + 0.06 * K)
 		end
 		if K >= 2.5 and d < R * 1.3 then
 			Juice.hitstop(0.05)
@@ -728,10 +803,13 @@ function Blast.play(p: Vector3, opts: any?)
 		})
 	end
 
-	-- ground: shockwave ring + dust kick-up
+	-- ground: shockwave ring + horizontal ground dust/ember blast ring + dust kick-up
 	if gpos and d < 600 then
 		local ringR = math.clamp(math.max(R * 0.9, 2 + 3.4 * K), 3, 42)
 		ringAt(upCF(g, n), ringR, st.core:Lerp(st.hot, 0.35), 0.38 + 0.08 * K)
+		if d < 420 and K >= 0.65 then
+			groundShockRingAt(g, n, K, st.spark)
+		end
 		if Spectacle and Spectacle.blastDust then
 			pcall(Spectacle.blastDust, g, K)
 		end

@@ -547,6 +547,9 @@ local function syncAmmoAttrs(p: Player)
 end
 
 local function materialFor(inst: Instance): string
+	if inst:GetAttribute("FuelBarrel") then
+		return "metal"
+	end
 	local enemyId = inst:GetAttribute("EnemyId")
 	if enemyId then
 		local model = inst:FindFirstAncestorOfClass("Model")
@@ -658,6 +661,12 @@ local function traceShot(p: Player, w, origin: Vector3, dir: Vector3, pierceLeft
 			end
 		end
 	else
+		if inst:GetAttribute("FuelBarrel") and S.Hazards and S.Hazards.hitBarrel then
+			local ignited = S.Hazards.hitBarrel(inst, w.damage, p)
+			if report then
+				hitConfirm:FireClient(p, "pen", endPos, ignited, false, 0)
+			end
+		end
 		S.Fx.except(p, "Impact", { p = endPos, n = res.Normal, r = "pen", m = mat }, true)
 		if w.splash then
 			local delayT = w.kind == "rocket" and (res.Position - origin).Magnitude / 260 or 0

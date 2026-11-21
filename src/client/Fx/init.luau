@@ -1080,12 +1080,12 @@ function Fx.impact(p: Vector3, n: Vector3?, result: string?, material: string?)
 	if result == "deflect" then
 		Audio.play("HitDeflect", p)
 		if visible then
-			-- 100-200 ms golden spark cone + immediate dark charcoal puff (#2A2624)
-			burst("sparks", cf, 16, { scale = 1.15, speed = 1.5, spread = 38, color = SPARK_HOT })
-			burst("puff", cf, 3, { scale = 0.85, speed = 0.9, spread = 35, color = CHARCOAL_PUFF })
+			-- 100-200 ms crisp metallic spark cone + immediate dark charcoal puff (#2A2624)
+			burst("sparks", cf, 20, { scale = 1.25, speed = 1.65, spread = 34, color = SPARK_HOT })
+			burst("puff", cf, 3, { scale = 0.9, speed = 0.95, spread = 35, color = CHARCOAL_PUFF })
 			if near then
-				impactFlash(p, C3(255, 247, 204), 1.05)
-				sparkStreaks(p, n, 3, PLAYER_BLOOM)
+				impactFlash(p, C3(255, 248, 212), 1.15)
+				sparkStreaks(p, n, 4, PLAYER_BLOOM)
 			end
 			-- ricochet streak
 			local tang = randUnit()
@@ -1122,34 +1122,34 @@ function Fx.impact(p: Vector3, n: Vector3?, result: string?, material: string?)
 		elseif material == "ground" then
 			Audio.play("HitGround", p)
 			if visible then
-				-- Loud sand impact plume + directed golden spark cone + immediate dark charcoal puff (#2A2624)
-				burst("dust", cf, 12, { scale = 1.35, speed = 1.85, spread = 38, color = SAND_PLUME })
-				burst("dust", cf, 5, { scale = 1.75, speed = 0.75, spread = 75, color = SAND_PLUME })
-				burst("puff", cf, 3, { scale = 0.95, speed = 0.95, spread = 32, color = CHARCOAL_PUFF })
-				if dist < 140 then
-					burst("sparks", cf, 8, { scale = 0.8, speed = 1.25, spread = 34, color = SPARK_HOT })
+				-- Tall vertical sand/dust geyser + base dust cloud + hot sparks + ember flash so cover visibly takes a beating
+				burst("dust", cf, 16, { scale = 1.6, speed = 2.25, spread = 28, color = SAND_PLUME })
+				burst("dust", cf, 7, { scale = 2.0, speed = 0.85, spread = 78, color = SAND_PLUME })
+				burst("puff", cf, 4, { scale = 1.05, speed = 1.05, spread = 30, color = CHARCOAL_PUFF })
+				if dist < 160 then
+					burst("sparks", cf, 11, { scale = 0.95, speed = 1.45, spread = 34, color = SPARK_HOT })
 					Fx.bulletMark(p, n)
 				end
 				if near then
-					impactFlash(p, PLAYER_CORE, 0.85)
-					sparkStreaks(p, n, 2, PLAYER_BLOOM)
+					impactFlash(p, PLAYER_CORE, 1.05)
+					sparkStreaks(p, n, 3, PLAYER_BLOOM)
 				end
-				if dist < 75 then
-					impactChips(p + n * 0.2, { n = 4, style = "rock", speed = 18, scale = 0.28, life = 1.0, up = 1.4, dir = n, bias = 0.85 })
+				if dist < 95 then
+					impactChips(p + n * 0.2, { n = 5, style = "rock", speed = 21, scale = 0.32, life = 1.05, up = 1.55, dir = n, bias = 0.85 })
 				end
 			end
 		else
 			Audio.play("HitMetal", p)
 			if visible then
-				-- 100-200 ms golden spark cone + dark charcoal puff (#2A2624) rising vertically + metal chips
-				burst("sparks", cf, 16, { scale = 1.15, speed = 1.4, spread = 36, color = SPARK_HOT })
-				burst("puff", cf, 4, { scale = 0.95, speed = 0.9, spread = 34, color = CHARCOAL_PUFF })
+				-- Crisp metallic spark cone + dark charcoal puff (#2A2624) rising vertically + metal chips
+				burst("sparks", cf, 20, { scale = 1.25, speed = 1.6, spread = 32, color = SPARK_HOT })
+				burst("puff", cf, 4, { scale = 1.0, speed = 0.95, spread = 34, color = CHARCOAL_PUFF })
 				if near then
-					impactFlash(p, PLAYER_CORE, 1.0)
-					sparkStreaks(p, n, 3, PLAYER_BLOOM)
+					impactFlash(p, PLAYER_CORE, 1.15)
+					sparkStreaks(p, n, 4, PLAYER_BLOOM)
 				end
-				if dist < 100 then
-					impactChips(p + n * 0.3, { n = 3, style = "scrap", speed = 20, scale = 0.36, life = 1.0, up = 1.15, dir = n, bias = 0.75 })
+				if dist < 110 then
+					impactChips(p + n * 0.3, { n = 4, style = "scrap", speed = 22, scale = 0.38, life = 1.05, up = 1.2, dir = n, bias = 0.75 })
 				end
 			end
 		end
@@ -1439,18 +1439,33 @@ local function death(d)
 		local puddle = if pal and pal.glow then pal.glow:Lerp(C3(70, 150, 45), 0.4) else nil
 		Fx.splat(p, 1.9 * f ^ 0.8, puddle, 10, dir)
 	else
-		-- robot: spark burst + a hard spark fan along the shot, scrap flung with it, a smoke wisp that lingers, scorch mark
-		burst("sparks", p, 18 * f, { scale = 0.9, speed = 1 + f * 0.1 })
+		-- robot: spark burst + a hard spark fan along the shot, dark shrapnel + scrap flung with it, charcoal smoke puff, scorch mark
+		burst("sparks", p, 22 * f, { scale = 1.05, speed = 1.15 + f * 0.12, color = SPARK_HOT })
 		if spray then
-			burst("sparks", spray, 10 * f ^ 0.8, { scale = 1.0, speed = 1.7 + f * 0.1, spread = 40 })
+			burst("sparks", spray, 12 * f ^ 0.8, { scale = 1.1, speed = 1.85 + f * 0.1, spread = 38, color = SPARK_HOT })
 		end
-		burst("puff", p, 5 * f, { scale = f ^ 0.7 })
-		burst("smoke", p + Vector3.new(0, 0.6, 0), 1 + f, { scale = 0.4 * f ^ 0.6, color = C3(70, 66, 62) })
-		Fx.debris(p, { n = 6 + 5 * f, style = "scrap", color = d.color, palette = pal and pal.scrap, speed = 26 + f * 3, scale = math.clamp(f * 0.5, 0.8, 2.2), dir = dir, bias = bias })
+		burst("puff", p, 6 * f, { scale = 1.05 * f ^ 0.7, color = CHARCOAL_PUFF })
+		burst("smoke", p + Vector3.new(0, 0.8, 0), 2 + math.floor(f * 1.4), { scale = 0.62 * f ^ 0.6, color = CHARCOAL_PUFF })
+		Fx.debris(p, { n = 6 + 5 * f, style = "scrap", color = d.color, palette = pal and pal.scrap, speed = 28 + f * 3, scale = math.clamp(f * 0.5, 0.8, 2.2), dir = dir, bias = bias })
+		if medium or heavy then
+			Fx.debris(p + Vector3.new(0, 0.8, 0), {
+				n = if heavy then 8 else 5,
+				style = "shrapnel",
+				speed = 32 + f * 4,
+				up = 1.55,
+				scale = math.clamp(0.78 + f * 0.22, 0.8, 1.5),
+				life = 1.25,
+				dir = dir,
+				bias = bias,
+			})
+			if dist < 130 then
+				sparkStreaks(p, Vector3.yAxis, if heavy then 6 else 4, PLAYER_BLOOM)
+			end
+		end
 		if heavy then
 			Fx.explosion(p, { size = if f >= 4 then "L" else "M", style = "fire", silent = true, noShake = true })
 		elseif medium and dist < 80 then
-			Fx.scorch(p, 1.1 * f ^ 0.5)
+			Fx.scorch(p, 1.25 * f ^ 0.5)
 		end
 	end
 end

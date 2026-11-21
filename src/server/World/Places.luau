@@ -17,6 +17,7 @@
 local Workspace = game:GetService("Workspace")
 local MapPlan = require(script.Parent.MapPlan)
 local Assets = require(script.Parent.Assets)
+local Services = require(script.Parent.Parent.Services)
 
 local Places = {}
 Places.partCount = 0
@@ -61,6 +62,12 @@ end
 
 local function gy(x: number, z: number): number
 	return groundFn(x, z)
+end
+
+local function barrelCluster(parent: Instance, pos: Vector3, n: number, seed: number)
+	if Services and Services.Hazards and Services.Hazards.spawnBarrelCluster then
+		Services.Hazards.spawnBarrelCluster(parent, Vector3.new(pos.X, gy(pos.X, pos.Z), pos.Z), gy, n, seed)
+	end
 end
 
 -- part helpers -----------------------------------------------------------------------------------------------------------
@@ -1134,6 +1141,9 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 			vcyl(g, 2.3, 0.35, CFrame.new(p + Vector3.new(0, 2.2, 0)), STEEL_D, false)
 		end
 	end
+	-- Tactical shootable COG Fuel Barrels on Signal Mesa flanks
+	barrelCluster(g, atRamp(dTop - 4, -8.5), 3, 2101)
+	barrelCluster(g, m + pr * 9 - u * 7, 2, 2102)
 end
 
 local function buildPowerLine(root: Instance, m: Vector3, refP: Vector3)
@@ -1417,6 +1427,9 @@ local function buildQuarry(root: Instance, Q: Vector3, refP: Vector3, anchors: a
 			end
 		end
 	end
+	-- Tactical shootable COG Fuel Barrels on Quarry pit flank & ramp rim
+	barrelCluster(g, Q + pr * (half - 2) + u * 6, 3, 3101)
+	barrelCluster(g, Q + u * (rimR - 1) + pr * 11, 2, 3102)
 end
 
 -- =============================================================================================================================
@@ -1577,6 +1590,9 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 			end
 		end
 	end
+	-- Tactical shootable COG Fuel Barrels flanking the Walker Graveyard rib corridor
+	barrelCluster(g, onG(-10, -14), 3, 4101)
+	barrelCluster(g, onG(14, 15), 2, 4102)
 end
 
 -- =============================================================================================================================
@@ -1757,6 +1773,10 @@ local function buildRefinery(root: Instance, R: Vector3, Q: Vector3, anchors: an
 	local top = emitterHost(g, S(61))
 	smoke(top, RGB(40, 36, 36), 10, 7, 16, 11)
 	light(top, AMBER, 30, 1.0)
+
+	-- Tactical shootable COG Fuel Barrels flanking the Refinery gate & smokestack yard
+	barrelCluster(g, polar(R, gateAngles[1] + 0.24, RING - 9), 3, 5101)
+	barrelCluster(g, polar(R, stackA - 0.36, 25), 3, 5102)
 
 	if biomeName == "desert" then
 		-- ONE stark monolithic brutalist concrete-and-steel bunker compound opposite the stack

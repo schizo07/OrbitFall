@@ -188,27 +188,33 @@ local function removeBolt(id: any, b: any)
 	end
 end
 
--- Near miss: whiz + screen-edge flash + directional flinch/micro-shake on the side the shot passed ----------
+-- Near miss & cover suppression: supersonic crack/whiz + edge flash + directional flinch/shake + peripheral vignette -----
 local WHIZ_ID = "rbxassetid://123402454968182" -- short whoosh arc
-local WHIZ_NEAR = 6.2 -- studs from the trooper's root (bolts)
-local WHIZ_NEAR_HEAVY = 9.8 -- heavy cannon shells roar past wider
+local WHIZ_NEAR = 8.5 -- studs from the trooper's root (bolts)
+local WHIZ_NEAR_HEAVY = 12.5 -- heavy cannon shells roar past wider
 local WHIZ_HIT = 2.4 -- closer than this the server counts a hit (hitRadius ~2.2): no whiz
+local COVER_SUPPRESS_R = 14 -- enemy bolt cover/ground impacts within 14 studs suppress the camera
+local COVER_SUPPRESS_HEAVY_R = 20
 local lastWhiz = 0
+local lastCoverSuppress = 0
+local lastBoltChip = 0
+local SAND_IMPACT = ColorSequence.new(C3(218, 188, 146), C3(144, 120, 94))
+local CHARCOAL_SMOKE = ColorSequence.new(C3(42, 38, 36), C3(74, 67, 60))
 local whizAtt: Attachment? = nil
 local whizSound: Sound? = nil
 local edgeGui: ScreenGui? = nil
 local edges: { [string]: Frame } = {}
 
-local function whizAudio(at: Vector3, heavy: boolean?)
+local function whizAudio(at: Vector3, heavy: boolean?, crack: boolean?)
 	if not whizAtt or not whizAtt.Parent then
 		local att = Instance.new("Attachment")
 		att.Name = "BoltWhiz"
 		att.Parent = workspace.Terrain
 		local s = Instance.new("Sound")
 		s.SoundId = WHIZ_ID
-		s.Volume = 0.78
-		s.RollOffMinDistance = 6
-		s.RollOffMaxDistance = 55
+		s.Volume = 0.96
+		s.RollOffMinDistance = 8
+		s.RollOffMaxDistance = 65
 		local master = SoundService:FindFirstChild("OrbitMaster")
 		local group = master and master:FindFirstChild("Enemies")
 		if group and group:IsA("SoundGroup") then
@@ -221,10 +227,14 @@ local function whizAudio(at: Vector3, heavy: boolean?)
 	local att = whizAtt :: Attachment
 	local s = whizSound :: Sound
 	att.WorldPosition = at
-	s.Volume = if heavy then 1.05 else 0.78
-	s.PlaybackSpeed = if heavy then (0.66 + math.random() * 0.14) else (1.45 + math.random() * 0.3)
+	s.Volume = if heavy then 1.2 else 0.96
+	s.PlaybackSpeed = if heavy then (0.64 + math.random() * 0.14) else (1.55 + math.random() * 0.32)
 	s.TimePosition = 0
 	s:Play()
+	-- crisp supersonic snap layered on close passes
+	if crack and Audio and Audio.play then
+		Audio.play("HitDeflect", at, { volume = if heavy then 0.6 else 0.42, pitch = if heavy then (1.45 + math.random() * 0.25) else (2.1 + math.random() * 0.35), priority = 3 })
+	end
 end
 
 local function edgeFrame(gui: ScreenGui, name: string, pos: UDim2, size: UDim2, rot: number): Frame
@@ -279,11 +289,12 @@ end
 -- q = closest point of the pass, lp = trooper root position
 local function nearMiss(q: Vector3, lp: Vector3, color: Color3, heavy: boolean?)
 	local now = os.clock()
-	if now - lastWhiz < (if heavy then 0.08 else 0.12) then
+	if now - lastWhiz < (if heavy then 0.08 else 0.11) then
 		return
 	end
 	lastWhiz = now
-	whizAudio(q, heavy)
+	local passDist = (q - lp).Magnitude
+	whizAudio(q, heavy, heavy or passDist <= 6.2)
 	local cam = workspace.CurrentCamera
 	if not cam then
 		return
@@ -296,14 +307,49 @@ local function nearMiss(q: Vector3, lp: Vector3, color: Color3, heavy: boolean?)
 	edgeHint(side, color)
 	if Juice then
 		local flinchSign = if rx >= 0 then -1 else 1
-		if heavy then
-			Juice.shake(0.85, 0.24)
-			Juice.kick(0.55, flinchSign * 1.05)
-			Juice.punchFov(-1.2)
+		local nearR = if heavy then WHIZ_NEAR_HEAVY else WHIZ_NEAR
+		local closeness = math.clamp(1 - (passDist - WHIZ_HIT) / math.max(nearR - WHIZ_HIT, 1), 0.35, 1)
+		if Juice.suppress then
+			Juice.suppress((if heavy then 1.1 else 0.68) * closeness, flinchSign, heavy)
 		else
-			Juice.shake(0.34, 0.14)
-			Juice.kick(0.22, flinchSign * 0.45)
+			if heavy then
+				Juice.shake(0.85, 0.24)
+				Juice.kick(0.55, flinchSign * 1.05)
+				Juice.punchFov(-1.2)
+			else
+				Juice.shake(0.34, 0.14)
+				Juice.kick(0.22, flinchSign * 0.45)
+			end
 		end
+	end
+end
+
+-- Cover / ground impact suppression when enemy fire slams into nearby rock/walls/ground (<= 14 studs of camera)
+local function coverSuppress(p: Vector3, color: Color3, heavy: boolean?, cDist: number)
+	local limit = if heavy then COVER_SUPPRESS_HEAVY_R else COVER_SUPPRESS_R
+	if cDist > limit then
+		return
+	end
+	local now = os.clock()
+	if now - lastCoverSuppress < (if heavy then 0.1 else 0.14) then
+		return
+	end
+	lastCoverSuppress = now
+	local cam = workspace.CurrentCamera
+	if not cam then
+		return
+	end
+	local off = p - cam.CFrame.Position
+	local rx = off:Dot(cam.CFrame.RightVector)
+	local uy = off:Dot(cam.CFrame.UpVector)
+	local side = if math.abs(rx) >= math.abs(uy) * 0.8 then (if rx >= 0 then "right" else "left")
+		else (if uy >= 0 then "top" else "bottom")
+	edgeHint(side, color)
+	whizAudio(p, heavy, true)
+	if Juice and Juice.suppress then
+		local flinchSign = if rx >= 0 then -1 else 1
+		local strength = math.clamp(1 - cDist / limit, 0.35, 1) * (if heavy then 1.15 else 0.72)
+		Juice.suppress(strength, flinchSign, heavy)
 	end
 end
 
@@ -844,20 +890,27 @@ local function onBoltEnd(d: any)
 				Fx.burst("sparks", p, 11, { color = bcol, speed = 1.1 })
 			end
 		else
-			-- ground / wall: crisp flash + sparks + lightweight scorch
-			flash(p, bcol:Lerp(BOLT_HOT, 0.4), 2.1, 0.13)
-			if Fx and Fx.burst and cDist < 150 then
-				Fx.burst("sparks", p, 5, { color = bcol, scale = 0.8 })
-				Fx.burst("puff", p, 1, { scale = 0.55 })
-			end
+			-- cover / terrain impact: vertical sand/dust geyser + molten spark shower + charcoal smoke + rock chips + cover suppression
+			flash(p, BOLT_HOT, if bHeavy then 2.4 else 1.5, 0.09)
+			flash(p, bcol:Lerp(BOLT_HOT, 0.35), if bHeavy then 4.2 else 2.8, 0.15)
 			local now = os.clock()
-			if Fx and Fx.scorch and hq >= 0.5 and cDist < 110 and now - lastBoltScorch > 0.22 then
-				lastBoltScorch = now
-				Fx.scorch(p, 1.1)
+			if Fx and Fx.burst and cDist < 190 then
+				Fx.burst("dust", p, if bHeavy then 16 else 12, { scale = if bHeavy then 1.85 else 1.45, speed = if bHeavy then 2.4 else 2.0, spread = 32, color = SAND_IMPACT })
+				Fx.burst("sparks", p, if bHeavy then 18 else 12, { color = bcol:Lerp(BOLT_HOT, 0.35), scale = if bHeavy then 1.25 else 1.05, speed = if bHeavy then 1.75 else 1.5 })
+				Fx.burst("puff", p, if bHeavy then 4 else 3, { scale = if bHeavy then 1.2 else 0.95, color = CHARCOAL_SMOKE })
 			end
+			if Fx and Fx.debris and hq >= 0.5 and cDist < 85 and now - lastBoltChip > 0.16 then
+				lastBoltChip = now
+				Fx.debris(p + Vector3.new(0, 0.3, 0), { n = if bHeavy then 6 else 4, style = "rock", speed = if bHeavy then 26 else 20, up = 1.65, scale = if bHeavy then 0.42 else 0.3, life = 0.95 })
+			end
+			if Fx and Fx.scorch and hq >= 0.5 and cDist < 125 and now - lastBoltScorch > 0.18 then
+				lastBoltScorch = now
+				Fx.scorch(p, if bHeavy then 1.7 else 1.25)
+			end
+			coverSuppress(p, bcol, bHeavy, cDist)
 		end
 		if Audio then
-			Audio.play("BoltImpact", p)
+			Audio.play("BoltImpact", p, { volume = if bHeavy then 1.2 else 1.05 })
 		end
 	elseif style == "acid" then
 		local r = math.max(d.r or 4, 2)
@@ -877,15 +930,20 @@ local function onBoltEnd(d: any)
 			Audio.play("AcidSplat", p)
 		end
 	else
-		-- cannon / mortar: multi-layer flash + sparks + scorch (Blast handles the main fireball & explosion trauma)
+		-- cannon / mortar: multi-layer flash + dust geyser + molten spark shower + scorch + cover suppression
 		local r = math.max(d.r or 5, 3.5)
-		flash(p, BOLT_HOT, r * 0.85, 0.12)
-		flash(p, ORANGE, r * (if d.hit then 1.8 else 1.45), 0.24)
-		if Fx and Fx.burst and cDist < 200 then
-			Fx.burst("sparks", p, 14, { color = ORANGE, scale = 1.15, speed = 1.25 })
+		flash(p, BOLT_HOT, r * 0.95, 0.12)
+		flash(p, ORANGE, r * (if d.hit then 1.9 else 1.55), 0.25)
+		if Fx and Fx.burst and cDist < 220 then
+			Fx.burst("dust", p, 18, { scale = 2.0, speed = 2.4, spread = 38, color = SAND_IMPACT })
+			Fx.burst("sparks", p, 20, { color = ORANGE:Lerp(BOLT_HOT, 0.3), scale = 1.3, speed = 1.65 })
+			Fx.burst("puff", p, 5, { scale = 1.4, color = CHARCOAL_SMOKE })
 		end
 		if Fx and Fx.scorch and hq >= 0.45 and cDist < 180 then
-			Fx.scorch(p, r * 0.85)
+			Fx.scorch(p, r * 0.9)
+		end
+		if not d.hit then
+			coverSuppress(p, ORANGE, true, cDist)
 		end
 	end
 end
@@ -2189,7 +2247,25 @@ local function onHeavyDeath(d: any)
 		return
 	end
 	local def = type(d.kind) == "string" and EnemyData.get(d.kind) or nil
-	if not def or not def.stages then
+	if not def then
+		return
+	end
+	local cDist = if Fx.camDistance then Fx.camDistance(d.p) else 0
+	-- punchier medium/heavy COG death burst (sparks + dark shrapnel + charcoal smoke) even on non-staged kinds
+	if def.faction == "COG" and (def.class == "medium" or def.class == "heavy" or def.class == "behemoth") and cDist < 260 then
+		local p = d.p
+		local big = def.class == "heavy" or def.class == "behemoth"
+		flash(p + Vector3.new(0, 1.2, 0), BOLT_HOT, if big then 5.2 else 3.4, 0.14)
+		flash(p + Vector3.new(0, 1.2, 0), ORANGE, if big then 8.5 else 5.2, 0.22)
+		if Fx.burst then
+			Fx.burst("sparks", p + Vector3.new(0, 1.2, 0), if big then 24 else 16, { scale = if big then 1.35 else 1.05, speed = 1.55, color = ORANGE:Lerp(BOLT_HOT, 0.4) })
+			Fx.burst("smoke", p + Vector3.new(0, 1.4, 0), if big then 6 else 4, { scale = if big then 1.15 else 0.85, color = CHARCOAL_SMOKE })
+		end
+		if Fx.debris and cDist < 170 then
+			Fx.debris(p + Vector3.new(0, 1.0, 0), { n = if big then 7 else 4, style = "shrapnel", speed = if big then 38 else 28, up = 1.6, scale = if big then 1.15 else 0.85, life = 1.2 })
+		end
+	end
+	if not def.stages then
 		return
 	end
 	local I = stageK()
@@ -2780,6 +2856,38 @@ local function onCookOffBoom(d: any)
 	onHeavyDeath({ p = p, kind = d.kind, dir = d.dir, fodder = false, cookoff = false })
 end
 
+-- COG Fuel Barrel 0.25 s ignition sputter / spark whine before detonation
+local function onBarrelIgnite(d: any)
+	if type(d) ~= "table" or typeof(d.p) ~= "Vector3" or not Fx then
+		return
+	end
+	local p: Vector3 = d.p + Vector3.new(0, 1.7, 0)
+	local dur = math.clamp(tonumber(d.dur) or 0.25, 0.1, 0.6)
+	local cDist = if Fx.camDistance then Fx.camDistance(p) else 0
+	if cDist > 340 then
+		return
+	end
+	if Audio and Audio.play then
+		pcall(Audio.play, "GasHiss", p, { volume = 0.95, pitch = 1.7, priority = 4 })
+		pcall(Audio.play, "HitMetal", p, { volume = 0.72, pitch = 1.55, priority = 3 })
+	end
+	flash(p, BOLT_HOT, 3.2, dur * 0.75)
+	if Fx.burst then
+		Fx.burst("sparks", p, 16, { scale = 1.05, speed = 1.45, color = ORANGE:Lerp(BOLT_HOT, 0.45) })
+		Fx.burst("fire", p, 4, { scale = 0.65, speed = 1.1 })
+		Fx.burst("puff", p, 3, { scale = 0.8, color = CHARCOAL_SMOKE })
+	end
+	-- quick urgent bright flicker light while fuel pressurises
+	local host = mk(Vector3.one * 0.4, ORANGE, CFrame.new(p), Enum.PartType.Ball, Enum.Material.Neon, 0.15, dur + 0.1)
+	local lt = Instance.new("PointLight")
+	lt.Color = ORANGE
+	lt.Range = 22
+	lt.Brightness = 6
+	lt.Shadows = false
+	lt.Parent = host
+	tween(host, dur, { Size = Vector3.one * 2.2, Transparency = 0.5 })
+end
+
 -- Init -------------------------------------------------------------------------------
 function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx = fx
@@ -2794,6 +2902,7 @@ function EnemyFx.init(fx: any, audio: any, juice: any)
 	Fx.register("Death", onHeavyDeath) -- staged kinds: flung burning plates (the generic death burst stays in Fx/init.luau)
 	Fx.register("CookOff", onCookOff)
 	Fx.register("CookOffBoom", onCookOffBoom)
+	Fx.register("BarrelIgnite", onBarrelIgnite)
 	Fx.register("LootBurst", onLootBurst)
 	Fx.register("LootEscape", onLootEscape)
 	startStaged()

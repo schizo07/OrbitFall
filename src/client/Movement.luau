@@ -31,6 +31,9 @@ local okAudio, AudioMod = pcall(require, script.Parent.Audio)
 local Audio: any = if okAudio then AudioMod else nil
 local okJuice, JuiceMod = pcall(require, script.Parent.Juice)
 local Juice: any = if okJuice then JuiceMod else nil
+local okFx, FxMod = pcall(require, script.Parent.Fx)
+local Fx: any = if okFx then FxMod else nil
+local DIVE_SAND = ColorSequence.new(Color3.fromRGB(214, 184, 142), Color3.fromRGB(142, 120, 94))
 
 local M = Config.Move
 local Movement = {}
@@ -365,6 +368,9 @@ local function tryDive(): boolean
 	hum.PlatformStand = true
 	root.AssemblyLinearVelocity = diveDir * M.DiveSpeed + UP * M.DiveUp
 	root.AssemblyAngularVelocity = Vector3.zero
+	if Fx and Fx.burst then
+		Fx.burst("dust", root.Position - Vector3.new(0, 2.2, 0), 7, { scale = 0.95, speed = 1.1, spread = 55, color = DIVE_SAND })
+	end
 	send("dive")
 	return true
 end
@@ -718,12 +724,37 @@ local function step(dt: number)
 			setStance("prone")
 			setMode("recover")
 			recoverFor = M.DiveRecover
-			landVel -= 8.5
+			landVel -= 11.5
 			if Audio and Audio.play then
-				Audio.play("Land", root.Position, { volume = 0.95, pitch = 0.82 })
+				Audio.play("Land", root.Position, { volume = 1.05, pitch = 0.78 })
 			end
-			if Juice and Juice.shake then
-				Juice.shake(0.55, 0.22)
+			if Juice then
+				if Juice.shake then
+					Juice.shake(0.85, 0.26)
+				end
+				if Juice.kick then
+					local rollSign = if math.random() < 0.5 then -1 else 1
+					Juice.kick(-1.35, 0, rollSign * 1.45)
+				end
+				if Juice.punchFov then
+					Juice.punchFov(-1.6)
+				end
+			end
+			if Fx then
+				local footPos = root.Position - Vector3.new(0, 1.5, 0)
+				if Fx.groundAt then
+					local gp = Fx.groundAt(root.Position, 1, 5)
+					if gp then
+						footPos = gp + Vector3.new(0, 0.2, 0)
+					end
+				end
+				if Fx.burst then
+					Fx.burst("dust", footPos, 16, { scale = 1.45, speed = 1.65, spread = 72, color = DIVE_SAND })
+					Fx.burst("puff", footPos, 5, { scale = 1.05, speed = 0.85, spread = 60, color = DIVE_SAND })
+				end
+				if Fx.debris then
+					Fx.debris(footPos, { n = 4, style = "rock", speed = 14, up = 0.9, scale = 0.24, life = 0.75 })
+				end
 			end
 		end
 	elseif mode == "mantle" then

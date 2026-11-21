@@ -26,13 +26,25 @@ GunFeel.external = false -- true once CombatPose drives the grip weld (then GunF
 
 local Fx: any = nil
 local Audio: any = nil
+local Juice: any = nil
 local player = Players.LocalPlayer
 local rng = Random.new()
 local C3 = Color3.fromRGB
 
--- grip kick per weapon (pistol .6, carbine .8, smg .5, shotgun 1.6, marksman 1.4, rocket 2.2, rail 2.0, gatling .3)
+-- grip kick per weapon (pistol .65, carbine .9, smg .55, shotgun 1.85, marksman 1.65, rocket 2.5, rail 2.25, gatling .35)
 local KICK: { [string]: number } = {
-	P3 = 0.6, BP2 = 1.0, PR7 = 0.8, VR1 = 0.8, SM2 = 0.5, SG4 = 1.6, HS3 = 1.8, MR9 = 1.4, ROCKET = 2.2, RAIL = 2.0, GATLING = 0.3,
+	P3 = 0.65, BP2 = 1.15, PR7 = 0.9, VR1 = 0.9, SM2 = 0.55, SG4 = 1.85, HS3 = 2.1, MR9 = 1.65, ROCKET = 2.5, RAIL = 2.25, GATLING = 0.35,
+}
+-- per-shot FOV micro-punch (degrees) on heavy / marksman / shotgun / rocket / rail weapons
+local SHOT_FOV: { [string]: number } = {
+	SG4 = 1.45, HS3 = 1.75, MR9 = 1.15, BP2 = 0.95, ROCKET = 2.8, RAIL = 2.45, GATLING = 0.16,
+}
+-- recoil roll jitter amplitude (degrees) per shot
+local SHOT_ROLL: { [string]: number } = {
+	P3 = 0.4, BP2 = 0.95, PR7 = 0.45, VR1 = 0.45, SM2 = 0.32, SG4 = 1.35, HS3 = 1.5, MR9 = 1.05, ROCKET = 1.9, RAIL = 1.6, GATLING = 0.28,
+}
+local HEAVY_MUZZLE: { [string]: boolean } = {
+	SG4 = true, HS3 = true, MR9 = true, BP2 = true, ROCKET = true, RAIL = true,
 }
 -- ejected casing type
 local CASING: { [string]: string } = { PR7 = "brass", SM2 = "brass", MR9 = "brass", P3 = "brass", BP2 = "brass", GATLING = "brass", SG4 = "shell", HS3 = "shell" }
@@ -336,11 +348,11 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- Muzzle flash rig: 3-pronged Neon star (random roll each shot) + hot core + forward lick + PointLight
 -- ---------------------------------------------------------------------------------------------
-type Rig = { parts: { Part }, core: Part, light: PointLight?, t: number, active: boolean }
+type Rig = { parts: { Part }, core: Part, light: PointLight?, lightPeak: number, t: number, active: boolean }
 local rigs: { Rig } = {}
 local liveRigs: { Rig } = {}
 local flashConn: RBXScriptConnection? = nil
-local FLASH_LIFE = 0.065 -- ~4 frames: long enough to register, short enough to strobe on full-auto
+local FLASH_LIFE = 0.055 -- ~55 ms strobe + dynamic bounce light illuminating nearby cover/armor
 
 local function newRig(): Rig
 	local function neon(size: Vector3, shape: Enum.PartType?): Part
@@ -351,16 +363,16 @@ local function newRig(): Rig
 		p.Parent = nil
 		return p
 	end
-	local rig: Rig = { parts = {}, core = neon(Vector3.new(0.55, 0.55, 0.55), Enum.PartType.Ball), light = nil, t = 0, active = false }
+	local rig: Rig = { parts = {}, core = neon(Vector3.new(0.65, 0.65, 0.65), Enum.PartType.Ball), light = nil, lightPeak = 6.2, t = 0, active = false }
 	table.insert(rig.parts, rig.core)
 	for _ = 1, 3 do
-		table.insert(rig.parts, neon(Vector3.new(1.9, 0.09, 0.09)))
+		table.insert(rig.parts, neon(Vector3.new(2.2, 0.12, 0.12)))
 	end
-	table.insert(rig.parts, neon(Vector3.new(0.3, 0.3, 1.5))) -- forward lick
-	if Fx.quality >= 0.75 then
+	table.insert(rig.parts, neon(Vector3.new(0.36, 0.36, 1.8))) -- forward lick
+	if Fx.quality >= 0.5 then
 		local l = Instance.new("PointLight")
-		l.Range = 16
-		l.Brightness = 5
+		l.Range = 20
+		l.Brightness = 6.2
 		l.Shadows = false
 		l.Enabled = false
 		l.Parent = rig.core
@@ -388,10 +400,10 @@ local function flashStep(dt: number)
 			liveRigs[n] = nil
 		else
 			for _, p in r.parts do
-				p.Transparency = 0.15 + 0.85 * f * f
+				p.Transparency = 0.1 + 0.9 * f * f
 			end
 			if r.light then
-				r.light.Brightness = 5 * (1 - f)
+				r.light.Brightness = r.lightPeak * (1 - f) ^ 1.35
 			end
 		end
 	end
@@ -407,44 +419,50 @@ local function muzzleFlash(w: any, cf: CFrame)
 		return
 	end
 	local col = if ENERGY[w.id] and w.tracer then w.tracer else WARM
-	local white = col:Lerp(Color3.new(1, 1, 1), 0.35) -- hot core, but not a pure-white blowout
+	local white = col:Lerp(Color3.new(1, 1, 1), 0.52) -- white-hot core inside warm golden-amber halo
 	local roll = rng:NextNumber() * math.pi
-	local s = rng:NextNumber(0.85, 1.2) * (if w.kind == "rocket" or w.kind == "rail" then 1.6 elseif w.id == "GATLING" then 0.8 else 1)
+	local heavy = HEAVY_MUZZLE[w.id] == true
+	local s = rng:NextNumber(0.92, 1.25) * (if w.kind == "rocket" or w.kind == "rail" then 1.75 elseif heavy then 1.3 elseif w.id == "GATLING" then 0.9 else 1.08)
 	rig.t = 0
 	rig.active = true
 	local base = cf * CFrame.Angles(0, 0, roll)
 	rig.core.Color = white
-	rig.core.Size = Vector3.one * 0.8 * s
+	rig.core.Size = Vector3.one * 0.95 * s
 	rig.core.CFrame = base
 	for k = 1, 3 do
 		local p = rig.parts[1 + k]
 		p.Color = if k == 1 then white else col
-		p.Size = Vector3.new(2.7 * s, 0.13, 0.13)
+		p.Size = Vector3.new(3.15 * s, 0.16 * math.max(s * 0.85, 0.9), 0.16 * math.max(s * 0.85, 0.9))
 		p.CFrame = base * CFrame.Angles(0, 0, (k - 1) * math.pi / 3)
 	end
 	local lick = rig.parts[5]
 	lick.Color = col
-	lick.Size = Vector3.new(0.38 * s, 0.38 * s, 2.4 * s)
-	lick.CFrame = cf * CFrame.new(0, 0, -1.2 * s)
+	lick.Size = Vector3.new(0.45 * s, 0.45 * s, 2.85 * s)
+	lick.CFrame = cf * CFrame.new(0, 0, -1.4 * s)
 	for _, p in rig.parts do
 		p.Parent = Fx.folder
 	end
 	if rig.light then
 		rig.light.Color = col
-		rig.light.Brightness = 5
+		rig.light.Range = if w.kind == "rocket" or w.kind == "rail" then 24 elseif heavy then 22 else 18
+		rig.lightPeak = if w.kind == "rocket" or w.kind == "rail" then 9.0 elseif heavy then 7.8 else 6.0
+		rig.light.Brightness = rig.lightPeak
 		rig.light.Enabled = true
 	end
 	table.insert(liveRigs, rig)
 	if not flashConn then
 		flashConn = RunService.Heartbeat:Connect(flashStep)
 	end
-	-- 2-3 sparkle / fire particles from the barrel
-	Fx.burst("sparks", cf, 3, { scale = 0.55, speed = 0.9, color = col:Lerp(Color3.new(1, 1, 1), 0.3) })
-	if Fx.quality >= 0.75 then
-		Fx.burst("fire", cf, 1, { scale = 0.18, speed = 0.4, color = col })
+	-- hot muzzle sparks + barrel fire/smoke haze
+	Fx.burst("sparks", cf, if heavy then 6 else 4, { scale = if heavy then 0.72 else 0.58, speed = if heavy then 1.15 else 0.95, color = white })
+	if Fx.quality >= 0.6 then
+		Fx.burst("fire", cf, if heavy then 2 else 1, { scale = if heavy then 0.28 else 0.2, speed = 0.45, color = col })
+	end
+	if heavy then
+		Fx.burst("puff", cf, 2, { scale = 0.36, speed = 0.5, color = C3(145, 138, 130) })
 	end
 	if w.kind == "rail" or (ENERGY[w.id] and Fx.quality >= 0.6) then
-		Fx.burst("zap", cf, if w.kind == "rail" then 6 else 2, { scale = 0.35, speed = 0.5 })
+		Fx.burst("zap", cf, if w.kind == "rail" then 7 else 2, { scale = 0.4, speed = 0.55 })
 	end
 end
 
@@ -510,9 +528,9 @@ end
 
 local function stepWisp(now: number)
 	if burstShots > 0 and now - lastBurstShot > 0.22 then
-		-- the burst just ended: a long one leaves the barrel smoking
-		if burstShots >= 10 then
-			startWisp(math.clamp(burstShots * 0.06, 0.8, 2.2))
+		-- even a short 4-round burst leaves visible barrel smoke haze
+		if burstShots >= 4 then
+			startWisp(math.clamp(burstShots * 0.14, 0.75, 2.4))
 		end
 		burstShots = 0
 	end
@@ -691,13 +709,26 @@ function GunFeel.shot(w: any, aiming: boolean?)
 	burstShots += 1
 	lastBurstShot = os.clock()
 	if WISP_HEAVY[w.id] then
-		startWisp(if w.kind == "rocket" or w.kind == "rail" then 1.6 else 0.9)
+		startWisp(if w.kind == "rocket" or w.kind == "rail" then 1.8 else 1.05)
+	end
+	-- per-shot FOV micro-punch on heavy/marksman/shotgun/rocket/rail weapons + crisp recoil roll jitter
+	if Juice then
+		local fovKick = SHOT_FOV[w.id]
+		if fovKick and Juice.punchFov then
+			Juice.punchFov(fovKick * (if aiming then 0.6 else 1))
+		end
+		local rollAmp = SHOT_ROLL[w.id]
+		if rollAmp and Juice.recoilRoll then
+			local sign = if rng:NextNumber() < 0.5 then -1 else 1
+			Juice.recoilRoll(sign * rollAmp * rng:NextNumber(0.75, 1.15) * (if aiming then 0.65 else 1))
+		end
 	end
 end
 
-function GunFeel.init(fx: any, audio: any, _juice: any)
+function GunFeel.init(fx: any, audio: any, juice: any)
 	Fx = fx
 	Audio = audio
+	Juice = juice
 	RunService.RenderStepped:Connect(update)
 	player.CharacterAdded:Connect(function()
 		gripWeld = nil

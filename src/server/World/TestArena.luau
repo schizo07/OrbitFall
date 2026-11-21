@@ -335,6 +335,21 @@ local function buildFolder()
 	jerseyBarrier(Vector3.new(-24, 0, 146), 14, -18)
 	jerseyBarrier(Vector3.new(24, 0, 146), 14, 18)
 
+	-- Tactical shootable COG Fuel Barrel clusters at checkpoints, flanking bunkers, and north outpost yard
+	if S and S.Hazards and S.Hazards.spawnBarrelCluster then
+		local barrelSpots = {
+			{ x = -19, z = -56, n = 3 },
+			{ x = 19, z = 48, n = 3 },
+			{ x = -84, z = -22, n = 2 },
+			{ x = 84, z = 14, n = 2 },
+			{ x = -36, z = 134, n = 3 },
+			{ x = 36, z = 134, n = 3 },
+		}
+		for i, bs in barrelSpots do
+			S.Hazards.spawnBarrelCluster(props, Vector3.new(bs.x, Y0, bs.z), groundY, bs.n, 9100 + i * 37)
+		end
+	end
+
 	-- 360-degree natural desert canyon rim & towering mountain skyline projected outside the 440 x 440 square
 	local function ringPos(angDeg: number, wallOffset: number): (number, number, number)
 		local a = math.rad(angDeg)
@@ -517,6 +532,9 @@ function TestArena.onClosed()
 	directorOn = false
 	arenaMap = nil
 	loopToken += 1
+	if S and S.Hazards and S.Hazards.clearBarrels then
+		S.Hazards.clearBarrels()
+	end
 	Workspace:SetAttribute("TestArena", false)
 	Workspace:SetAttribute("ArenaDirector", false)
 	if S.DevTools and S.DevTools.onArenaClosed then

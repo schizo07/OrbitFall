@@ -343,7 +343,7 @@ function CameraController.init()
 			if ocf then
 				camera.CFrame = ocf * Juice.step(dt)
 				camera.Focus = CFrame.new(ocf.Position + ocf.LookVector * 30)
-				camera.FieldOfView = ofov or 70
+				camera.FieldOfView = math.clamp((ofov or 70) + Juice.getFov(), 20, 100)
 				return
 			end
 			override = nil
@@ -396,7 +396,9 @@ function CameraController.init()
 			if not focusXZ or (focusXZ - want).Magnitude > 8 or root.Anchored then
 				focusXZ = want
 			else
-				focusXZ = focusXZ:Lerp(want, 1 - math.exp(-dt * FOLLOW_RATE))
+				local diving = Movement ~= nil and Movement.getMode() == "dive"
+				local rate = if diving then 8.2 else FOLLOW_RATE
+				focusXZ = focusXZ:Lerp(want, 1 - math.exp(-dt * rate))
 			end
 			local fxz = focusXZ :: Vector3
 			focus = Vector3.new(fxz.X, rp.Y + tune("PivotUp", PIVOT_UP), fxz.Z)
