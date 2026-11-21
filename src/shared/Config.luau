@@ -59,7 +59,7 @@ Config.Downed = {
 -- Passive regen (server/PlayerService). Studio A/B: workspace attribute Feel_Regen = "off" | "slow" | "current".
 Config.Regen = {
 	Mode = "slow",
-	Slow = { above = 0.5, delay = 6, rate = 5, cap = 1.0 }, -- only above 50 % hp, 6 s after the last hit, up to full
+	Slow = { above = 0, delay = 4.5, rate = 9, cap = 1.0 }, -- from any living hp (> 0), 4.5 s after the last hit, up to full
 	Current = { above = 0, delay = 5, rate = 10, cap = 0.6 }, -- the old regen: below 60 % only, 5 s after the last hit
 }
 Config.TrooperBody = true -- everyone spawns as the standard R15 trooper body (server/PlayerService loadTrooper)

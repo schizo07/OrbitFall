@@ -366,7 +366,7 @@ local function buildFolder()
 		local x, z, a = ringPos(sp.ang, sp.off)
 		local tint = rockPalette[(i % #rockPalette) + 1]
 		local mat = if sp.key == "desert_cliff" then Enum.Material.Rock else Enum.Material.Slate
-		placeMeshProp(sp.key, CFrame.new(x, Y0 - sp.sink, z) * CFrame.Angles(0, a + math.rad(sp.yawOff), 0), sp.sc, tint, mat, false)
+		placeMeshProp(sp.key, CFrame.new(x, Y0 - sp.sink, z) * CFrame.Angles(0, a + math.rad(sp.yawOff), 0), sp.sc, tint, mat, true)
 	end
 
 	-- Band 2: distant towering jagged mountain peaks fading cleanly into golden atmospheric haze

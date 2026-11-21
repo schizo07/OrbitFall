@@ -428,7 +428,7 @@ local function brutalistMonolith(parent: Instance, pos: Vector3, faceDir: Vector
 	local body = part(parent, Vector3.new(w, h, d), fr * CFrame.new(0, h / 2, 0), CONCRETE, true, { Material = Enum.Material.Concrete, CastShadow = true })
 	keepMat(body)
 	-- battered lower concrete apron hugging the ground
-	local apron = part(parent, Vector3.new(w + 1.6, math.min(h * 0.28, 3.6), d + 1.6), fr * CFrame.new(0, math.min(h * 0.14, 1.8), 0), CONCRETE_D, false, { Material = Enum.Material.Concrete, CastShadow = false })
+	local apron = part(parent, Vector3.new(w + 1.6, math.min(h * 0.28, 3.6), d + 1.6), fr * CFrame.new(0, math.min(h * 0.14, 1.8), 0), CONCRETE_D, true, { Material = Enum.Material.Concrete, CastShadow = false })
 	keepMat(apron)
 	-- heavy stepped roof cornice + dark steel cap
 	local cornice = part(parent, Vector3.new(w + 1.4, 1.6, d + 1.4), fr * CFrame.new(0, h + 0.5, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete, CastShadow = true })
@@ -442,7 +442,7 @@ local function brutalistMonolith(parent: Instance, pos: Vector3, faceDir: Vector
 			local bcf = fr
 				* CFrame.new(sx * (w * 0.5 + 0.5), bH * 0.46, sz * (d * 0.5 - 1.2))
 				* CFrame.Angles(0, 0, sx * math.rad(9))
-			local buttress = part(parent, Vector3.new(2.2, bH, 2.8), bcf, CONCRETE_D, false, { Material = Enum.Material.Concrete, CastShadow = false })
+			local buttress = part(parent, Vector3.new(2.2, bH, 2.8), bcf, CONCRETE_D, true, { Material = Enum.Material.Concrete, CastShadow = false })
 			keepMat(buttress)
 		end
 	end
@@ -683,8 +683,10 @@ local function setPiece(g: Instance, key: string, cf: CFrame, collide: boolean?,
 	for _, p in m:GetDescendants() do
 		if p:IsA("BasePart") then
 			p.Anchored = true
-			p.CanCollide = collide ~= false and p.Name == "Body"
-			if dimGlow and (p.Name == "Glow" or p:GetAttribute("Role") == "glow") then
+			local role = p:GetAttribute("Role")
+			local isGlow = p.Name == "Glow" or role == "glow"
+			p.CanCollide = collide ~= false and not isGlow and (p.Name == "Body" or role == "body" or role == "armor")
+			if dimGlow and isGlow then
 				p.Material = Enum.Material.SmoothPlastic
 				p.Color = RGB(74, 34, 30)
 			else
@@ -792,8 +794,10 @@ local function buildDrone(root: Instance, crashP: Vector3, spillP: Vector3, refP
 		for _, p in wreck:GetDescendants() do
 			if p:IsA("BasePart") then
 				p.Anchored = true
-				p.CanCollide = p.Name == "Body"
-				if biomeName == "desert" and (p.Name == "Glow" or p:GetAttribute("Role") == "glow") then
+				local role = p:GetAttribute("Role")
+				local isGlow = p.Name == "Glow" or role == "glow"
+				p.CanCollide = not isGlow and (p.Name == "Body" or role == "body" or role == "armor")
+				if biomeName == "desert" and isGlow then
 					p.Material = Enum.Material.SmoothPlastic
 					p.Color = RGB(74, 34, 30)
 				else
@@ -918,7 +922,7 @@ local function buildSpill(root: Instance, S: Vector3, crashP: Vector3, anchors: 
 	if biomeName ~= "desert" then
 		part(g, Vector3.new(8.1, 1, 0.8), Wp(0, 3.4, 3), HAZ, false)
 	end
-	part(g, Vector3.new(0.7, 4, 6), Wp(-4, 2, 0) * CFrame.Angles(0, 0, math.rad(6)), plateCol, false)
+	part(g, Vector3.new(0.7, 4, 6), Wp(-4, 2, 0) * CFrame.Angles(0, 0, math.rad(6)), plateCol, true)
 	part(g, Vector3.new(0.7, 4, 6), Wp(5.9, 0.9, 0) * CFrame.Angles(0, 0, math.rad(-74)), plateCol, false) -- the wall that burst outward
 	part(g, Vector3.new(7.6, 0.5, 5.6), Wp(-8.5, 0.6, 2) * CFrame.Angles(0, math.rad(70), math.rad(6)), STEEL_D, false) -- flung lid
 	if biomeName ~= "desert" then
@@ -1006,7 +1010,7 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 	for k = 0, 3 do
 		local a = k / 4 * TAU + math.rad(45)
 		local dir = Vector3.new(math.cos(a), 0, math.sin(a))
-		pipe(g, Y(0.5) + dir * 9.5, Y(25) + dir * 2.2, 1.6, STEEL_D, false)
+		pipe(g, Y(0.5) + dir * 9.5, Y(25) + dir * 2.2, 1.6, STEEL_D, true)
 	end
 	vcyl(g, 1.2, 12, CFrame.new(Y(76.5)), STEEL_D, false)
 	part(g, Vector3.new(10.5, 0.9, 0.9), CFrame.lookAt(Y(76), Y(76) + u), STEEL_D, false)

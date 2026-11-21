@@ -43,8 +43,8 @@ function TopRight.build(_parent: Instance, touch: boolean)
 	holder.AutomaticSize = Enum.AutomaticSize.X
 	holder.Visible = false
 	InfoLayer.backing(holder, "plate")
-	Theme.pad(holder, if touch then 8 else 10, 0, if touch then 8 else 10, 0)
-	Theme.list(holder, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+	Theme.pad(holder, if touch then 10 else 12, 0, if touch then 10 else 12, 0)
+	Theme.list(holder, Enum.FillDirection.Horizontal, if touch then 5 else 6, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
 	nu.holder = holder
 
 	InfoLayer.label({

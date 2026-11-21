@@ -1812,8 +1812,9 @@ end
 
 -- Round talus skirt: `n` big half-sunk boulders (stretched balls) in a ring (rIn..rOut from `centre`), heights / widths
 -- jittered, crests at ~h above the local ground. Hides the flat top and straight edges of a foundation block so a landmark
--- rises out of a heap of rounded rock instead of standing on a box. Far landmarks only: no collision.
-local function rockSkirt(parent: Instance, centre: Vector3, rIn: number, rOut: number, h: number, n: number, col: Color3, mat: Enum.Material?)
+-- rises out of a heap of rounded rock instead of standing on a box.
+local function rockSkirt(parent: Instance, centre: Vector3, rIn: number, rOut: number, h: number, n: number, col: Color3, mat: Enum.Material?, collide: boolean?)
+	local solid = collide == true
 	local len = rOut - rIn
 	local a0 = rng:NextNumber(0, TAU)
 	for i = 0, n - 1 do
@@ -1829,14 +1830,14 @@ local function rockSkirt(parent: Instance, centre: Vector3, rIn: number, rOut: n
 				scale = (hh * 1.2) / (if sz then sz.Y else 6.5),
 				tint = jitter(col, 0.08),
 				material = mat or B.rockMat,
-				collide = false,
+				collide = solid,
 				align = 0.25,
 				sink = rng:NextNumber(0.18, 0.28),
 				y = gy,
 				maxSlope = 80,
 				paint = function(p)
 					keepMat(p)
-					p.CanQuery = false
+					p.CanQuery = solid
 					p.CanTouch = false
 					p.CastShadow = true
 				end,
@@ -1848,7 +1849,7 @@ local function rockSkirt(parent: Instance, centre: Vector3, rIn: number, rOut: n
 		local wid = TAU * rm / n * rng:NextNumber(1.15, 1.45)
 		local p = Vector3.new(x, gy + hh * 0.2, z) -- crest at gy + hh, the rest sunk
 		local cf = CFrame.lookAt(p, Vector3.new(centre.X, p.Y, centre.Z))
-		local b = blob(parent, Vector3.new(wid, hh * 1.6, len * rng:NextNumber(1.0, 1.2)), cf, jitter(col, 0.1), mat or B.rockMat, false)
+		local b = blob(parent, Vector3.new(wid, hh * 1.6, len * rng:NextNumber(1.0, 1.2)), cf, jitter(col, 0.1), mat or B.rockMat, solid)
 		b.CastShadow = true
 		if biomeName == "desert" then
 			keepMat(b)
@@ -3165,7 +3166,7 @@ local function foundryTower(parent: Instance, x: number, z: number, yaw: number)
 	part(parent, Vector3.new(70, 12, 70), base * CFrame.new(0, 9, 0), RGB(58, 60, 66), Enum.Material.Basalt)
 	part(parent, Vector3.new(62, 6, 62), base * CFrame.new(0, 18, 0), steel, Enum.Material.CorrodedMetal)
 	-- slag heaps piled against the plinth: the flat box edges disappear into a ragged sloped skirt
-	rockSkirt(parent, g, 31, 60, 15, 12, RGB(48, 46, 50):Lerp(B.rocks[1], 0.3), Enum.Material.Basalt)
+	rockSkirt(parent, g, 31, 60, 15, 12, RGB(48, 46, 50):Lerp(B.rocks[1], 0.3), Enum.Material.Basalt, true)
 
 	-- tapering round tiers with catwalk rings: dia, height, centre y, material
 	local tiers = {
@@ -3354,7 +3355,7 @@ local function crashedCruiser(parent: Instance, x: number, z: number, yaw: numbe
 	-- the part that goes underground doubles as the foundation (solid, so nothing floats on a sloped rim)
 	part(parent, Vector3.new(44, 40, 52), base * CFrame.new(-2, -10, -52), RGB(52, 50, 54), Enum.Material.Basalt)
 	-- ploughed-up earth heaped around the buried nose: hides the foundation block's flat top and straight edges
-	rockSkirt(parent, (base * CFrame.new(-2, 0, -52)).Position, 20, 44, 15, 10, RGB(54, 50, 52):Lerp(B.rocks[1], 0.35))
+	rockSkirt(parent, (base * CFrame.new(-2, 0, -52)).Position, 20, 44, 15, 10, RGB(54, 50, 52):Lerp(B.rocks[1], 0.35), nil, true)
 	hullSection(noseF, -1, 84, 36, 6, 30, 10, 6)
 	brokenFrames(noseF, -1, 36, 30, 4)
 	-- chin guns / prow blade
@@ -3365,7 +3366,7 @@ local function crashedCruiser(parent: Instance, x: number, z: number, yaw: numbe
 	-- rock pedestals under the stern section so a falling slope never leaves it hanging
 	part(parent, Vector3.new(34, 70, 34), base * CFrame.new(8, -30, 30), RGB(52, 50, 54), Enum.Material.Basalt)
 	part(parent, Vector3.new(40, 70, 40), base * CFrame.new(10, -33, 72), RGB(56, 52, 54), Enum.Material.Basalt)
-	rockSkirt(parent, (base * CFrame.new(9, 0, 51)).Position, 22, 46, 9, 9, RGB(54, 50, 52):Lerp(B.rocks[1], 0.35))
+	rockSkirt(parent, (base * CFrame.new(9, 0, 51)).Position, 22, 46, 9, 9, RGB(54, 50, 52):Lerp(B.rocks[1], 0.35), nil, true)
 	hullSection(sternF, 1, 86, 36, 31, 30, 27, 5)
 	brokenFrames(sternF, 1, 36, 30, 4)
 	-- stepped bridge superstructure with glowing viewport strip, dorsal ridge and a bent mast
@@ -3453,7 +3454,7 @@ local function hiveSpire(parent: Instance, x: number, z: number, yaw: number)
 	local goo = RGB(140, 255, 60)
 	-- foundation sunk below the surface (its flat top used to stand 10 studs proud as a mud box) + a ragged organic skirt
 	part(parent, Vector3.new(60, 44, 60), base * CFrame.new(0, -24, 0), RGB(50, 34, 64), Enum.Material.Mud)
-	rockSkirt(parent, g, 9, 44, 16, 10, RGB(62, 40, 78), Enum.Material.Mud)
+	rockSkirt(parent, g, 9, 44, 16, 10, RGB(62, 40, 78), Enum.Material.Mud, true)
 	-- core: giant needle (mesh, else part blade)
 	local m = placeMesh(parent, "env_spire_b", g.X, g.Z, { scale = 3.8, tint = purple, material = Enum.Material.Slate, collide = true, align = 0.1, sink = 0.05, y = g.Y - 4, maxSlope = 89 })
 	if not m then
@@ -3486,7 +3487,7 @@ local function hiveSpire(parent: Instance, x: number, z: number, yaw: number)
 	for i = 1, 6 do
 		local a = i / 6 * TAU + 0.3
 		local px, pz = g.X + math.cos(a) * 52, g.Z + math.sin(a) * 52
-		placeMesh(parent, "env_hive_mound", px, pz, { scale = rng:NextNumber(2.4, 3.4), sink = 0.2, collide = false, align = 0.3, maxSlope = 50 })
+		placeMesh(parent, "env_hive_mound", px, pz, { scale = rng:NextNumber(2.4, 3.4), sink = 0.2, collide = true, align = 0.3, maxSlope = 50 })
 	end
 	maybeYield()
 end
@@ -3540,7 +3541,7 @@ local function mesaArch(parent: Instance, x: number, z: number, yaw: number)
 			spire(parent, sp.X, sp.Z, rng:NextNumber(0.9, 1.4), tint)
 		end
 		-- a talus skirt + boulders heaped around the foot hide the flat top and straight sides of the footing block
-		rockSkirt(parent, fg, 12, 36, 13, 8, tint)
+		rockSkirt(parent, fg, 12, 36, 13, 8, tint, nil, true)
 		for _ = 1, 2 do
 			local bp = fg + (rot * Vector3.new(sx * rng:NextNumber(-12, 18), 0, rng:NextNumber(-20, 20)))
 			rock(parent, bp.X, bp.Z, rng:NextNumber(2.2, 3.4), true)
@@ -3563,7 +3564,7 @@ local function iceCrystals(parent: Instance, x: number, z: number, _yaw: number)
 	local g = surfaceAt(x, z)
 	-- foundation sunk below the surface (it used to stand 8 studs proud as a flat glacier box) + a ragged ice skirt
 	part(parent, Vector3.new(60, 40, 60), CFrame.new(g + Vector3.new(0, -24, 0)), B.rocks[2], Enum.Material.Glacier)
-	rockSkirt(parent, g, 8, 40, 12, 9, B.rocks[2], Enum.Material.Glacier)
+	rockSkirt(parent, g, 8, 40, 12, 9, B.rocks[2], Enum.Material.Glacier, true)
 	for i = 1, 4 do
 		local a = i / 4 * TAU + rng:NextNumber(-0.3, 0.3)
 		local d = if i == 1 then 0 else rng:NextNumber(22, 38)
@@ -3582,7 +3583,7 @@ local function crystalSpire(parent: Instance, x: number, z: number, yaw: number)
 	local glow = RGB(170, 140, 255)
 	-- foundation sunk below the surface + ragged skirt
 	part(parent, Vector3.new(56, 40, 56), base * CFrame.new(0, -22, 0), deep, Enum.Material.Slate)
-	rockSkirt(parent, g, 8, 40, 12, 9, shell, Enum.Material.Limestone)
+	rockSkirt(parent, g, 8, 40, 12, 9, shell, Enum.Material.Limestone, true)
 	-- the spire: four stacked tapering drums with a ball tip, glowing core shaft inside
 	local h = 120
 	do
@@ -3616,8 +3617,8 @@ local function crystalSpire(parent: Instance, x: number, z: number, yaw: number)
 	maybeYield()
 end
 
--- Helper: place a craggy horizon rock formation sunk cleanly below terrain (never floating, non-colliding)
-local function placeHorizonSetpiece(parent: Instance, key: string, cf: CFrame, scale: number, rockTintCol: Color3?, matOverride: Enum.Material?): boolean
+-- Helper: place a craggy horizon rock formation sunk cleanly below terrain (solid by default for reachable rim formations)
+local function placeHorizonSetpiece(parent: Instance, key: string, cf: CFrame, scale: number, rockTintCol: Color3?, matOverride: Enum.Material?, collide: boolean?): boolean
 	local m = Assets.get(key, { anchored = true })
 	if not m then
 		return false
@@ -3626,13 +3627,14 @@ local function placeHorizonSetpiece(parent: Instance, key: string, cf: CFrame, s
 		m:ScaleTo(scale)
 	end
 	m:PivotTo(cf)
+	local solid = collide ~= false
 	for _, d in m:GetDescendants() do
 		if d:IsA("BasePart") then
 			d.Anchored = true
-			d.CanCollide = false
-			d.CanQuery = false
+			d.CanCollide = solid
+			d.CanQuery = solid
 			d.CanTouch = false
-			d.CastShadow = false
+			d.CastShadow = solid
 			if d.Name == "Glow" or d:GetAttribute("Role") == "glow" then
 				d.Material = Enum.Material.SmoothPlastic
 				d.Color = RGB(52, 46, 48)
@@ -3656,20 +3658,20 @@ local function desertMountainPeak(parent: Instance, x: number, z: number, yaw: n
 	local base = CFrame.new(x, lo, z) * CFrame.Angles(0, yaw, 0)
 	local tint = spireShade(rockTint())
 	local placed = false
-	if placeHorizonSetpiece(parent, "env_spire_b", base * CFrame.new(0, -28, 10) * CFrame.Angles(0, math.rad(18), 0), 3.1, tint, Enum.Material.Slate) then
+	if placeHorizonSetpiece(parent, "env_spire_b", base * CFrame.new(0, -28, 10) * CFrame.Angles(0, math.rad(18), 0), 3.1, tint, Enum.Material.Slate, true) then
 		placed = true
 	end
-	if placeHorizonSetpiece(parent, "env_spire_a", base * CFrame.new(-42, -26, 22) * CFrame.Angles(0, math.rad(-34), 0), 2.4, jitter(tint, 0.06), Enum.Material.Slate) then
+	if placeHorizonSetpiece(parent, "env_spire_a", base * CFrame.new(-42, -26, 22) * CFrame.Angles(0, math.rad(-34), 0), 2.4, jitter(tint, 0.06), Enum.Material.Slate, true) then
 		placed = true
 	end
-	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(12, -24, -8) * CFrame.Angles(0, math.rad(8), 0), 2.8, jitter(tint, 0.06), Enum.Material.Rock) then
+	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(12, -24, -8) * CFrame.Angles(0, math.rad(8), 0), 2.8, jitter(tint, 0.06), Enum.Material.Rock, true) then
 		placed = true
 	end
-	if placeHorizonSetpiece(parent, "env_rock_b", base * CFrame.new(48, -22, 14) * CFrame.Angles(0, math.rad(42), 0), 4.6, jitter(tint, 0.06), Enum.Material.Rock) then
+	if placeHorizonSetpiece(parent, "env_rock_b", base * CFrame.new(48, -22, 14) * CFrame.Angles(0, math.rad(42), 0), 4.6, jitter(tint, 0.06), Enum.Material.Rock, true) then
 		placed = true
 	end
 	if not placed then
-		rockSkirt(parent, Vector3.new(x, lo, z), 14, 58, 42, 8, tint, B.rockMat)
+		rockSkirt(parent, Vector3.new(x, lo, z), 14, 58, 42, 8, tint, B.rockMat, true)
 	end
 	maybeYield()
 end
@@ -3680,20 +3682,20 @@ local function desertCanyonRidge(parent: Instance, x: number, z: number, yaw: nu
 	local base = CFrame.new(x, lo, z) * CFrame.Angles(0, yaw, 0)
 	local tint = spireShade(rockTint())
 	local placed = false
-	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(-28, -24, 4) * CFrame.Angles(0, math.rad(10), 0), 3.1, tint, Enum.Material.Rock) then
+	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(-28, -24, 4) * CFrame.Angles(0, math.rad(10), 0), 3.1, tint, Enum.Material.Rock, true) then
 		placed = true
 	end
-	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(34, -26, 12) * CFrame.Angles(0, math.rad(-14), 0), 2.7, jitter(tint, 0.06), Enum.Material.Rock) then
+	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(34, -26, 12) * CFrame.Angles(0, math.rad(-14), 0), 2.7, jitter(tint, 0.06), Enum.Material.Rock, true) then
 		placed = true
 	end
-	if placeHorizonSetpiece(parent, "env_spire_b", base * CFrame.new(6, -30, 26) * CFrame.Angles(0, math.rad(28), 0), 2.5, jitter(tint, 0.05), Enum.Material.Slate) then
+	if placeHorizonSetpiece(parent, "env_spire_b", base * CFrame.new(6, -30, 26) * CFrame.Angles(0, math.rad(28), 0), 2.5, jitter(tint, 0.05), Enum.Material.Slate, true) then
 		placed = true
 	end
-	if placeHorizonSetpiece(parent, "env_rock_c", base * CFrame.new(-54, -18, -6) * CFrame.Angles(0, math.rad(-25), 0), 4.4, jitter(tint, 0.07), Enum.Material.Rock) then
+	if placeHorizonSetpiece(parent, "env_rock_c", base * CFrame.new(-54, -18, -6) * CFrame.Angles(0, math.rad(-25), 0), 4.4, jitter(tint, 0.07), Enum.Material.Rock, true) then
 		placed = true
 	end
 	if not placed then
-		rockSkirt(parent, Vector3.new(x, lo, z), 16, 62, 36, 8, tint, B.rockMat)
+		rockSkirt(parent, Vector3.new(x, lo, z), 16, 62, 36, 8, tint, B.rockMat, true)
 	end
 	maybeYield()
 end
@@ -3754,7 +3756,7 @@ local function buildLandmarks(parent: Instance, faction: string)
 end
 
 -- Place a single skyline rock mesh at (x, baseY, z), sunk deeply so its base never floats above terrain.
-local function placeSkylineMesh(parent: Instance, key: string, x: number, z: number, scale: number, baseY: number, tint: Color3, yawOverride: number?): boolean
+local function placeSkylineMesh(parent: Instance, key: string, x: number, z: number, scale: number, baseY: number, tint: Color3, yawOverride: number?, collide: boolean?): boolean
 	local m = Assets.get(key, { anchored = true })
 	if not m then
 		return false
@@ -3765,13 +3767,14 @@ local function placeSkylineMesh(parent: Instance, key: string, x: number, z: num
 	m:PivotTo(CFrame.new(x, baseY - h * rng:NextNumber(0.16, 0.28), z) * CFrame.Angles(0, yaw, 0))
 	local col = spireShade(tint)
 	local mat = if biomeName == "desert" and (key == "env_spire_a" or key == "env_spire_b") then Enum.Material.Slate else B.rockMat
+	local solid = collide ~= false
 	for _, p in m:GetChildren() do
 		if p:IsA("BasePart") then
 			p.Color = col
 			p.Material = mat
 			keepMat(p)
-			p.CanCollide = false
-			p.CanQuery = false
+			p.CanCollide = solid
+			p.CanQuery = solid
 			p.CanTouch = false
 			p.CastShadow = false
 			partCount += 1
@@ -4414,7 +4417,7 @@ function MapBuilder.build(faction: string?, biome: string?): any
 	buildLandmarks(landmarks, fac)
 	farMountains(landmarks)
 
-	-- invisible boundary walls
+	-- invisible boundary walls (kept just inside the playable rim so players never reach distant backdrop meshes)
 	local walls = Instance.new("Folder")
 	walls.Name = "Walls"
 	walls.Parent = folder
@@ -4428,7 +4431,7 @@ function MapBuilder.build(faction: string?, biome: string?): any
 		w.CanTouch = false
 		w.CastShadow = false
 		w.Size = if d[1] == 0 then Vector3.new(wl, 400, 6) else Vector3.new(6, 400, wl)
-		w.CFrame = CFrame.new(d[1] * (HALF + 2), 150, d[2] * (HALF + 2))
+		w.CFrame = CFrame.new(d[1] * (HALF - 6), 150, d[2] * (HALF - 6))
 		w.Parent = walls
 	end
 

@@ -39,10 +39,10 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 	local left = Instance.new("Frame")
 	left.Name = "Left"
 	left.BackgroundTransparency = 1
-	left.Size = UDim2.new(1, if compact then -72 else -92, 1, 0)
+	left.Size = UDim2.new(1, if compact then -64 else -80, 1, 0)
 	left.ClipsDescendants = true
 	left.Parent = holder
-	Theme.list(left, Enum.FillDirection.Horizontal, if compact then 5 else 7, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+	Theme.list(left, Enum.FillDirection.Horizontal, if compact then 4 else 5, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
 	ui.countRow = left
 	ui.countOrder = 4
 
@@ -50,7 +50,7 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 	ui.nadeIcon = Style.glyph("dot", {
 		Size = if compact then 7 else 8,
 		Color = HudSkin.color("own"),
-		Box = UDim2.fromOffset(10, h),
+		Box = UDim2.fromOffset(if compact then 8 else 9, h),
 		LayoutOrder = 1,
 		Parent = left,
 	})
@@ -105,7 +105,7 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 		})
 		out.name.TextTruncate = Enum.TextTruncate.AtEnd
 		local nameCap = Instance.new("UISizeConstraint")
-		nameCap.MaxSize = Vector2.new(112, h)
+		nameCap.MaxSize = Vector2.new(72, h)
 		nameCap.Parent = out.name
 	else
 		out.name = HudSkin.label({ Text = "" })
@@ -145,7 +145,7 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 	out.ap = text({
 		Role = "label",
 		Text = "",
-		TextSize = lay.ModeSize,
+		TextSize = math.max(10, lay.ModeSize - 1),
 		ColorRole = "own",
 		H = h,
 		LayoutOrder = 9,
@@ -159,10 +159,10 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 	right.BackgroundTransparency = 1
 	right.AnchorPoint = Vector2.new(1, 0.5)
 	right.Position = UDim2.fromScale(1, 0.5)
-	right.Size = UDim2.fromOffset(if compact then 70 else 90, h)
+	right.Size = UDim2.fromOffset(if compact then 62 else 78, h)
 	right.Parent = holder
 
-	local spareW = if compact then 32 else 40
+	local spareW = if compact then 28 else 36
 	out.spare = HudSkin.label({
 		Role = "number",
 		Text = "/ 0",
@@ -182,8 +182,8 @@ function WeaponBlock.build(parent: Instance, touch: boolean, onFireModeTap: (() 
 		XAlign = Enum.TextXAlignment.Right,
 		YAlign = Enum.TextYAlignment.Bottom,
 		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -(spareW + 3), 1, 1),
-		Size = UDim2.fromOffset(if compact then 36 else 48, h),
+		Position = UDim2.new(1, -(spareW + 2), 1, 1),
+		Size = UDim2.fromOffset(if compact then 32 else 40, h),
 		Parent = right,
 	})
 

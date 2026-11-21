@@ -283,6 +283,8 @@ function EnemyAI.register(e: any, cf: CFrame, opts: any)
 	e.called = false
 	e.needSnap = true
 	e.lastSnap = e.pos
+	e.groundY = e.pos.Y
+	e.groundN = Vector3.yAxis
 	e.stuckT = now + 1
 	e.stuckPos = e.pos
 	e.stuckUntil = 0
@@ -2154,32 +2156,43 @@ end
 local function snapGround(e: any, dt: number, force: boolean, exact: boolean)
 	local prevSnap = e.lastSnap
 	local moved = flat(e.pos - prevSnap).Magnitude
-	local coarse = e.fodder or perfOn -- PERF A/B: non-fodder snap as rarely as PERF_SNAP and close the gap like fodder
-	local acc = (e.snapAcc or 0) + dt
-	e.snapAcc = acc
-	if not force and not (exact and moved > 0.02) and moved < (if perfOn and not e.fodder then PERF_SNAP else e.snapDist) then
-		return
-	end
-	e.snapAcc = 0
-	local origin = Vector3.new(e.pos.X, e.pos.Y + 8 + e.def.size * 0.5, e.pos.Z)
-	local r = workspace:Raycast(origin, Vector3.new(0, -70, 0), groundParams)
-	if r then
-		local gy = r.Position.Y
-		if not force and gy - e.pos.Y > 4.5 and e.air <= 0 then
-			e.pos = Vector3.new(prevSnap.X, e.pos.Y, prevSnap.Z)
-			e.lastSnap = e.pos
-			return
+	local thresh = if perfOn and not e.fodder then PERF_SNAP else e.snapDist
+	if force or (exact and moved > 0.02) or moved >= thresh then
+		-- Keep normal walk raycasts just above max step-up (5 studs) so steep mountain overhangs above the unit don't
+		-- falsely trigger the cliff step-up reject; fall back higher only on forced snaps or missed hits.
+		local topOff = if force then 12 + e.def.size * 0.5 else 5.0
+		local r = workspace:Raycast(Vector3.new(e.pos.X, e.pos.Y + topOff, e.pos.Z), Vector3.new(0, -70, 0), groundParams)
+		if not r and force then
+			r = workspace:Raycast(Vector3.new(e.pos.X, e.pos.Y + 40, e.pos.Z), Vector3.new(0, -120, 0), groundParams)
 		end
-		if force or exact or (e.pos.Y - gy) > 6 then
-			e.pos = Vector3.new(e.pos.X, gy, e.pos.Z)
-		else
-			-- fodder snaps less often, so each snap closes more of the gap
-			local k = if coarse then 0.6 else 1 - math.exp(-SNAP_RATE * math.min(acc, 0.1))
-			local y = e.pos.Y + (gy - e.pos.Y) * k
-			e.pos = Vector3.new(e.pos.X, math.clamp(y, gy - SNAP_SINK, gy + SNAP_HOVER), e.pos.Z)
+		if r then
+			local gy = r.Position.Y
+			if not force and gy - e.pos.Y > 4.5 and e.air <= 0 then
+				e.pos = Vector3.new(prevSnap.X, e.pos.Y, prevSnap.Z)
+				e.lastSnap = e.pos
+				return
+			end
+			e.groundY = gy
+			e.groundN = r.Normal
 		end
+		e.lastSnap = Vector3.new(e.pos.X, e.groundY or e.pos.Y, e.pos.Z)
 	end
-	e.lastSnap = e.pos
+
+	-- Project along the last sampled slope plane so targetY descends/ascends continuously every frame without
+	-- flat-hovering between raycasts and teleport-snapping down on slopes.
+	local baseY = e.groundY or e.pos.Y
+	local n = e.groundN or Vector3.yAxis
+	local d = flat(e.pos - e.lastSnap)
+	local slopeDelta = if n.Y > 0.35 then math.clamp(-(d.X * n.X + d.Z * n.Z) / n.Y, -1.8, 1.8) else 0
+	local targetY = baseY + slopeDelta
+
+	if force or exact or (e.pos.Y - targetY) > 6 then
+		e.pos = Vector3.new(e.pos.X, targetY, e.pos.Z)
+	else
+		local k = 1 - math.exp(-SNAP_RATE * math.min(dt, 0.1))
+		local y = e.pos.Y + (targetY - e.pos.Y) * k
+		e.pos = Vector3.new(e.pos.X, math.clamp(y, targetY - SNAP_SINK, targetY + SNAP_HOVER), e.pos.Z)
+	end
 end
 
 local function update(e: any, dt: number, now: number)
