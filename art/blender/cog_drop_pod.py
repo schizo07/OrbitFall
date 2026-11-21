@@ -1,9 +1,11 @@
-"""Hostile Cogwork Heavy Drop Pod (key cog_drop_pod) in Orbitfall's "Foundry Clockwork" style.
+"""Hostile Cogwork Ballistic Drop Pod (key cog_drop_pod) in Orbitfall's "Foundry Clockwork" style.
 
-Heavy chamfered gunmetal breach capsule built from bolted plates around a hollow front
-deploy bay, with a separate hinged front blast door that lowers into an assault ramp,
-CogRed riveted armour panels, offset brass gear clusters, rear steam boiler and copper
-pipes, twin flared smokestacks, ground-anchor impact claws, and a caged top beacon.
+Hard-faceted orbital artillery-shell / bullet-form assault pod built from bolted forged-iron
+tiers rising from a heavy impact skirt into a fluted armour-piercing warhead tip, anchored by
+four swept-back stabilizer blast-blades with brass gear-joint roots. Features a flush-contoured
+hinged front blast door lowering into a ribbed boarding ramp, a hollow recessed deploy bay with
+glowing furnace vents, slanted CogRed flank armour with offset brass gear clusters, a toothed
+brass warhead collar over recessed glow slits, and compact rear thruster-manifold exhausts.
 
 Origin = base centre on the ground (z = 0), front blast door facing -Y (Roblox -Z).
 Parts: Body (Metal), Door (Metal, parent Body), Glow (Neon, parent Body),
@@ -15,34 +17,63 @@ Headless:
 import os
 import shutil
 import sys
-from math import cos, radians, sin
+from math import atan2, cos, pi, radians, sin, sqrt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..", "helper")))
 sys.path.insert(0, HERE)
 import parts_lib as pl
-from mathutils import Euler, Vector
+from mathutils import Euler, Matrix, Vector
 
 KEY = "cog_drop_pod"
 
-# Core dimensions (1 Blender unit = 1 stud)
-HX = 2.85          # main hull half-width
-HY = 2.85          # main hull half-depth
-CH = 1.05          # 45-degree corner chamfer size
-BAY_X = 1.80       # inner deploy bay half-width (3.60 studs clear)
-BAY_Y_BACK = 1.55  # inner rear bulkhead Y
-Z_BASE = 0.70      # deploy bay floor top / plinth height
-Z_WALL_TOP = 8.45  # top of main octagonal hull walls
-Z_BAY_TOP = 7.68   # deploy bay ceiling height
+# Core ballistic hull dimensions (1 Blender unit = 1 stud, Z up, front = -Y)
+Z_BASE = 0.66          # deploy bay floor top / lower driving-band shelf
+Z_BAY_TOP = 6.08       # deploy bay ceiling height
+Z_SHOULDER = 6.66      # top of lower tapered fuselage / warhead collar base
+Z_TIP = 13.68          # sharp armour-piercing bullet tip
 
-DOOR_HINGE = (0.0, -2.96, 0.66)
-DOOR_W = 3.74
-DOOR_H = 7.04
-DOOR_T = 0.28
+R_BASE = 2.94          # lower fuselage octagonal apothem at Z_BASE
+C_BASE = 1.14          # 45-deg corner chamfer at Z_BASE
+R_TOP = 2.26           # fuselage octagonal apothem at Z_SHOULDER
+C_TOP = 0.94           # 45-deg corner chamfer at Z_SHOULDER
+
+BAY_X_BOT = 1.54       # clear interior bay half-width at Z_BASE
+BAY_X_TOP = 1.14       # clear interior bay half-width at Z_SHOULDER
+BAY_Y_BOT = 1.48       # inner rear bulkhead Y at Z_BASE
+BAY_Y_TOP = 1.06       # inner rear bulkhead Y at Z_SHOULDER
+
+# Uniform inward slant angle of the lower tapered bullet fuselage (~6.47 deg)
+HULL_TILT = atan2(R_BASE - R_TOP, Z_SHOULDER - Z_BASE)
+
+# Hinged front blast door parameters (flush-contoured to the -Y tapered face)
+DOOR_HINGE = (0.0, -2.99, 0.62)
+DOOR_LEN = 5.42        # length along slanted front hull plane
+DOOR_T = 0.26          # base slab thickness
+DOOR_W_BOT = 3.24      # bottom width of door slab
+DOOR_W_MID = 2.66      # width at shoulder chamfer start
+DOOR_W_TOP = 1.82      # narrow bullet-shoulder top edge width
+DOOR_S_MID = 4.35      # distance along door where top shoulder chamfer begins
+
+
+def lerp(a, b, t):
+    return a + (b - a) * t
+
+
+def hull_rc(z):
+    """Interpolated (apothem R, chamfer C) along the lower tapered bullet casing."""
+    t = (z - Z_BASE) / (Z_SHOULDER - Z_BASE)
+    return lerp(R_BASE, R_TOP, t), lerp(C_BASE, C_TOP, t)
+
+
+def bay_xy(z):
+    """Interpolated (half-width bay_x, rear bulkhead bay_y) inside the tapered bay."""
+    t = (z - Z_BASE) / (Z_SHOULDER - Z_BASE)
+    return lerp(BAY_X_BOT, BAY_X_TOP, t), lerp(BAY_Y_BOT, BAY_Y_TOP, t)
 
 
 def facing(n, up=(0, 0, 1)):
-    """Euler for a local-XY plate whose +Z faces normal n."""
+    """Euler for a local-XY plate whose +Z faces normal n and local +Y aligns near up."""
     n = Vector(n).normalized()
     u = Vector(up)
     x = u.cross(n)
@@ -51,378 +82,592 @@ def facing(n, up=(0, 0, 1)):
     return pl.basis(x, n)
 
 
-def extrude_z(part, poly_xy, z0, z1, color, bevel=0.0):
-    """Extrude a 2D XY polygon cleanly from z0 to z1."""
-    return pl.extrude(part, poly_xy, z1 - z0, (0.0, 0.0, (z0 + z1) / 2.0),
-                      color=color, plane='XY', bevel=bevel)
+def front_plane_vectors():
+    """Return (origin, up_vec, normal_vec, rot) for the slanted front (-Y) bullet face."""
+    u = Vector((0.0, sin(HULL_TILT), cos(HULL_TILT))).normalized()
+    n = Vector((0.0, -cos(HULL_TILT), sin(HULL_TILT))).normalized()
+    rot = pl.basis((1.0, 0.0, 0.0), n)
+    return Vector((0.0, -R_BASE, Z_BASE)), u, n, rot
 
 
-def recessed_furnace_grate(b, g, w, h, bars, loc, normal, depth=0.22):
-    """Low-tri recessed furnace grate with hot Neon backing behind horizontal bars."""
-    rot = facing(normal)
+def side_plane_vectors(side):
+    """Return (origin, up_vec, normal_vec, rot) for the slanted left (-1) or right (+1) face."""
+    u = Vector((-side * sin(HULL_TILT), 0.0, cos(HULL_TILT))).normalized()
+    n = Vector((side * cos(HULL_TILT), 0.0, sin(HULL_TILT))).normalized()
+    x_ax = u.cross(n).normalized()
+    rot = pl.basis(x_ax, n)
+    return Vector((side * R_BASE, 0.0, Z_BASE)), u, n, rot
+
+
+def rear_plane_vectors():
+    """Return (origin, up_vec, normal_vec, rot) for the slanted rear (+Y) bullet face."""
+    u = Vector((0.0, -sin(HULL_TILT), cos(HULL_TILT))).normalized()
+    n = Vector((0.0, cos(HULL_TILT), sin(HULL_TILT))).normalized()
+    rot = pl.basis((-1.0, 0.0, 0.0), n)
+    return Vector((0.0, R_BASE, Z_BASE)), u, n, rot
+
+
+def recessed_furnace_grate(b, g, w, h, bars, loc, normal, up=(0, 0, 1), depth=0.20):
+    """Low-tri recessed furnace grate with hot Neon core recessed behind iron bars."""
+    rot = facing(normal, up=up)
     f = pl.frame(loc, rot)
-    fw = min(w, h) * 0.11
+    fw = min(w, h) * 0.12
     for x, y, sx, sy in ((0, h / 2 - fw / 2, w, fw), (0, -h / 2 + fw / 2, w, fw),
                          (w / 2 - fw / 2, 0, fw, h), (-w / 2 + fw / 2, 0, fw, h)):
         pl.box(b, (sx, sy, depth), f((x, y, 0)), "GunmetalDark", rot, bevel=0.0)
     inner_w = w - 2 * fw
     inner_h = h - 2 * fw
-    # Dark soot recess wall + recessed glowing furnace core
-    pl.box(b, (inner_w, inner_h, depth * 0.25), f((0, 0, -depth * 0.38)), "Soot", rot, bevel=0.0)
-    pl.box(g, (inner_w * 0.90, inner_h * 0.90, depth * 0.12), f((0, 0, -depth * 0.20)), rot=rot, bevel=0.0)
-    # Protective iron grate bars across the front of the recessed furnace
+    pl.box(b, (inner_w, inner_h, depth * 0.24), f((0, 0, -depth * 0.36)), "Soot", rot, bevel=0.0)
+    pl.box(g, (inner_w * 0.90, inner_h * 0.90, depth * 0.12), f((0, 0, -depth * 0.18)), rot=rot, bevel=0.0)
     for i in range(bars):
         y = -inner_h / 2 + inner_h * (i + 0.5) / bars
-        pl.box(b, (inner_w, inner_h / bars * 0.28, depth * 0.45), f((0, y, depth * 0.18)),
+        pl.box(b, (inner_w, inner_h / bars * 0.30, depth * 0.44), f((0, y, depth * 0.18)),
                "Gunmetal", rot, bevel=0.0)
 
 
-def build_hull_and_bay(b, g):
-    """Base impact plinth, hollow octagonal hull walls, top collar, and dark deploy bay."""
-    # Bottom impact keel plate resting solidly on z = 0
-    extrude_z(b, pl.chamfer_rect(2.45, 2.45, 0.90), 0.0, 0.18, "RustDark", bevel=0.0)
-
-    # Heavy lower impact plinth / skirt (z = 0.14 .. 0.72)
+def build_base_and_hull(b, g):
+    """Heavy impact skirt, tapered hollow octagonal bullet hull, and recessed deploy bay."""
+    # Bottom forged impact keel resting flat on z = 0
     pl.loft(b, [
-        pl.chamfer_rect(2.68, 2.68, 1.00, z=0.14),
-        pl.chamfer_rect(2.94, 2.94, 1.08, z=0.72),
-    ], color="GunmetalDark", bevel=0.05)
+        pl.chamfer_rect(2.50, 2.50, 0.98, z=0.0),
+        pl.chamfer_rect(2.74, 2.74, 1.07, z=0.22),
+    ], color="RustDark", bevel=0.0)
 
-    # Lower exterior rust bumper band along the bottom skirt
+    # Heavy lower breach skirt / ballistic driving-band base (z = 0.20 .. 0.70)
     pl.loft(b, [
-        pl.chamfer_rect(2.98, 2.98, 1.10, z=0.38),
-        pl.chamfer_rect(3.00, 3.00, 1.11, z=0.62),
+        pl.chamfer_rect(2.76, 2.76, 1.08, z=0.20),
+        pl.chamfer_rect(3.00, 3.00, 1.16, z=0.52),
+        pl.chamfer_rect(2.96, 2.96, 1.15, z=0.70),
+    ], color="GunmetalDark", bevel=0.04)
+
+    # Scorched Rust artillery driving band around the base skirt
+    pl.loft(b, [
+        pl.chamfer_rect(3.04, 3.04, 1.18, z=0.34),
+        pl.chamfer_rect(3.04, 3.04, 1.18, z=0.56),
     ], color="Rust", bevel=0.0)
 
-    # Hollow octagonal main walls (three convex extruded slabs, flush outer octagon)
-    z0, z1 = Z_BASE - 0.04, Z_WALL_TOP
-    left_poly = [(-HX, -HY + CH), (-BAY_X, -HY), (-BAY_X, BAY_Y_BACK + 0.04), (-HX, BAY_Y_BACK + 0.04)]
-    extrude_z(b, left_poly, z0, z1, "Gunmetal", bevel=0.05)
+    # Tapered hollow octagonal bullet hull (3 convex watertight lofted walls)
+    z0, z1 = Z_BASE - 0.03, Z_SHOULDER
+    r0, c0 = hull_rc(z0)
+    r1, c1 = hull_rc(z1)
+    bx0, by0 = bay_xy(z0)
+    bx1, by1 = bay_xy(z1)
 
-    right_poly = [(BAY_X, -HY), (HX, -HY + CH), (HX, BAY_Y_BACK + 0.04), (BAY_X, BAY_Y_BACK + 0.04)]
-    extrude_z(b, right_poly, z0, z1, "Gunmetal", bevel=0.05)
+    def left_ring(r, c, bx, by, z):
+        return [
+            (-r, -r + c, z), (-r + c, -r, z),
+            (-bx, -r, z), (-bx, by + 0.06, z), (-r, by + 0.06, z),
+        ]
 
-    rear_poly = [
-        (-HX, BAY_Y_BACK), (HX, BAY_Y_BACK),
-        (HX, HY - CH), (HX - CH, HY),
-        (-HX + CH, HY), (-HX, HY - CH),
-    ]
-    extrude_z(b, rear_poly, z0, z1, "Gunmetal", bevel=0.05)
+    def right_ring(r, c, bx, by, z):
+        return [
+            (bx, -r, z), (r - c, -r, z), (r, -r + c, z),
+            (r, by + 0.06, z), (bx, by + 0.06, z),
+        ]
 
-    # Upper ceiling slab closing the top of the deploy bay
-    extrude_z(b, pl.chamfer_rect(HX, HY, CH), Z_BAY_TOP, Z_WALL_TOP + 0.08, "Gunmetal", bevel=0.05)
+    def rear_ring(r, c, by, z):
+        return [
+            (-r, by, z), (r, by, z),
+            (r, r - c, z), (r - c, r, z),
+            (-r + c, r, z), (-r, r - c, z),
+        ]
 
-    # Heavy upper bolted structural collar wrapping the top of the main torso
+    pl.loft(b, [left_ring(r0, c0, bx0, by0, z0), left_ring(r1, c1, bx1, by1, z1)],
+            color="Gunmetal", bevel=0.04)
+    pl.loft(b, [right_ring(r0, c0, bx0, by0, z0), right_ring(r1, c1, bx1, by1, z1)],
+            color="Gunmetal", bevel=0.04)
+    pl.loft(b, [rear_ring(r0, c0, by0, z0), rear_ring(r1, c1, by1, z1)],
+            color="Gunmetal", bevel=0.04)
+
+    # Solid upper bay ceiling closing the bullet hull at Z_BAY_TOP .. Z_SHOULDER + 0.06
+    rc_ceil = hull_rc(Z_BAY_TOP)
+    rc_sh = hull_rc(Z_SHOULDER + 0.06)
     pl.loft(b, [
-        pl.chamfer_rect(HX + 0.18, HY + 0.18, CH + 0.07, z=7.74),
-        pl.chamfer_rect(HX + 0.18, HY + 0.18, CH + 0.07, z=8.52),
-    ], color="GunmetalDark", bevel=0.05)
+        pl.chamfer_rect(rc_ceil[0], rc_ceil[0], rc_ceil[1], z=Z_BAY_TOP),
+        pl.chamfer_rect(rc_sh[0], rc_sh[0], rc_sh[1], z=Z_SHOULDER + 0.06),
+    ], color="Gunmetal", bevel=0.04)
 
-    # Brass perimeter bolts around the upper collar (skip centre front where visor sits)
-    for x_off in (-1.40, 1.40):
-        pl.bolt(b, (x_off, -HY - 0.18, 8.15), (0, -1, 0), r=0.11, color="Brass", segs=4)
-    for x_off in (-1.20, 0.0, 1.20):
-        pl.bolt(b, (x_off, HY + 0.18, 8.15), (0, 1, 0), r=0.11, color="Brass", segs=4)
-    for y_off in (-1.20, 0.0, 1.20):
-        pl.bolt(b, (-HX - 0.18, y_off, 8.15), (-1, 0, 0), r=0.11, color="Brass", segs=4)
-        pl.bolt(b, (HX + 0.18, y_off, 8.15), (1, 0, 0), r=0.11, color="Brass", segs=4)
-
-    # Front armoured doorway frame pillars & upper slam-latch lock lugs
+    # Slanted armoured doorway frame jambs + upper chamfered slam-latch brow
+    f_orig, f_up, f_n, f_rot = front_plane_vectors()
     for s in (-1, 1):
-        pl.box(b, (0.30, 0.36, Z_BAY_TOP - Z_BASE + 0.16),
-               (s * (BAY_X + 0.10), -HY - 0.06, (Z_BASE + Z_BAY_TOP) / 2.0),
-               "GunmetalDark", bevel=0.03)
-        pl.box(b, (0.48, 0.44, 0.56), (s * 1.48, -HY - 0.22, 7.82), "GunmetalDark", bevel=0.0)
-        pl.cyl(b, 0.12, 0.36, (s * 1.48, -HY - 0.38, 7.62), "Brass", segs=6, bevel=0.0)
+        p_bot = f_orig + Vector((s * (BAY_X_BOT + 0.14), 0.0, 0.0)) + f_up * 0.08 + f_n * 0.05
+        p_top = f_orig + Vector((s * (BAY_X_TOP + 0.16), 0.0, 0.0)) + f_up * 5.40 + f_n * 0.05
+        d_jamb = p_top - p_bot
+        rot_j = pl.basis(f_n, d_jamb)
+        pl.box(b, (0.28, 0.26, d_jamb.length), (p_bot + p_top) / 2.0, "GunmetalDark", rot_j, bevel=0.02)
 
-    # Recessed twin warning visor slot on the upper front brow (above the door)
-    pl.visor_slot(b, g, 1.75, 0.36, (0.0, -HY - 0.17, 8.15),
-                  normal=(0, -1, 0), depth=0.22, lenses=2,
-                  color="Soot", frame_color="Gunmetal")
+        # Heavy upper slam-latch lock housing flanking the door's top shoulder cut
+        p_lock = f_orig + Vector((s * 1.12, 0.0, 0.0)) + f_up * 5.38 + f_n * 0.14
+        pl.box(b, (0.40, 0.42, 0.34), p_lock, "GunmetalDark", f_rot, bevel=0.0)
+        pl.cyl(b, 0.09, 0.30, p_lock + f_n * 0.12 - f_up * 0.06, "Brass",
+               pl.orient(f_up), segs=6, bevel=0.0)
 
-    # ---- Recessed Dark Deploy Bay Interior ----
-    pl.box(b, (BAY_X * 2.0 - 0.04, BAY_Y_BACK + HY - 0.25, 0.08),
-           (0.0, (BAY_Y_BACK - HY) / 2.0 + 0.12, Z_BASE + 0.03), "Grime", bevel=0.0)
+    # Recessed twin warning visor slot on the slanted upper brow above the blast door
+    p_brow = f_orig + f_up * 5.74 + f_n * 0.04
+    pl.visor_slot(b, g, 1.48, 0.28, p_brow, normal=f_n, up=f_up, depth=0.20,
+                  lenses=2, color="Soot", frame_color="GunmetalDark")
+
+    # ---- Hollow Recessed Dark Deploy Bay Interior ----
+    pl.box(b, (BAY_X_BOT * 2.0 - 0.06, BAY_Y_BOT + R_BASE - 0.28, 0.08),
+           (0.0, (BAY_Y_BOT - R_BASE) / 2.0 + 0.10, Z_BASE + 0.03), "Grime", bevel=0.0)
     for y_rib in (-2.05, -1.35, -0.65, 0.05, 0.75):
-        pl.box(b, (BAY_X * 1.72, 0.16, 0.08), (0.0, y_rib, Z_BASE + 0.09), "GunmetalDark", bevel=0.0)
-    pl.hazard_stripes(b, BAY_X * 1.92, 0.42, (0.0, -HY + 0.24, Z_BASE + 0.06),
+        pl.box(b, (BAY_X_BOT * 1.72, 0.15, 0.07), (0.0, y_rib, Z_BASE + 0.09), "GunmetalDark", bevel=0.0)
+    pl.hazard_stripes(b, BAY_X_BOT * 1.88, 0.40, (0.0, -R_BASE + 0.28, Z_BASE + 0.06),
                       rot=(0, 0, 0), stripes=5, c1="Hazard", c2="Oil", t=0.04)
 
-    # Dark Soot interior wall linings + vertical structural bulkhead ribs
-    pl.box(b, (BAY_X * 1.96, 0.10, Z_BAY_TOP - Z_BASE - 0.12),
-           (0.0, BAY_Y_BACK - 0.04, (Z_BASE + Z_BAY_TOP) / 2.0), "Soot", bevel=0.0)
-    for s in (-1, 1):
-        pl.box(b, (0.10, BAY_Y_BACK + HY - 0.20, Z_BAY_TOP - Z_BASE - 0.12),
-               (s * (BAY_X - 0.04), (BAY_Y_BACK - HY) / 2.0 + 0.08, (Z_BASE + Z_BAY_TOP) / 2.0),
-               "Soot", bevel=0.0)
-        for y_rib in (-1.75, -0.35, 0.90):
-            pl.box(b, (0.20, 0.22, Z_BAY_TOP - Z_BASE - 0.20),
-                   (s * (BAY_X - 0.12), y_rib, (Z_BASE + Z_BAY_TOP) / 2.0),
-                   "GunmetalDark", bevel=0.0)
-        # Recessed vertical furnace/heat vent strip on each interior side wall
-        recessed_furnace_grate(b, g, 0.85, 2.75, 4, (s * (BAY_X - 0.18), -1.05, 4.10),
-                               normal=(-s, 0, 0), depth=0.16)
-        # Interior vertical copper steam conduit running down the back corner
-        pl.rod(b, (s * (BAY_X - 0.26), BAY_Y_BACK - 0.26, Z_BASE + 0.25),
-               (s * (BAY_X - 0.26), BAY_Y_BACK - 0.26, Z_BAY_TOP - 0.25),
-               0.10, "Copper", segs=6, bevel=0.0)
+    # Slanted dark Soot rear bulkhead liner + glowing recessed furnace grate
+    rear_bay_tilt = atan2(BAY_Y_BOT - BAY_Y_TOP, Z_SHOULDER - Z_BASE)
+    u_rb = Vector((0.0, -sin(rear_bay_tilt), cos(rear_bay_tilt))).normalized()
+    n_rb = Vector((0.0, -cos(rear_bay_tilt), -sin(rear_bay_tilt))).normalized()
+    rot_rb = facing(n_rb, up=u_rb)
+    z_mid = (Z_BASE + Z_BAY_TOP) / 2.0
+    bx_mid, by_mid = bay_xy(z_mid)
+    bay_h = Z_BAY_TOP - Z_BASE - 0.16
 
-    # Interior rear bulkhead: recessed glowing furnace grate + overhead restraint yoke
-    recessed_furnace_grate(b, g, 2.40, 2.80, 4, (0.0, BAY_Y_BACK - 0.22, 4.25),
-                           normal=(0, -1, 0), depth=0.24)
-    pl.box(b, (2.60, 0.38, 0.30), (0.0, 0.45, Z_BAY_TOP - 0.24), "GunmetalDark", bevel=0.0)
-    for s in (-1, 1):
-        pl.box(b, (0.26, 1.30, 0.24), (s * 0.92, 0.25, Z_BAY_TOP - 0.48), "Rust", bevel=0.0)
+    pl.box(b, (bx_mid * 1.94, bay_h, 0.10), (0.0, by_mid - 0.05, z_mid), "Soot", rot_rb, bevel=0.0)
+    recessed_furnace_grate(b, g, 1.96, 2.40, 4, (0.0, by_mid - 0.20, z_mid + 0.15),
+                           normal=n_rb, up=u_rb, depth=0.22)
 
-    # Stationary hinge knuckles + prominent brass cog_joint gears at bottom-front corners
+    # Slanted interior side bay walls (Soot liners + ribs + recessed furnace slits + copper pipes)
+    side_bay_tilt = atan2(BAY_X_BOT - BAY_X_TOP, Z_SHOULDER - Z_BASE)
+    for s in (-1, 1):
+        u_sb = Vector((-s * sin(side_bay_tilt), 0.0, cos(side_bay_tilt))).normalized()
+        n_sb = Vector((-s * cos(side_bay_tilt), 0.0, -sin(side_bay_tilt))).normalized()
+        rot_sb = facing(n_sb, up=u_sb)
+        pl.box(b, (by_mid + R_BASE - 0.55, bay_h, 0.09),
+               (s * (bx_mid - 0.04), -0.60, z_mid), "Soot", rot_sb, bevel=0.0)
+        for y_rib in (-1.55, -0.30, 0.72):
+            pl.box(b, (0.18, bay_h - 0.16, 0.18), (s * (bx_mid - 0.10), y_rib, z_mid),
+                   "GunmetalDark", rot_sb, bevel=0.0)
+        recessed_furnace_grate(b, g, 0.76, 2.25, 4, (s * (bx_mid - 0.16), -0.92, z_mid + 0.05),
+                               normal=n_sb, up=u_sb, depth=0.14)
+        # Interior rear-corner copper steam conduit following the inward taper
+        pl.rod(b, (s * (BAY_X_BOT - 0.22), BAY_Y_BOT - 0.22, Z_BASE + 0.20),
+               (s * (BAY_X_TOP - 0.16), BAY_Y_TOP - 0.16, Z_BAY_TOP - 0.20),
+               0.09, "Copper", segs=6, bevel=0.0)
+
+    # Overhead troop restraint yoke inside the bay ceiling
+    pl.box(b, (2.05, 0.34, 0.26), (0.0, 0.15, Z_BAY_TOP - 0.20), "GunmetalDark", bevel=0.0)
+    for s in (-1, 1):
+        pl.box(b, (0.22, 1.05, 0.20), (s * 0.72, 0.0, Z_BAY_TOP - 0.42), "Rust", bevel=0.0)
+
+    # Stationary hinge knuckles & prominent brass cog_joint gears at bottom-front threshold
     hy, hz = DOOR_HINGE[1], DOOR_HINGE[2]
     for s in (-1, 1):
-        pl.box(b, (0.48, 0.68, 0.68), (s * 2.08, hy + 0.20, hz + 0.04), "GunmetalDark", bevel=0.04)
-        pl.cog_joint(b, (s * 2.18, hy, hz), (1, 0, 0), r=0.52, w=0.28, color="Brass",
+        pl.box(b, (0.42, 0.58, 0.58), (s * 1.84, hy + 0.22, hz + 0.04), "GunmetalDark", bevel=0.03)
+        pl.cog_joint(b, (s * 1.94, hy, hz), (1, 0, 0), r=0.46, w=0.26, color="Brass",
                      cap="GunmetalDark", teeth=10)
 
 
 def build_door(door, door_glow):
-    """Separate hinged Front Blast Door that lowers forward into an assault ramp."""
+    """Separate contoured Front Blast Door pivoting at DOOR_HINGE into an assault ramp."""
     hy, hz = DOOR_HINGE[1], DOOR_HINGE[2]
-    yc = hy - 0.02                      # centre plane of door slab
-    zc = hz + DOOR_H / 2.0 + 0.04       # vertical centre of closed door
-
-    # Main heavy door armour slab
-    pl.box(door, (DOOR_W, DOOR_T, DOOR_H), (0.0, yc, zc), "GunmetalDark", bevel=0.05)
+    _, f_up, f_n, f_rot = front_plane_vectors()
+    # Local door frame: origin at DOOR_HINGE, +X = right, +Y = up along door, +Z = outward (-Y/up)
+    df = pl.frame(DOOR_HINGE, f_rot)
 
     # Bottom hinge axle barrel spanning the hinge axis + brass hinge knuckles
-    pl.cyl(door, 0.20, DOOR_W + 0.24, (0.0, hy, hz), "GunmetalDark", pl.AX_X, segs=8, bevel=0.0)
-    for x_kn in (-1.35, 0.0, 1.35):
-        pl.cyl(door, 0.28, 0.46, (x_kn, hy, hz), "Brass", pl.AX_X, segs=8, bevel=0.0)
+    pl.cyl(door, 0.18, DOOR_W_BOT + 0.32, DOOR_HINGE, "GunmetalDark", pl.AX_X, segs=8, bevel=0.0)
+    for x_kn in (-1.18, 0.0, 1.18):
+        pl.cyl(door, 0.25, 0.42, (x_kn, hy, hz), "Brass", pl.AX_X, segs=8, bevel=0.0)
 
-    # ---- Outer Blast Face (-Y when closed) ----
-    y_out = yc - DOOR_T / 2.0
-    rot_front = facing((0, -1, 0))
+    # Main contoured heavy door slab (trapezoid + chamfered bullet-shoulder top cut)
+    s0 = 0.06
+    s_top = s0 + DOOR_LEN
+    s_mid = s0 + DOOR_S_MID
+    door_prof = [
+        (-DOOR_W_BOT / 2.0, s0),
+        (DOOR_W_BOT / 2.0, s0),
+        (DOOR_W_MID / 2.0, s_mid),
+        (DOOR_W_TOP / 2.0, s_top),
+        (-DOOR_W_TOP / 2.0, s_top),
+        (-DOOR_W_MID / 2.0, s_mid),
+    ]
+    z_slab = -0.02  # slab center offset slightly inward along local Z so outer face is flush
+    pl.extrude(door, door_prof, DOOR_T, df((0.0, 0.0, z_slab)), "GunmetalDark",
+               f_rot, plane='XY', bevel=0.04)
 
-    # Upper & lower CogRed riveted armour plates with horizontal blast seam
-    pl.riveted_plate(door, 3.16, 2.48, 0.16, (0.0, y_out - 0.07, hz + 5.38),
-                     rot_front, "CogRed", "Brass", spacing=1.25, rivet_r=0.085,
-                     chamfer=0.14, rivet_segs=4, bevel=0.0)
-    pl.riveted_plate(door, 3.16, 2.48, 0.16, (0.0, y_out - 0.07, hz + 2.48),
-                     rot_front, "CogRed", "Brass", spacing=1.25, rivet_r=0.085,
-                     chamfer=0.14, rivet_segs=4, bevel=0.0)
+    # ---- Outer Blast Face (+Z in door frame) ----
+    z_out = z_slab + DOOR_T / 2.0
 
-    # Horizontal seam crossbar & heavy locking bolts across the door waist
-    pl.box(door, (DOOR_W + 0.08, 0.22, 0.36), (0.0, y_out - 0.08, hz + 3.93), "Gunmetal", bevel=0.0)
+    # Lower CogRed tapered armour plate (s = 0.82 .. 2.86)
+    low_prof = [(-1.38, 0.84), (1.38, 0.84), (1.28, 2.84), (-1.28, 2.84)]
+    pl.extrude(door, low_prof, 0.14, df((0.0, 0.0, z_out + 0.06)), "CogRed",
+               f_rot, plane='XY', bevel=0.0)
+    for x_r in (-1.14, 0.0, 1.14):
+        pl.bolt(door, df((x_r, 1.08, z_out + 0.13)), f_n, r=0.075, color="Brass", segs=4)
+        pl.bolt(door, df((x_r, 2.60, z_out + 0.13)), f_n, r=0.075, color="Brass", segs=4)
+
+    # Upper CogRed bullet-shoulder tapered armour plate (s = 3.22 .. 5.14)
+    up_prof = [
+        (-1.24, 3.22), (1.24, 3.22),
+        (1.12, 4.30), (0.76, 5.12),
+        (-0.76, 5.12), (-1.12, 4.30),
+    ]
+    pl.extrude(door, up_prof, 0.14, df((0.0, 0.0, z_out + 0.06)), "CogRed",
+               f_rot, plane='XY', bevel=0.0)
+    for rx, ry in ((-1.00, 3.44), (0.0, 3.44), (1.00, 3.44),
+                   (-0.92, 4.24), (0.92, 4.24), (-0.56, 4.92), (0.56, 4.92)):
+        pl.bolt(door, df((rx, ry, z_out + 0.13)), f_n, r=0.075, color="Brass", segs=4)
+
+    # Heavy horizontal waist crossbar + side slam-locking lugs
+    pl.box(door, (2.94, 0.34, 0.20), df((0.0, 3.03, z_out + 0.09)), "Gunmetal", f_rot, bevel=0.0)
     for s in (-1, 1):
-        pl.box(door, (0.44, 0.28, 0.62), (s * 1.62, y_out - 0.10, hz + 3.93), "GunmetalDark", bevel=0.0)
-        pl.box(door, (0.42, 0.18, 0.22), (s * 1.88, y_out - 0.06, hz + 3.93), "Brass", bevel=0.0)
-        pl.box(door, (0.36, 0.26, 0.72), (s * 1.48, y_out - 0.10, hz + 6.45), "Gunmetal", bevel=0.0)
-        pl.bolt(door, (s * 1.48, y_out - 0.23, hz + 6.55), (0, -1, 0), r=0.09, color="Brass", segs=4)
+        pl.box(door, (0.38, 0.56, 0.26), df((s * 1.38, 3.03, z_out + 0.11)), "GunmetalDark", f_rot, bevel=0.0)
+        pl.box(door, (0.34, 0.20, 0.16), df((s * 1.56, 3.03, z_out + 0.06)), "Brass", f_rot, bevel=0.0)
+        # Upper diagonal latch bar along the shoulder chamfer
+        pl.box(door, (0.28, 0.56, 0.22), df((s * 0.96, 4.86, z_out + 0.10)), "Gunmetal", f_rot, bevel=0.0)
+        pl.bolt(door, df((s * 0.96, 4.92, z_out + 0.21)), f_n, r=0.075, color="Brass", segs=4)
 
-    # Central Faction Mark (brass gear + recessed glowing red Cog Eye in DoorGlow)
-    pl.cog_mark(door, door_glow, (0.0, y_out - 0.16, hz + 3.93),
-                normal=(0, -1, 0), r=0.92, color="Brass", rim="GunmetalDark")
+    # Central Faction Mark (brass gear + recessed red-orange Cog Eye lens in DoorGlow)
+    pl.cog_mark(door, door_glow, df((0.0, 3.03, z_out + 0.18)),
+                normal=f_n, r=0.82, color="Brass", rim="GunmetalDark")
 
-    # Lower exterior hazard warning stripe band
-    pl.hazard_stripes(door, 3.12, 0.56, (0.0, y_out - 0.04, hz + 0.68),
-                      rot=rot_front, stripes=5, c1="Hazard", c2="Oil", t=0.06)
+    # Lower exterior hazard chevron threshold band
+    pl.hazard_stripes(door, 2.74, 0.46, df((0.0, 0.46, z_out + 0.04)),
+                      rot=f_rot, stripes=5, c1="Hazard", c2="Oil", t=0.05)
 
-    # Top heavy rust breach bumper lip (takes impact when slamming open onto ground)
-    pl.box(door, (DOOR_W - 0.12, 0.34, 0.30), (0.0, yc - 0.04, hz + DOOR_H - 0.05), "Rust", bevel=0.04)
+    # Heavy forged Rust breach bumper across the chamfered top rim (impacts ground when open)
+    pl.box(door, (DOOR_W_TOP + 0.06, 0.26, 0.32), df((0.0, s_top - 0.08, z_slab + 0.02)),
+           "Rust", f_rot, bevel=0.03)
 
-    # ---- Inner Assault Ramp Face (+Y when closed, faces UP when lowered!) ----
-    y_in = yc + DOOR_T / 2.0
+    # ---- Inner Assault Ramp Face (-Z in door frame; faces UP when opened ~99 deg!) ----
+    z_in = z_slab - DOOR_T / 2.0
+    # Dark non-slip ramp deck backing
+    in_prof = [
+        (-DOOR_W_BOT / 2.0 + 0.26, s0 + 0.16),
+        (DOOR_W_BOT / 2.0 - 0.26, s0 + 0.16),
+        (DOOR_W_MID / 2.0 - 0.24, s_mid - 0.06),
+        (DOOR_W_TOP / 2.0 - 0.20, s_top - 0.20),
+        (-DOOR_W_TOP / 2.0 + 0.20, s_top - 0.20),
+        (-DOOR_W_MID / 2.0 + 0.24, s_mid - 0.06),
+    ]
+    pl.extrude(door, in_prof, 0.06, df((0.0, 0.0, z_in - 0.02)), "Soot",
+               f_rot, plane='XY', bevel=0.0)
+
+    # Tapered raised steel boarding tread cleats across the inner ramp face
+    for i in range(7):
+        si = s0 + 0.46 + i * 0.68
+        if si < s_mid:
+            t_w = (si - s0) / (s_mid - s0)
+            w_cleat = lerp(DOOR_W_BOT, DOOR_W_MID, t_w) - 0.64
+        else:
+            t_w = (si - s_mid) / (s_top - s_mid)
+            w_cleat = lerp(DOOR_W_MID, DOOR_W_TOP, t_w) - 0.56
+        pl.box(door, (w_cleat, 0.18, 0.11), df((0.0, si, z_in - 0.07)), "Steel", f_rot, bevel=0.0)
+
+    # Center traction spine + angled side guide rails with brass trim
+    pl.box(door, (0.20, DOOR_LEN - 0.52, 0.09), df((0.0, s0 + DOOR_LEN / 2.0, z_in - 0.05)),
+           "GunmetalDark", f_rot, bevel=0.0)
     for s in (-1, 1):
-        pl.box(door, (0.24, 0.16, DOOR_H - 0.36), (s * (DOOR_W / 2.0 - 0.18), y_in + 0.07, zc),
-               "Gunmetal", bevel=0.0)
-        pl.box(door, (0.10, 0.06, DOOR_H - 0.50), (s * (DOOR_W / 2.0 - 0.18), y_in + 0.16, zc),
-               "Brass", bevel=0.0)
-    pl.box(door, (DOOR_W - 0.60, 0.06, DOOR_H - 0.48), (0.0, y_in + 0.02, zc), "Soot", bevel=0.0)
-    for i in range(9):
-        zt = hz + 0.62 + i * 0.72
-        pl.box(door, (DOOR_W - 0.82, 0.12, 0.20), (0.0, y_in + 0.08, zt), "Steel", bevel=0.0)
-    pl.box(door, (0.22, 0.10, DOOR_H - 0.56), (0.0, y_in + 0.06, zc), "GunmetalDark", bevel=0.0)
+        p0 = df((s * (DOOR_W_BOT / 2.0 - 0.16), s0 + 0.22, z_in - 0.07))
+        p1 = df((s * (DOOR_W_MID / 2.0 - 0.16), s_mid - 0.05, z_in - 0.07))
+        d_rail = p1 - p0
+        rot_r = pl.basis(f_n, d_rail)
+        pl.box(door, (0.14, 0.20, d_rail.length), (p0 + p1) / 2.0, "Gunmetal", rot_r, bevel=0.0)
+        pl.box(door, (0.05, 0.09, d_rail.length - 0.16),
+               (p0 + p1) / 2.0 - f_n * 0.09, "Brass", rot_r, bevel=0.0)
 
 
-def build_nose_and_beacon(b, g):
-    """Top-heavy chamfered armoured impact cowl, toothed crown gear, vanes, and caged beacon."""
-    # Main stepped chamfered impact nose (z = 8.48 .. 10.68)
+def build_warhead_ogive(b, g):
+    """Multi-stage faceted artillery-shell ogive, brass toothed collar, slit glow ring, and pointed tip."""
+    # Heavy bolted collar transitioning from tapered hull into the warhead shoulder (z = 6.62 .. 7.36)
     pl.loft(b, [
-        pl.chamfer_rect(2.86, 2.86, 1.06, z=8.48),
-        pl.chamfer_rect(2.42, 2.42, 0.90, z=9.40),
-        pl.chamfer_rect(1.86, 1.86, 0.70, z=10.68),
-    ], color="Gunmetal", bevel=0.05)
-
-    # CogRed armoured collar band wrapped around the mid-cowl
-    pl.loft(b, [
-        pl.chamfer_rect(2.68, 2.68, 1.00, z=8.98),
-        pl.chamfer_rect(2.40, 2.40, 0.90, z=9.62),
-    ], color="CogRed", bevel=0.0)
-
-    # Toothed brass crown gear collar cleanly proud around the upper cap shelf (Cog rule 3)
-    pl.gear(b, 2.08, 1.84, 14, 0.30, (0.0, 0.0, 10.74), "Brass")
-
-    # Upper octagonal armoured cap plate nested cleanly inside the brass crown gear
-    pl.loft(b, [
-        pl.chamfer_rect(1.66, 1.66, 0.62, z=10.68),
-        pl.chamfer_rect(1.38, 1.38, 0.52, z=11.24),
+        pl.chamfer_rect(2.38, 2.38, 0.99, z=6.62),
+        pl.chamfer_rect(2.34, 2.34, 0.98, z=7.02),
+        pl.chamfer_rect(2.14, 2.14, 0.90, z=7.36),
     ], color="GunmetalDark", bevel=0.04)
 
-    # Recessed Top Warning Beacon inside an armoured roll-cage (z = 11.24 .. 12.32)
-    pl.cyl(b, 0.76, 0.24, (0.0, 0.0, 11.34), "Gunmetal", segs=8, bevel=0.0)
-    pl.cyl(b, 0.56, 0.12, (0.0, 0.0, 11.46), "Brass", segs=8, bevel=0.0)
-    pl.cyl(g, 0.42, 0.52, (0.0, 0.0, 11.74), segs=8, bevel=0.0)
-    pl.cyl(b, 0.68, 0.22, (0.0, 0.0, 12.08), "CogRed", segs=8, bevel=0.0)
-    pl.cyl(b, 0.42, 0.14, (0.0, 0.0, 12.24), "GunmetalDark", segs=8, bevel=0.0)
+    # Prominent toothed brass warhead collar ring (Cog rule 3) at z = 7.42
+    pl.gear(b, 2.30, 2.08, 16, 0.28, (0.0, 0.0, 7.42), "Brass")
+
+    # Recessed red-orange glowing warhead slit ring caged inside 8 armoured vertical ribs (z = 7.56 .. 8.12)
+    pl.cyl(b, 1.72, 0.60, (0.0, 0.0, 7.84), "Soot", segs=8, bevel=0.0)
+    pl.cyl(g, 1.79, 0.34, (0.0, 0.0, 7.84), segs=8, bevel=0.0)
+    for i in range(8):
+        a = radians(22.5 + i * 45.0)
+        d = Vector((cos(a), sin(a), 0.0))
+        pl.box(b, (0.34, 0.44, 0.66), d * 1.88 + Vector((0.0, 0.0, 7.84)),
+               "GunmetalDark", rot=(0.0, 0.0, a), bevel=0.0)
+
+    # Overhanging warhead brow collar capping the glow slits (z = 8.08 .. 8.46)
+    pl.loft(b, [
+        pl.chamfer_rect(2.06, 2.06, 0.86, z=8.08),
+        pl.chamfer_rect(2.04, 2.04, 0.85, z=8.34),
+        pl.chamfer_rect(1.94, 1.94, 0.81, z=8.46),
+    ], color="GunmetalDark", bevel=0.04)
+
+    # Stage 1 & 2 Ballistic Ogive Warhead Cone (z = 8.44 .. 11.12)
+    pl.loft(b, [
+        pl.chamfer_rect(1.92, 1.92, 0.80, z=8.44),
+        pl.chamfer_rect(1.52, 1.52, 0.63, z=9.78),
+        pl.chamfer_rect(0.96, 0.96, 0.40, z=11.12),
+    ], color="Gunmetal", bevel=0.04)
+
+    # Bold CogRed tapered warhead identification band wrapping the lower ogive (z = 8.62 .. 10.12)
+    pl.loft(b, [
+        pl.chamfer_rect(1.92, 1.92, 0.80, z=8.62),
+        pl.chamfer_rect(1.48, 1.48, 0.62, z=10.12),
+    ], color="CogRed", bevel=0.0)
+
+    # 4 heavy longitudinal ballistic armour strakes + brass bolts along the ogive cardinal faces
+    for a_deg in (0, 90, 180, 270):
+        a = radians(a_deg)
+        d = Vector((cos(a), sin(a), 0.0))
+        p0 = d * 1.96 + Vector((0.0, 0.0, 8.50))
+        p1 = d * 0.98 + Vector((0.0, 0.0, 11.12))
+        dv = p1 - p0
+        rot_s = pl.basis(Vector((-d.y, d.x, 0.0)), dv)
+        pl.taper_box(b, (0.36, 0.24), (0.20, 0.16), 0.0, dv.length,
+                     color="GunmetalDark", loc=p0, rot=rot_s, bevel=0.0)
+        # Brass armour bolt near mid-strake
+        n_strake = (d * dv.z + Vector((0, 0, (p0.xy.length - p1.xy.length)))).normalized()
+        pl.bolt(b, p0.lerp(p1, 0.45) + n_strake * 0.11, n_strake, r=0.08, color="Brass", segs=4)
+
+    # Upper brass toothed fuze collar at z = 11.16
+    pl.gear(b, 1.06, 0.90, 12, 0.22, (0.0, 0.0, 11.16), "Brass")
+
+    # Compact recessed upper warhead beacon collar (z = 11.26 .. 11.98)
+    pl.loft(b, [
+        pl.chamfer_rect(0.88, 0.88, 0.37, z=11.26),
+        pl.chamfer_rect(0.68, 0.68, 0.28, z=11.44),
+    ], color="GunmetalDark", bevel=0.0)
+    pl.cyl(b, 0.52, 0.46, (0.0, 0.0, 11.66), "Soot", segs=8, bevel=0.0)
+    pl.cyl(g, 0.56, 0.24, (0.0, 0.0, 11.66), segs=8, bevel=0.0)
     for i in range(4):
         a = radians(45 + i * 90)
-        px, py = cos(a) * 0.60, sin(a) * 0.60
-        pl.rod(b, (px, py, 11.34), (px * 0.94, py * 0.94, 12.10), 0.085, "GunmetalDark", segs=5)
+        d = Vector((cos(a), sin(a), 0.0))
+        pl.box(b, (0.24, 0.28, 0.48), d * 0.60 + Vector((0.0, 0.0, 11.66)),
+               "GunmetalDark", rot=(0.0, 0.0, a), bevel=0.0)
 
-    # Four chunky corner re-entry drag vanes on brass cog_joint pivots (z = 9.05)
+    # Fluted Steel & Brass Armoured Pointed Bullet / Artillery Tip (z = 11.90 .. 13.68)
+    pl.loft(b, [
+        pl.chamfer_rect(0.70, 0.70, 0.29, z=11.90),
+        pl.chamfer_rect(0.56, 0.56, 0.23, z=12.16),
+    ], color="GunmetalDark", bevel=0.0)
+    pl.cyl(b, 0.56, 0.12, (0.0, 0.0, 12.22), "Brass", segs=8, bevel=0.0)
+
+    # Sharp 8-sided armour-piercing penetrator cone
+    pl.lathe(b, [
+        (0.52, 12.26),
+        (0.36, 12.88),
+        (0.16, 13.38),
+        (0.0, Z_TIP),
+    ], (0.0, 0.0, 0.0), color="Steel", rot=(0.0, 0.0, radians(22.5)), segs=8, bevel=0.0)
+
+    # 4 crisp Brass/Gunmetal ballistic fluting ribs racing up the penetrator tip
+    for i in range(4):
+        a = radians(45 + i * 90)
+        d = Vector((cos(a), sin(a), 0.0))
+        p0 = d * 0.53 + Vector((0.0, 0.0, 12.26))
+        p1 = d * 0.14 + Vector((0.0, 0.0, 13.36))
+        dv = p1 - p0
+        rot_f = pl.basis(Vector((-d.y, d.x, 0.0)), dv)
+        pl.taper_box(b, (0.12, 0.14), (0.05, 0.06), 0.0, dv.length,
+                     color="Brass", loc=p0, rot=rot_f, bevel=0.0)
+
+
+def build_stabilizer_fins(b):
+    """Four heavy swept-back stabilizer tail-fins / ground-anchoring blast blades at 45-deg corners."""
     for sx in (-1, 1):
         for sy in (-1, 1):
-            d = Vector((sx, sy, 0)).normalized()
             ang = radians(45 if (sx > 0 and sy > 0) else 135 if (sx < 0 and sy > 0)
                           else 225 if (sx < 0 and sy < 0) else 315)
-            p_base = d * 3.12 + Vector((0, 0, 9.10))
-            pl.box(b, (0.54, 0.54, 0.44), d * 2.92 + Vector((0, 0, 9.06)),
-                   "GunmetalDark", rot=(0, 0, ang), bevel=0.0)
-            tangent = Vector((-d.y, d.x, 0))
-            pl.cog_joint(b, p_base, tangent, r=0.32, w=0.34, color="Brass",
+            d = Vector((cos(ang), sin(ang), 0.0))
+            tangent = Vector((-d.y, d.x, 0.0))
+            rot_z = (0.0, 0.0, ang)
+
+            # Diagonal hull corner radius at base (z=0.66) is (2.94 - 1.14/2)*sqrt(2) = 3.35
+            # and at shoulder (z=6.66) is (2.26 - 0.94/2)*sqrt(2) = 2.53.
+            # Main swept forged-iron blast fin blade (plane='XZ' -> local X = radial out, Z = height)
+            fin_prof = [
+                (2.34, 6.42),   # upper root tucked cleanly into hull shoulder
+                (2.74, 6.26),   # upper leading shoulder
+                (4.78, 1.82),   # fierce swept diagonal leading blade edge
+                (5.26, 0.36),   # outer ground-anchor blade tip
+                (5.16, 0.00),   # flat ground-anchor toe at z = 0
+                (2.84, 0.00),   # inner ground-anchor heel at z = 0
+                (2.96, 0.56),   # slight lower blast-relief step
+                (3.04, 1.38),   # lower hull root
+            ]
+            pl.extrude(b, fin_prof, 0.32, (0.0, 0.0, 0.0), "GunmetalDark",
+                       rot=rot_z, plane='XZ', bevel=0.02)
+
+            # Scorched Rust armour leading-edge cap bolted down the slashing outer fin edge
+            lead_prof = [
+                (2.68, 6.28),
+                (2.98, 6.18),
+                (5.06, 1.76),
+                (5.46, 0.32),
+                (5.36, 0.00),
+                (5.08, 0.00),
+                (5.20, 0.34),
+                (4.74, 1.80),
+            ]
+            pl.extrude(b, lead_prof, 0.22, (0.0, 0.0, 0.0), "Rust",
+                       rot=rot_z, plane='XZ', bevel=0.0)
+
+            # Chamfered CogRed armour gusset bolted to both faces of the lower-mid fin
+            gus_prof = [
+                (2.92, 1.35),
+                (3.92, 1.35),
+                (3.62, 3.10),
+                (2.74, 3.45),
+            ]
+            pl.extrude(b, gus_prof, 0.42, (0.0, 0.0, 0.0), "CogRed",
+                       rot=rot_z, plane='XZ', bevel=0.0)
+
+            # Heavy ground-anchoring impact foot plate clamping the blade into the dirt at z = 0
+            p_spade = d * 4.24 + Vector((0.0, 0.0, 0.16))
+            pl.box(b, (1.82, 0.86, 0.32), p_spade, "RustDark", rot=rot_z, bevel=0.03)
+            pl.loft(b, [
+                [(0.58, -0.38, 0.0), (0.58, 0.38, 0.0), (1.36, 0.22, 0.0), (1.36, -0.22, 0.0)],
+                [(0.58, -0.32, 0.30), (0.58, 0.32, 0.30), (1.16, 0.16, 0.12), (1.16, -0.16, 0.12)],
+            ], loc=d * 4.24, rot=rot_z, color="GunmetalDark", bevel=0.0)
+
+            # Heavy root mounting bracket saddle + proud brass cog_joint pivots (Cog rule 1)
+            p_root_lo = d * 3.30 + Vector((0.0, 0.0, 1.98))
+            pl.box(b, (0.72, 0.56, 1.18), d * 3.04 + Vector((0.0, 0.0, 2.02)),
+                   "Gunmetal", rot=rot_z, bevel=0.03)
+            pl.cog_joint(b, p_root_lo, tangent, r=0.45, w=0.66, color="Brass",
                          cap="GunmetalDark", teeth=8)
-            rot_vane = Euler((0, radians(-18), ang)).to_matrix()
-            p_vane = p_base + d * 0.64 + Vector((0, 0, 0.20))
-            pl.box(b, (1.02, 0.86, 0.14), p_vane, "GunmetalDark", rot=rot_vane, bevel=0.0)
-            pl.box(b, (0.76, 0.62, 0.18), p_vane, "Rust", rot=rot_vane, bevel=0.0)
-            pl.box(b, (0.84, 0.14, 0.28), p_vane + Vector((0, 0, 0.10)), "Brass",
-                   rot=rot_vane, bevel=0.0)
+
+            p_root_hi = d * 2.78 + Vector((0.0, 0.0, 5.56))
+            pl.box(b, (0.62, 0.48, 0.86), d * 2.56 + Vector((0.0, 0.0, 5.58)),
+                   "GunmetalDark", rot=rot_z, bevel=0.02)
+            pl.cog_joint(b, p_root_hi, tangent, r=0.34, w=0.58, color="Brass",
+                         cap="GunmetalDark", teeth=6)
+
+            # Diagonal armour stiffening rib spanning the outer fin flank
+            p_rib0 = d * 3.06 + Vector((0.0, 0.0, 4.92))
+            p_rib1 = d * 4.52 + Vector((0.0, 0.0, 1.62))
+            d_rib = p_rib1 - p_rib0
+            rot_rib = pl.basis(tangent, d_rib)
+            pl.box(b, (0.44, 0.16, d_rib.length), (p_rib0 + p_rib1) / 2.0,
+                   "Gunmetal", rot_rib, bevel=0.0)
 
 
-def build_flanks(b):
-    """Side CogRed riveted armour panels, offset brass gear clusters, vents, and gauges."""
+def build_flanks(b, g):
+    """Slanted CogRed flank armour plates, offset brass gear clusters, and flush exhaust louvres."""
     for s in (-1, 1):
-        rot_side = facing((s, 0, 0))
-        # Large CogRed riveted armour slab bolted to each flank
-        pl.riveted_plate(b, 3.15, 5.30, 0.22, (s * (HX + 0.08), 0.0, 4.55),
-                         rot_side, "CogRed", "Brass", spacing=1.25, rivet_r=0.09,
-                         chamfer=0.14, rivet_segs=4, bevel=0.0)
+        s_orig, s_up, s_n, s_rot = side_plane_vectors(s)
+        sf = pl.frame(s_orig, s_rot)
 
-        for z_rib in (1.58, 7.52):
-            pl.box(b, (0.28, 3.30, 0.34), (s * (HX + 0.08), 0.0, z_rib), "GunmetalDark", bevel=0.0)
+        # Tapered CogRed flank armour slab hugging the slanted bullet wall (s = 0.55 .. 5.25)
+        flank_prof = [
+            (-1.46, 0.55), (1.46, 0.55),
+            (1.16, 5.25), (-1.16, 5.25),
+        ]
+        pl.extrude(b, flank_prof, 0.18, sf((0.0, 0.0, 0.08)), "CogRed",
+                   s_rot, plane='XY', bevel=0.0)
 
-        # Offset brass gear_cluster seated cleanly inside the CogRed plate (upper-front third)
-        # Note: facing((+1,0,0)) has local +X along +Y; facing((-1,0,0)) has local +X along -Y.
+        # Brass border rivets seated flush on the tapered CogRed flank plate
+        for rx, ry in (
+            (-1.24, 0.80), (0.0, 0.80), (1.24, 0.80),
+            (-1.18, 2.25), (1.18, 2.25),
+            (-1.08, 3.70), (1.08, 3.70),
+            (-0.96, 5.02), (0.0, 5.02), (0.96, 5.02),
+        ):
+            pl.bolt(b, sf((rx, ry, 0.17)), s_n, r=0.08, color="Brass", segs=4)
+
+        # Heavy upper & lower GunmetalDark clamping bars across the flank plate
+        pl.box(b, (3.04, 0.28, 0.24), sf((0.0, 0.46, 0.08)), "GunmetalDark", s_rot, bevel=0.0)
+        pl.box(b, (2.46, 0.28, 0.24), sf((0.0, 5.34, 0.08)), "GunmetalDark", s_rot, bevel=0.0)
+
+        # Offset brass gear_cluster on the upper-front third of the slanted flank plate (Cog rule 2)
+        # Note: side_plane_vectors(+1) has local +X = +Y (rear); (-1) has local +X = -Y (front).
         if s < 0:
-            # Left flank (-X): big gear slightly toward rear (+Y), meshing forward & down (-Y, -Z)
-            pl.gear_cluster(b, (s * (HX + 0.20), 0.32, 5.38), rot_side,
-                            R=0.76, color="Brass", hub="CogRed", t=0.15, third=True, angle=-42.0)
+            pl.gear_cluster(b, sf((-0.30, 3.66, 0.16)), s_rot,
+                            R=0.62, color="Brass", hub="CogRed", t=0.14, third=True, angle=-45.0)
+            vent_x, gauge_x = 0.42, 0.72
         else:
-            # Right flank (+X): big gear slightly toward front (-Y), meshing rearward & down (+Y, -Z)
-            pl.gear_cluster(b, (s * (HX + 0.20), -0.32, 5.38), rot_side,
-                            R=0.76, color="Brass", hub="CogRed", t=0.15, third=True, angle=-42.0)
+            pl.gear_cluster(b, sf((0.30, 3.66, 0.16)), s_rot,
+                            R=0.62, color="Brass", hub="CogRed", t=0.14, third=True, angle=-135.0)
+            vent_x, gauge_x = -0.42, -0.72
 
-        # Lower-rear recessed exhaust vent grille (low-tri)
-        vf = pl.frame((s * (HX + 0.18), 0.65, 2.85), rot_side)
-        pl.box(b, (1.18, 1.05, 0.18), vf((0, 0, 0)), "GunmetalDark", rot_side, bevel=0.0)
-        pl.box(b, (0.94, 0.82, 0.08), vf((0, 0, 0.06)), "Soot", rot_side, bevel=0.0)
+        # Flush angled exhaust louvre box with subtle recessed ember slit in lower-rear flank
+        pl.box(b, (1.16, 1.06, 0.16), sf((vent_x, 1.72, 0.16)), "GunmetalDark", s_rot, bevel=0.0)
+        pl.box(b, (0.94, 0.84, 0.08), sf((vent_x, 1.72, 0.20)), "Soot", s_rot, bevel=0.0)
+        pl.box(g, (0.82, 0.62, 0.04), sf((vent_x, 1.72, 0.21)), rot=s_rot, bevel=0.0)
         for i in range(4):
-            pl.box(b, (0.92, 0.10, 0.08), vf((0, -0.30 + i * 0.20, 0.10)),
-                   "Gunmetal", rot_side, bevel=0.0)
+            y_slat = 1.40 + i * 0.21
+            slat_rot = (pl._rot(s_rot).to_matrix() @ Matrix.Rotation(radians(28), 3, 'X')).to_euler()
+            pl.box(b, (0.94, 0.14, 0.07), sf((vent_x, y_slat, 0.25)), "Gunmetal", slat_rot, bevel=0.0)
 
-        # Side pressure gauge near upper-rear corner
-        pl.gauge(b, (s * (HX + 0.20), 1.08, 6.28), (s, 0, 0), r=0.28)
+        # Brass pressure gauge on the upper-rear flank corner, clear of gear teeth
+        pl.gauge(b, sf((gauge_x, 4.54, 0.18)), s_n, r=0.22)
 
 
 def build_rear_machinery(b, g):
-    """Rear steam boiler drum, CogRed upper plate, twin smokestacks, and copper steam pipes."""
-    rot_back = facing((0, 1, 0))
+    """Compact rear steam boiler, slanted CogRed valve panel, and flush angled thruster-manifold exhausts."""
+    r_orig, r_up, r_n, r_rot = rear_plane_vectors()
+    rf = pl.frame(r_orig, r_rot)
 
-    # Upper rear CogRed riveted armour panel
-    pl.riveted_plate(b, 3.10, 2.55, 0.22, (0.0, HY + 0.08, 6.08),
-                     rot_back, "CogRed", "Brass", spacing=1.20, rivet_r=0.09,
-                     chamfer=0.15, rivet_segs=4, bevel=0.0)
+    # Slanted rear CogRed armour hatch plate (s = 2.65 .. 5.20)
+    rear_prof = [
+        (-1.32, 2.65), (1.32, 2.65),
+        (1.14, 5.20), (-1.14, 5.20),
+    ]
+    pl.extrude(b, rear_prof, 0.18, rf((0.0, 0.0, 0.08)), "CogRed",
+               r_rot, plane='XY', bevel=0.0)
+    for rx, ry in ((-1.10, 2.86), (0.0, 2.86), (1.10, 2.86),
+                   (-1.02, 4.02), (1.02, 4.02),
+                   (-0.92, 4.98), (0.0, 4.98), (0.92, 4.98)):
+        pl.bolt(b, rf((rx, ry, 0.17)), r_n, r=0.075, color="Brass", segs=4)
 
-    # Rear valve handwheel & pressure gauge on the upper plate
-    pl.handwheel(b, (-0.75, HY + 0.34, 6.08), (0, 1, 0), R=0.45, stem=0.20,
+    # Rear valve handwheel & pressure gauge mounted cleanly below the manifold housings
+    pl.handwheel(b, rf((0.46, 3.68, 0.30)), r_n, R=0.36, stem=0.18,
                  color="Brass", stem_color="GunmetalDark")
-    pl.gauge(b, (0.78, HY + 0.22, 6.25), (0, 1, 0), r=0.32)
+    pl.gauge(b, rf((-0.48, 3.74, 0.18)), r_n, r=0.24)
 
-    # Horizontal steam boiler drum cradled across the lower-mid rear wall
-    pl.steam_boiler(b, 0.88, 2.25, (0.0, HY + 0.54, 2.95), rot=pl.AX_X,
-                    color="Rust", band_color="Brass", bands=3, rivets=False, segs=10)
+    # Compact horizontal steam boiler drum cradled tightly against the lower rear taper
+    p_boiler = rf((0.0, 1.56, 0.44))
+    pl.steam_boiler(b, 0.72, 1.88, p_boiler, rot=pl.AX_X,
+                    color="Rust", band_color="Brass", bands=3, rivets=False, segs=8)
     for s in (-1, 1):
-        pl.box(b, (0.40, 1.12, 1.48), (s * 0.82, HY + 0.34, 2.75), "GunmetalDark", bevel=0.0)
-        pl.box(b, (0.52, 0.90, 0.36), (s * 0.82, HY + 0.42, 1.88), "Gunmetal", bevel=0.0)
+        pl.box(b, (0.34, 1.16, 0.90), rf((s * 0.68, 1.48, 0.24)), "GunmetalDark", r_rot, bevel=0.0)
+        pl.box(b, (0.44, 0.32, 0.78), rf((s * 0.68, 0.88, 0.30)), "Gunmetal", r_rot, bevel=0.0)
 
-    # Rear lower hazard bumper stripe below the boiler
-    pl.hazard_stripes(b, 2.95, 0.48, (0.0, HY + 0.06, 1.24),
-                      rot=rot_back, stripes=5, c1="Hazard", c2="Oil", t=0.06)
+    # Lower rear hazard warning strip beneath the boiler cradle
+    pl.hazard_stripes(b, 2.58, 0.42, rf((0.0, 0.44, 0.05)),
+                      rot=r_rot, stripes=5, c1="Hazard", c2="Oil", t=0.05)
 
-    # Twin rear/upper smokestacks (tucked inward on the flat rear wall, clear of rear vanes)
+    # Twin compact angled thruster-manifold exhausts hugging the rear bullet taper
+    stack_tips = {}
     for s in (-1, 1):
-        sx, sy, sz = s * 1.18, 2.72, 7.18
-        pl.box(b, (0.98, 1.02, 1.24), (sx, sy - 0.16, sz + 0.18), "GunmetalDark", bevel=0.0)
-        pl.box(b, (0.76, 1.08, 0.30), (sx, sy - 0.48, 9.25), "GunmetalDark", bevel=0.0)
-        pl.cyl(b, 0.58, 0.26, (sx, sy, 9.25), "Brass", segs=8, bevel=0.0)
-        pl.smokestack(b, (sx, sy, sz), r=0.46, h=4.75, color="Gunmetal", rim="Rust",
-                      glow=g, segs=8)
+        # Manifold base bolted high on the upper rear shoulder, clear of rear valve/gauge
+        p_m0 = rf((-s * 0.88, 5.14, 0.22))
+        # Sweeps inward along the bullet taper up to z ~ 7.92
+        p_m1 = Vector((s * 0.84, 2.26, 7.92))
+        d_m = (p_m1 - p_m0).normalized()
+        rot_m = pl.orient(d_m)
 
-        # Copper steam pipe running from rear boiler up into smokestack base
+        # Armoured manifold collar & clamp onto the hull
+        pl.box(b, (0.60, 0.74, 0.52), p_m0 - d_m * 0.14, "GunmetalDark", r_rot, bevel=0.0)
+        # Main compact angled exhaust barrel hugging the shoulder collar
+        pl.rod(b, p_m0, p_m1, 0.32, "Gunmetal", segs=8, r2=0.28, bevel=0.0)
+        # Brass collar clamp mid-pipe
+        pl.cyl(b, 0.38, 0.20, p_m0.lerp(p_m1, 0.55), "Brass", rot_m, segs=8, bevel=0.0)
+        # Flared Rust exhaust cowl mouth with deeply recessed red-orange ember glow
+        pl.lathe(b, [
+            (0.26, -0.10),
+            (0.40, 0.24),
+            (0.34, 0.28),
+            (0.20, 0.08),
+            (0.0, 0.08),
+        ], p_m1, "Rust", rot_m, segs=8, bevel=0.0)
+        pl.cyl(g, 0.19, 0.03, p_m1 + d_m * 0.10, rot=rot_m, segs=8, bevel=0.0)
+        stack_tips[s] = p_m1 + d_m * 0.28
+
+        # Copper steam feed pipe hugging the outer edge of the rear plate up into the manifold
         pl.pipe(b, [
-            (s * 1.08, HY + 0.54, 3.45),
-            (s * 1.65, HY + 0.46, 4.35),
-            (s * 1.72, HY + 0.25, 6.25),
-            (sx, sy + 0.08, sz + 0.35),
-        ], r=0.16, color="Copper", joint="Brass", sides=6)
+            (s * 0.94, p_boiler.y, p_boiler.z + 0.34),
+            (s * 1.28, 2.74, 3.65),
+            (s * 1.18, 2.54, 5.38),
+            (p_m0.x, p_m0.y + 0.06, p_m0.z + 0.18),
+        ], r=0.12, color="Copper", joint="Brass", sides=6)
 
-        # Secondary copper feed pipe routing ABOVE the rear corner shock housing into the flank
-        pl.pipe(b, [
-            (s * 1.25, HY + 0.42, 3.35),
-            (s * 2.02, HY + 0.15, 4.10),
-            (s * 2.95, 1.85, 4.10),
-            (s * 2.95, 1.45, 4.45),
-        ], r=0.13, color="Copper", joint="Brass", sides=6)
-
-
-def build_impact_claws(b):
-    """Four heavy ground-anchor impact claws / shock-skids ringing the 45-deg lower corners."""
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            d = Vector((sx, sy, 0)).normalized()
-            tangent = Vector((-d.y, d.x, 0))
-            ang = radians(45 if (sx > 0 and sy > 0) else 135 if (sx < 0 and sy > 0)
-                          else 225 if (sx < 0 and sy < 0) else 315)
-            rot_z = (0, 0, ang)
-
-            # Heavy upper corner shock housing bolted onto the 45-deg chamfered wall
-            p_house = d * 3.06 + Vector((0, 0, 2.42))
-            pl.box(b, (0.90, 1.12, 1.98), p_house, "GunmetalDark", rot=rot_z, bevel=0.05)
-            pl.box(b, (0.82, 1.04, 0.32), p_house + Vector((0, 0, 1.08)), "CogRed",
-                   rot=rot_z, bevel=0.0)
-
-            # Brass cog_joint hinge gear at the claw hip knuckle
-            p_hip = d * 3.36 + Vector((0, 0, 1.68))
-            pl.cog_joint(b, p_hip, tangent, r=0.42, w=0.54, color="Brass",
-                         cap="GunmetalDark", teeth=8)
-
-            # Angled forged claw leg strut slamming outward into the ground
-            p_ankle = d * 4.06 + Vector((0, 0, 0.30))
-            leg_dir = p_ankle - p_hip
-            leg_rot = pl.basis(tangent, leg_dir)
-            pl.taper_box(b, (0.54, 0.52), (0.40, 0.40), 0.0, leg_dir.length,
-                         color="RustDark", loc=p_hip, rot=leg_rot, bevel=0.0)
-
-            # Hydraulic shock absorber piston running from upper housing to ankle
-            pl.piston(b, d * 3.52 + Vector((0, 0, 3.02)), p_ankle + Vector((0, 0, 0.24)),
-                      r=0.13, color="Gunmetal", rod_color="Steel", split=0.55, segs=5)
-
-            # Heavy ground-anchor impact claw / spade skid seated firmly at z = 0
-            p_foot = d * 4.18 + Vector((0, 0, 0.21))
-            pl.box(b, (1.06, 1.16, 0.42), p_foot, "Rust", rot=rot_z, bevel=0.04)
-            pl.loft(b, [
-                [(0.34, -0.50, 0.0), (0.34, 0.50, 0.0), (0.88, 0.34, 0.0), (0.88, -0.34, 0.0)],
-                [(0.34, -0.44, 0.36), (0.34, 0.44, 0.36), (0.72, 0.26, 0.14), (0.72, -0.26, 0.14)],
-            ], loc=d * 4.18, rot=rot_z, color="GunmetalDark", bevel=0.0)
-            pl.rod(b, d * 2.86 + Vector((0, 0, 0.40)), d * 3.92 + Vector((0, 0, 0.32)),
-                   0.15, "GunmetalDark", segs=5)
+    return stack_tips
 
 
 def build():
@@ -432,18 +677,18 @@ def build():
     door = k.part("Door", "limb", "Metal", pivot=DOOR_HINGE, parent="Body", color="Gunmetal")
     door_glow = k.glow("DoorGlow", role="glow", pivot=DOOR_HINGE, parent="Door")
 
-    build_hull_and_bay(b, g)
+    build_base_and_hull(b, g)
     build_door(door, door_glow)
-    build_nose_and_beacon(b, g)
-    build_flanks(b)
-    build_rear_machinery(b, g)
-    build_impact_claws(b)
+    build_warhead_ogive(b, g)
+    build_stabilizer_fins(b)
+    build_flanks(b, g)
+    stack_tips = build_rear_machinery(b, g)
 
     # Named attachments for Luau wiring
     k.attachment("DoorHinge", DOOR_HINGE, part="Body")
-    k.attachment("Beacon", (0.0, 0.0, 11.74), part="Body")
-    k.attachment("StackL", (-1.18, 2.72, 12.05), part="Body")
-    k.attachment("StackR", (1.18, 2.72, 12.05), part="Body")
+    k.attachment("Beacon", (0.0, 0.0, 11.66), part="Body")
+    k.attachment("StackL", tuple(stack_tips[-1]), part="Body")
+    k.attachment("StackR", tuple(stack_tips[1]), part="Body")
     k.attachment("DeployExit", (0.0, -4.35, 1.35), part="Body")
 
     k.build()
@@ -455,9 +700,9 @@ def render_previews(k, root):
     img_dir = os.path.join(root, "art", "images")
     os.makedirs(img_dir, exist_ok=True)
     shots = [
-        ("", None, (0.68, -1.0, 0.48), 1.04),
-        ("_open", {"Door": (radians(94), 0, 0)}, (0.48, -1.0, 0.38), 1.02),
-        ("_back", None, (-0.70, 1.0, 0.46), 1.04),
+        ("", None, (0.66, -1.0, 0.42), 1.06),
+        ("_open", {"Door": (radians(99), 0, 0)}, (0.50, -1.0, 0.36), 1.04),
+        ("_back", None, (-0.68, 1.0, 0.42), 1.06),
     ]
     previews_dir = os.path.join(root, "art", "previews")
     previews_existed = os.path.isdir(previews_dir)
