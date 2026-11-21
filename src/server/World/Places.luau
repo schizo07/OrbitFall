@@ -25,21 +25,21 @@ local RGB = Color3.fromRGB
 local PI = math.pi
 local TAU = math.pi * 2
 
--- COG palette: dark steel + hazard yellow + cyan glow
-local STEEL = RGB(84, 90, 102)
-local STEEL_D = RGB(48, 52, 62)
-local STEEL_L = RGB(112, 119, 132)
-local CRATE = RGB(96, 104, 118)
-local RUST = RGB(140, 84, 60)
-local HAZ = RGB(238, 188, 40)
+-- COG palette: Band 2 dark gunmetal silhouettes + bright-edged metallic trim + disciplined hazard/cyan accents
+local STEEL = RGB(66, 72, 82)
+local STEEL_D = RGB(38, 42, 50)
+local STEEL_L = RGB(128, 134, 144)
+local CRATE = RGB(76, 82, 92)
+local RUST = RGB(108, 72, 54)
+local HAZ = RGB(228, 178, 42)
 local TEAL = RGB(70, 235, 225)
 local GLASS = RGB(48, 176, 176)
-local SOOT = RGB(30, 27, 28)
-local RED = RGB(255, 60, 50)
-local AMBER = RGB(255, 170, 60)
+local SOOT = RGB(28, 26, 28)
+local RED = RGB(255, 56, 46)
+local AMBER = RGB(255, 170, 56)
 
 local BIOME_LOOK = {
-	desert = { sand = RGB(150, 98, 66), rock = RGB(118, 80, 58) },
+	desert = { sand = RGB(114, 98, 80), rock = RGB(92, 82, 72) },
 	ash = { sand = RGB(90, 82, 78), rock = RGB(66, 61, 60) },
 	swamp = { sand = RGB(90, 106, 98), rock = RGB(70, 64, 84) },
 	ice = { sand = RGB(150, 162, 178), rock = RGB(122, 148, 192) },
@@ -300,6 +300,36 @@ local function crate(parent: Instance, pos: Vector3, yaw: number, w: number, h: 
 	local cf = CFrame.new(pos + Vector3.new(0, h / 2 - 0.3, 0)) * CFrame.Angles(0, yaw, 0)
 	part(parent, Vector3.new(w, h, d), cf, jit(CRATE, 0.05), solid)
 	part(parent, Vector3.new(w + 0.12, h * 0.2, d + 0.12), cf * CFrame.new(0, h * 0.18, 0), HAZ, false)
+end
+
+-- bright-edged ribbed metallic grating deck / threshold pad (KeepMat preserves metallic sheen against muted desert ground)
+local function ribbedDeck(parent: Instance, cf: CFrame, w: number, len: number, solid: boolean?)
+	local base = part(parent, Vector3.new(w, 0.36, len), cf, STEEL_D, solid, { Material = Enum.Material.DiamondPlate, CastShadow = false })
+	base:SetAttribute("KeepMat", true)
+	for _, sx in { -1, 1 } do
+		local rail = part(parent, Vector3.new(0.55, 0.46, len + 0.15), cf * CFrame.new(sx * (w / 2 - 0.28), 0.04, 0), STEEL_L, false, { Material = Enum.Material.Metal, CastShadow = false })
+		rail:SetAttribute("KeepMat", true)
+	end
+	local ribs = math.clamp(math.floor(len / 3.4), 2, 5)
+	for i = 1, ribs do
+		local z = -len * 0.42 + (i - 1) / math.max(ribs - 1, 1) * len * 0.84
+		local rib = part(parent, Vector3.new(w - 0.9, 0.42, 0.42), cf * CFrame.new(0, 0.04, z), STEEL_L, false, { Material = Enum.Material.Metal, CastShadow = false })
+		rib:SetAttribute("KeepMat", true)
+	end
+	part(parent, Vector3.new(w - 0.6, 0.4, 0.55), cf * CFrame.new(0, 0.03, -len / 2 + 0.35), HAZ, false, { CastShadow = false })
+end
+
+-- tall vertical sector banner marking a POI approach or gate junction
+local function poiBanner(parent: Instance, base: Vector3, yaw: number, isCrimson: boolean)
+	local cf = CFrame.new(base) * CFrame.Angles(0, yaw, 0)
+	local h = 16.5
+	vcyl(parent, 0.7, h, cf * CFrame.new(-1.6, h / 2 - 0.4, 0), STEEL_D, false)
+	part(parent, Vector3.new(3.4, 0.42, 0.45), cf * CFrame.new(0, h - 1.1, 0), STEEL, false)
+	part(parent, Vector3.new(3.4, 0.38, 0.42), cf * CFrame.new(0, h - 9.8, 0), STEEL, false)
+	local cloth = if isCrimson then RGB(132, 42, 38) else RGB(148, 108, 42)
+	part(parent, Vector3.new(2.4, 8.6, 0.22), cf * CFrame.new(0.2, h - 5.45, 0), cloth, false, { CastShadow = false })
+	part(parent, Vector3.new(2.44, 1.0, 0.26), cf * CFrame.new(0.2, h - 3.3, 0), if isCrimson then RGB(228, 214, 194) else HAZ, false, { CastShadow = false })
+	glow(parent, Vector3.new(0.85, 0.85, 0.85), cf * CFrame.new(-1.6, h + 0.1, 0), if isCrimson then RED else AMBER, true)
 end
 
 local DESERT_ROCK_KEYS = { "desert_boulder_a", "desert_boulder_b", "desert_boulder_a" }
@@ -664,13 +694,9 @@ local function buildDrone(root: Instance, crashP: Vector3, spillP: Vector3, refP
 				local a = rnd:NextNumber(0, TAU)
 				local d = Vector3.new(math.cos(a), 0.12, math.sin(a)) * rnd:NextNumber(2.5, 4)
 				pipe(g, Vector3.new(x, y + 0.5, z) - d, Vector3.new(x, y + 0.5, z) + d, 0.6, STEEL_D, false)
-			else
+			elseif biomeName ~= "desert" then
 				local w = rnd:NextNumber(1.4, 2.2)
-				if biomeName == "desert" then
-					part(g, Vector3.new(w * 1.4, 0.35, w), CFrame.new(x, lowAt(x, z, w * 0.5) + 0.15, z) * CFrame.Angles(math.rad(rnd:NextNumber(-14, 14)), rnd:NextNumber(0, TAU), math.rad(rnd:NextNumber(-14, 14))), STEEL_L, false)
-				else
-					ball(g, Vector3.new(w, w, w), CFrame.new(x, y + w * 0.4, z), STEEL_L, false)
-				end
+				ball(g, Vector3.new(w, w, w), CFrame.new(x, y + w * 0.4, z), STEEL_L, false)
 			end
 		end
 	end
@@ -690,10 +716,14 @@ local function buildSpill(root: Instance, S: Vector3, crashP: Vector3, anchors: 
 	part(g, Vector3.new(0.7, 4, 6), Wp(5.9, 0.9, 0) * CFrame.Angles(0, 0, math.rad(-74)), STEEL_L, false) -- the wall that burst outward
 	part(g, Vector3.new(7.6, 0.5, 5.6), Wp(-8.5, 0.6, 2) * CFrame.Angles(0, math.rad(70), math.rad(6)), STEEL, false) -- flung lid
 	part(g, Vector3.new(7.7, 0.2, 1.1), Wp(-8.5, 0.9, 2) * CFrame.Angles(0, math.rad(70), math.rad(6)), HAZ, false)
-	for _ = 1, 5 do
-		local d = rnd:NextNumber(1.2, 2.2)
-		local px, pz = rnd:NextNumber(-7, 7), rnd:NextNumber(-7, 2)
-		ball(g, Vector3.new(d, d, d), Wp(px, d * 0.4, pz), RGB(200, 205, 210), false)
+	if biomeName ~= "desert" then
+		for _ = 1, 5 do
+			local d = rnd:NextNumber(1.2, 2.2)
+			local px, pz = rnd:NextNumber(-7, 7), rnd:NextNumber(-7, 2)
+			ball(g, Vector3.new(d, d, d), Wp(px, d * 0.4, pz), RGB(200, 205, 210), false)
+		end
+	else
+		ribbedDeck(g, Wp(0, 0.08, -4.1), 9.6, 5.4, false)
 	end
 	if biomeName == "desert" then
 		scorch(Wp(0, 0, -3).Position, 8.5)
@@ -749,9 +779,19 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 		return Vector3.new(mx, topY + h, mz)
 	end
 
-	-- relay mast (~74 studs, art/blender/cog_sites.py): big dish at 54 toward the refinery (model front), small dish at
-	-- 36 toward -pr, cross arm at 66; the blinking beacon stays a part
+	-- relay mast (~84 studs with extended spire, art/blender/cog_sites.py): bold dark armored base buttresses so the
+	-- silhouette reads strongly across the basin; the blinking beacon stays a part
 	setPiece(g, "cog_relay_mast", CFrame.lookAt(Y(0), Y(0) + u))
+	-- dark brutalist base collar + 4 raking buttress fins + extended upper telemetry spire
+	vcyl(g, 11.5, 5.5, CFrame.new(Y(2.2)), STEEL_D, true)
+	vcyl(g, 12.2, 0.9, CFrame.new(Y(4.6)), HAZ, false)
+	for k = 0, 3 do
+		local a = k / 4 * TAU + math.rad(45)
+		local dir = Vector3.new(math.cos(a), 0, math.sin(a))
+		pipe(g, Y(0.5) + dir * 9.5, Y(25) + dir * 2.2, 1.6, STEEL_D, false)
+	end
+	vcyl(g, 1.2, 12, CFrame.new(Y(76.5)), STEEL_D, false)
+	part(g, Vector3.new(10.5, 0.9, 0.9), CFrame.lookAt(Y(76), Y(76) + u), STEEL_D, false)
 	-- guy cables
 	for i = 0, 2 do
 		local a = i / 3 * TAU + 0.5
@@ -761,7 +801,7 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 		vcyl(g, 1.6, 1.2, CFrame.new(ax, ay + 0.3, az), STEEL_D, false)
 	end
 	-- beacon
-	local lamp = glow(g, Vector3.new(2.8, 2.8, 2.8), CFrame.new(Y(73.4)), RED, true)
+	local lamp = glow(g, Vector3.new(3.0, 3.0, 3.0), CFrame.new(Y(83.2)), RED, true)
 	local lt = light(lamp, RED, 60, 2.5)
 	blink(lamp, lt)
 	anchors.mastLight = lamp
@@ -781,6 +821,7 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 		return hf * CFrame.new(x, y, z)
 	end
 	part(g, Vector3.new(13, 0.9, 15), H(0, 0.4, -1.2), STEEL_D, true)
+	ribbedDeck(g, H(0, 0.92, -6.2), 12.6, 5.4, false)
 	xcyl(g, 6.2, 10, H(0, 4.3, 1), STEEL, true)
 	for _, s in { -1, 1 } do
 		ball(g, Vector3.new(6.4, 6.4, 6.4), H(5 * s, 4.3, 1), STEEL, false)
@@ -792,7 +833,7 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 		glow(g, Vector3.new(0.6, 0.6, 0.6), H(-1.4 + i * 1.1, 3.6, -3.4), c, true)
 	end
 	local ex = vcyl(g, 1.1, 4, H(2.8, 8.2, 1), STEEL_D, false)
-	smoke(emitterHost(g, ex.CFrame.Position + Vector3.new(0, 2.2, 0)), RGB(70, 64, 60), 2.2, 2, 7, 5)
+	smoke(emitterHost(g, ex.CFrame.Position + Vector3.new(0, 2.2, 0)), RGB(46, 42, 40), 2.4, 2, 7, 5)
 	pipe(g, H(0, 6, 5).Position, Y(3.5), 0.6, SOOT, false)
 	local firstRing: Part? = nil
 	for _, x in { -3.6, 0, 3.6 } do
@@ -820,6 +861,10 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 		local p = m + u * d + pr * lat
 		return Vector3.new(p.X, lowAt(p.X, p.Z, 1.5), p.Z)
 	end
+	-- flush bright-edged ribbed metallic grating apron at the ramp top (center clear & walkable)
+	local rampLip = atRamp(dTop + 1, 0)
+	ribbedDeck(g, CFrame.lookAt(rampLip + Vector3.new(0, 0.14, 0), rampLip + Vector3.new(0, 0.14, 0) + u), 10.5, 6.2, false)
+	poiBanner(g, atRamp(dTop - 1, -11.5), angOf(u), true)
 	local c1 = atRamp(dTop, -8.5)
 	crate(g, c1, 0.3, 4.2, 3.4, 4.2, true)
 	crate(g, c1 + Vector3.new(0, 3.1, 0), 0.7, 3, 2.4, 3, false)
@@ -965,6 +1010,28 @@ local function buildQuarry(root: Instance, Q: Vector3, refP: Vector3, anchors: a
 	local cf = CFrame.lookAt(cb, cb - pr)
 	setPiece(g, "cog_crane", cf) -- art/blender/cog_sites.py: jib 27 forward, hook hanging at 25 over the belt
 
+	-- opposite rim silhouette: towering dark-iron quarry hoist gantry (strictly outside pit, zero arena obstruction)
+	local hpRim = Q - pr * (rimR + 7)
+	local hb = Vector3.new(hpRim.X, lowAt(hpRim.X, hpRim.Z, 4), hpRim.Z)
+	local hcf = CFrame.lookAt(hb, hb + pr)
+	part(g, Vector3.new(10, 3.2, 8), hcf * CFrame.new(0, 1.2, 0), STEEL_D, true)
+	for _, sx in { -3.6, 3.6 } do
+		pipe(g, (hcf * CFrame.new(sx, 2, 2.5)).Position, (hcf * CFrame.new(sx * 0.6, 34, -1.5)).Position, 1.6, STEEL_D, false)
+		pipe(g, (hcf * CFrame.new(sx, 2, -2.5)).Position, (hcf * CFrame.new(sx * 0.6, 34, -1.5)).Position, 1.4, STEEL_D, false)
+	end
+	part(g, Vector3.new(7.5, 2.4, 18), hcf * CFrame.new(0, 34.5, -7.5), STEEL, false)
+	part(g, Vector3.new(7.8, 0.8, 14), hcf * CFrame.new(0, 33.1, -6.5), HAZ, false)
+	pipe(g, (hcf * CFrame.new(0, 33.5, -14.5)).Position, (hcf * CFrame.new(0, 20, -14.5)).Position, 0.45, SOOT, false)
+	part(g, Vector3.new(3.2, 2.6, 3.2), hcf * CFrame.new(0, 18.8, -14.5), STEEL_D, false)
+	glow(g, Vector3.new(1.6, 1.6, 1.6), hcf * CFrame.new(0, 36.6, -1.5), AMBER, true)
+
+	-- flush bright-edged ribbed metallic grating deck at the top lip of the quarry ramp (facing refinery)
+	local rampTopP = Q + u * (rimR + 3)
+	local rampTopY = gy(rampTopP.X, rampTopP.Z)
+	ribbedDeck(g, CFrame.lookAt(Vector3.new(rampTopP.X, rampTopY + 0.14, rampTopP.Z), Vector3.new(rampTopP.X + u.X, rampTopY + 0.14, rampTopP.Z + u.Z)), 11.5, 6.8, false)
+	local bannerP = rampTopP + pr * 8.5
+	poiBanner(g, Vector3.new(bannerP.X, gy(bannerP.X, bannerP.Z), bannerP.Z), angOf(u), true)
+
 	-- terraces: standing spots on the upper steps, rail along the lip, cover between spots
 	local rampA = angOf(u)
 	local cand = {}
@@ -1052,14 +1119,14 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 		return Vector3.new(p.X, gy(p.X, p.Z), p.Z)
 	end
 
-	-- ribs
+	-- ribs: monumental dark rib-arch corridor towering cleanly against the bright sky
 	local crowns = {}
 	local RIBS = 6
 	local SEGS = 6
 	for i = 0, RIBS - 1 do
 		local s = -19 + 8.6 * i
 		local w = math.sin(i / (RIBS - 1) * PI)
-		local rx, ry = 11.5 + 2.5 * w, 24 + 7 * w
+		local rx, ry = 12.2 + 2.8 * w, 29 + 9 * w
 		local baseY = math.min(onG(s, rx).Y, onG(s, -rx).Y) - 1.2
 		local pts = {}
 		for k = 0, SEGS do
@@ -1085,6 +1152,10 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 			end
 		end
 		crowns[i] = pts[3]
+		-- dark armored dorsal fin cresting each intact rib crown for crisp horizon silhouette
+		if firstK == 0 and lastK == SEGS then
+			part(g, Vector3.new(2.2, 5.4, 3.8), CFrame.lookAt(pts[3] + Vector3.new(0, 2.2, 0), pts[3] + Vector3.new(0, 2.2, 0) + axis), STEEL_D, false)
+		end
 		-- the snapped-off halves lie in the sand
 		if i == 1 then
 			local a = onG(s - 2, -rx - 5)
@@ -1096,9 +1167,9 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 	end
 	-- spine along the crowns, neck to the head, tail to the pelvis
 	for i = 0, RIBS - 1 do
-		ball(g, Vector3.new(3.6, 3.6, 3.6), CFrame.new(crowns[i]), STEEL_D, false)
+		ball(g, Vector3.new(4.2, 4.2, 4.2), CFrame.new(crowns[i]), STEEL_D, false)
 		if i < RIBS - 1 then
-			pipe(g, crowns[i], crowns[i + 1], 2.6, STEEL, false)
+			pipe(g, crowns[i], crowns[i + 1], 3.0, STEEL_D, false)
 		end
 	end
 
@@ -1129,13 +1200,13 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 	pipe(g, hip + Vector3.new(0, 1, 0), knee + Vector3.new(0, 1.5, 1), 0.7, STEEL_L, false)
 	pipe(g, knee + Vector3.new(0, 1, 0), shinEnd + Vector3.new(0, 1.8, 0), 0.6, STEEL_L, false)
 
-	-- chest cavity: the dead core, the floor plate, and where the cells rest
+	-- chest cavity: the dead core, bright-edged ribbed metallic deck plate, and where the cells rest
 	local cc = onG(2.5, 0)
 	ball(g, Vector3.new(7, 7, 7), CFrame.new(cc + Vector3.new(0, 3.6, 0)), STEEL_D, true)
 	local ringLamp = glow(g, Vector3.new(0.5, 7.6, 7.6), CFrame.new(cc + Vector3.new(0, 3.6, 0)) * CFrame.Angles(0, 0, PI / 2), TEAL, false, 0.35)
 	ringLamp.Shape = Enum.PartType.Cylinder
 	light(ringLamp, TEAL, 20, 1.1)
-	part(g, Vector3.new(16, 0.4, 9), CFrame.lookAt(cc + Vector3.new(0, 0.2, 0), cc + Vector3.new(0, 0.2, 0) + axis), STEEL_D, false)
+	ribbedDeck(g, CFrame.lookAt(cc + Vector3.new(0, 0.22, 0), cc + Vector3.new(0, 0.22, 0) + axis), 11, 18, false)
 	for _, o in { { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } } do
 		local pp = onG(2.5 + 3.2 * o[1], 3.2 * o[2])
 		xcyl(g, 1.2, 3.4, CFrame.new(pp + Vector3.new(0, 1.7, 0)) * CFrame.Angles(0, rnd:NextNumber(0, PI), math.rad(90)), STEEL_L, false)
@@ -1154,12 +1225,12 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 		table.insert(anchors.dormant, CFrame.lookAt(p, p - side * math.sign(d[2])))
 	end
 
-	-- plates, gears and sand drifts
-	for _ = 1, 7 do
+	-- plates, gears and sand drifts (cleaner floor on desert so cells and dormant robots read effortlessly)
+	for _ = 1, if biomeName == "desert" then 3 else 7 do
 		local s, l = rnd:NextNumber(-34, 38), rnd:NextNumber(-26, 26)
 		local p = onG(s, l)
 		if rnd:NextNumber() < 0.7 then
-			part(g, Vector3.new(rnd:NextNumber(3, 6), 0.5, rnd:NextNumber(2, 4)), CFrame.new(p + Vector3.new(0, 0.5, 0)) * CFrame.Angles(math.rad(rnd:NextNumber(-14, 14)), rnd:NextNumber(0, TAU), math.rad(rnd:NextNumber(-14, 14))), if rnd:NextNumber() < 0.3 then HAZ else STEEL, false)
+			part(g, Vector3.new(rnd:NextNumber(3.5, 6), 0.5, rnd:NextNumber(2.5, 4)), CFrame.new(p + Vector3.new(0, 0.5, 0)) * CFrame.Angles(math.rad(rnd:NextNumber(-14, 14)), rnd:NextNumber(0, TAU), math.rad(rnd:NextNumber(-14, 14))), if rnd:NextNumber() < 0.3 then HAZ else STEEL, false)
 		else
 			xcyl(g, rnd:NextNumber(3, 5), 0.9, CFrame.new(p + Vector3.new(0, 1.3, 0)) * CFrame.Angles(rnd:NextNumber(-0.4, 0.4), rnd:NextNumber(0, TAU), rnd:NextNumber(1, 1.4)), RUST, false)
 		end
@@ -1262,17 +1333,29 @@ local function buildRefinery(root: Instance, R: Vector3, Q: Vector3, anchors: an
 			local c1, c2 = phase + order[1].i * step, phase + order[2].i * step
 			local mid = c1 + angDiff(c2, c1) / 2
 			gateAngles[gi] = mid
+			local pillarTops = {}
 			for _, e in { -1, 1 } do
 				local pa = mid + e * step
 				local px, pz = R.X + math.cos(pa) * RING, R.Z + math.sin(pa) * RING
 				local y0 = lowAt(px, pz, 1.8)
-				vcyl(g, 3.6, 12.5, CFrame.new(px, y0 + 4.75, pz), STEEL_D, true)
-				ball(g, Vector3.new(4, 4, 4), CFrame.new(px, y0 + 11, pz), STEEL_L, false)
-				vcyl(g, 3.8, 1, CFrame.new(px, y0 + 3, pz), HAZ, false)
-				local lamp = glow(g, Vector3.new(1.4, 1.4, 1.4), CFrame.new(px, y0 + 12.6, pz), AMBER, true)
+				vcyl(g, 3.8, 15.5, CFrame.new(px, y0 + 6.25, pz), STEEL_D, true)
+				ball(g, Vector3.new(4.2, 4.2, 4.2), CFrame.new(px, y0 + 14.0, pz), STEEL_L, false)
+				vcyl(g, 4.0, 1.1, CFrame.new(px, y0 + 3.2, pz), HAZ, false)
+				local lamp = glow(g, Vector3.new(1.5, 1.5, 1.5), CFrame.new(px, y0 + 15.8, pz), AMBER, true)
 				if e == 1 then
 					light(lamp, AMBER, 24, 1.2)
 				end
+				table.insert(pillarTops, Vector3.new(px, y0 + 14.2, pz))
+			end
+			-- bold overhead steel gate gantry spanning between the two gate pylons (14+ studs clearance, center open)
+			if #pillarTops == 2 then
+				pipe(g, pillarTops[1], pillarTops[2], 2.2, STEEL_D, false)
+				pipe(g, pillarTops[1] + Vector3.new(0, 2.2, 0), pillarTops[2] + Vector3.new(0, 2.2, 0), 1.1, STEEL, false)
+				local gateMid = polar(R, mid, RING)
+				local gcf = CFrame.lookAt(Vector3.new(gateMid.X, gateMid.Y + 0.14, gateMid.Z), Vector3.new(R.X, gateMid.Y + 0.14, R.Z))
+				ribbedDeck(g, gcf, 14.5, 6.6, false)
+				local banP = polar(R, mid + step * 1.45, RING + 3.5)
+				poiBanner(g, banP, mid + PI / 2, gi == 1)
 			end
 		end
 		for i = 0, N - 1 do
@@ -1318,9 +1401,31 @@ local function buildRefinery(root: Instance, R: Vector3, Q: Vector3, anchors: an
 	local fdir = dirTo(R, sp)
 	local ftan = Vector3.new(fdir.Z, 0, -fdir.X)
 	setPiece(g, "cog_smokestack", CFrame.fromMatrix(S(0), -ftan, Vector3.yAxis))
+	-- dark armored catwalk collar & vertical structural ribs on the smokestack silhouette
+	vcyl(g, 13.5, 2.2, CFrame.new(S(36)), STEEL_D, false)
+	vcyl(g, 11.2, 2.0, CFrame.new(S(50)), STEEL_D, false)
 	local top = emitterHost(g, S(61))
-	smoke(top, RGB(58, 54, 52), 9, 7, 16, 11)
+	smoke(top, RGB(40, 36, 36), 10, 7, 16, 11)
 	light(top, AMBER, 30, 1.0)
+
+	-- outer-ring lifter crane gantry tower (r = 46, strictly clear of interior lifter pad & both gates)
+	local gantryAngles = pickAngles({ gateAngles[1], gateAngles[2], stackA }, math.rad(42), stackA + PI, 1, math.rad(40))
+	if #gantryAngles > 0 then
+		local ga = gantryAngles[1]
+		local gp = polar(R, ga, RING + 2)
+		local gy0 = lowAt(gp.X, gp.Z, 4)
+		local gcf = CFrame.lookAt(Vector3.new(gp.X, gy0, gp.Z), Vector3.new(R.X, gy0, R.Z))
+		part(g, Vector3.new(9, 4, 9), gcf * CFrame.new(0, 1.6, 0), STEEL_D, true)
+		for _, sx in { -3.4, 3.4 } do
+			pipe(g, (gcf * CFrame.new(sx, 2, 2.6)).Position, (gcf * CFrame.new(sx * 0.55, 44, 0)).Position, 1.8, STEEL_D, false)
+			pipe(g, (gcf * CFrame.new(sx, 2, -2.6)).Position, (gcf * CFrame.new(sx * 0.55, 44, 0)).Position, 1.8, STEEL_D, false)
+		end
+		part(g, Vector3.new(7.5, 2.8, 26), gcf * CFrame.new(0, 44.5, -8), STEEL_D, false)
+		part(g, Vector3.new(7.8, 0.9, 18), gcf * CFrame.new(0, 42.9, -6), HAZ, false)
+		pipe(g, (gcf * CFrame.new(0, 44, -19.5)).Position, (gcf * CFrame.new(0, 29, -19.5)).Position, 0.5, SOOT, false)
+		part(g, Vector3.new(3.6, 3.0, 3.6), gcf * CFrame.new(0, 27.5, -19.5), STEEL, false)
+		glow(g, Vector3.new(1.8, 1.8, 1.8), gcf * CFrame.new(0, 47.0, 0), RED, true)
+	end
 
 	-- tanks and pipes
 	local nTanks = if haul then 4 else 3
@@ -1358,18 +1463,17 @@ end
 local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, rock: Color3 })
 	local g = folder(root, "SaltPan")
 
-	-- keep the center ~24-stud Skiff landing circle clear; place flush corner deck markers at r = 24.5 (non-colliding)
+	-- keep the center ~24-stud Skiff landing circle clear; place bright-edged ribbed metallic approach pads at r = 24.5 (non-colliding)
 	for i = 0, 3 do
 		local a = math.rad(45 + i * 90)
-		local p = polar(P, a, 24.5)
-		local y0 = lowAt(p.X, p.Z, 2)
-		local base = Vector3.new(p.X, y0 - 0.08, p.Z)
+		local p = polar(P, a, 25.0)
+		local y0 = lowAt(p.X, p.Z, 2.5)
+		local base = Vector3.new(p.X, y0 + 0.1, p.Z)
 		local fr = CFrame.lookAt(base, Vector3.new(P.X, base.Y, P.Z))
-		part(g, Vector3.new(4.2, 0.3, 1.4), fr, STEEL_D, false)
-		part(g, Vector3.new(3.6, 0.34, 0.7), fr * CFrame.new(0, 0.02, 0), HAZ, false)
+		ribbedDeck(g, fr, 5.6, 3.8, false)
 	end
 
-	-- perimeter LZ marker beacons at r = 27-28 (low bollards with amber/teal glow; 1 PointLight within LIGHT_CAP)
+	-- perimeter LZ marker stanchions at r = 27.5 (taller silhouetted bollards + disciplined pennants; 1 PointLight within LIGHT_CAP)
 	local litBeacon = false
 	for i = 0, 5 do
 		local a = math.rad(15 + i * 60)
@@ -1379,11 +1483,12 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 			if hi - lo <= 1.8 then
 				local base = Vector3.new(p.X, lo - 0.1, p.Z)
 				local fr = CFrame.lookAt(base, Vector3.new(P.X, base.Y, P.Z))
-				part(g, Vector3.new(2.2, 0.7, 2.2), fr * CFrame.new(0, 0.35, 0), STEEL_D, true)
-				vcyl(g, 1.1, 3.2, fr * CFrame.new(0, 2.1, 0), STEEL, true)
-				vcyl(g, 1.22, 0.55, fr * CFrame.new(0, 2.4, 0), HAZ, false)
+				part(g, Vector3.new(2.4, 0.9, 2.4), fr * CFrame.new(0, 0.45, 0), STEEL_D, true)
+				vcyl(g, 1.15, 5.8, fr * CFrame.new(0, 3.4, 0), STEEL_D, true)
+				vcyl(g, 1.32, 0.7, fr * CFrame.new(0, 4.4, 0), HAZ, false)
+				part(g, Vector3.new(1.8, 0.4, 1.8), fr * CFrame.new(0, 6.2, 0), STEEL_L, false)
 				local lampCol = if i % 2 == 0 then AMBER else TEAL
-				local cap = glow(g, Vector3.new(0.85, 0.7, 0.85), fr * CFrame.new(0, 3.9, 0), lampCol, true)
+				local cap = glow(g, Vector3.new(1.0, 0.85, 1.0), fr * CFrame.new(0, 6.8, 0), lampCol, true)
 				if not litBeacon and i % 2 == 0 then
 					litBeacon = true
 					light(cap, AMBER, 30, 1.4)
@@ -1452,10 +1557,18 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 		vcyl(g, 4.2, 1.8, wcf, SOOT, true)
 		vcyl(g, 2.2, 1.9, wcf, STEEL_L, false)
 		pipe(g, Vector3.new(wp.X - 1.2, wy + 0.5, wp.Z - 0.6), Vector3.new(wp.X + 2.4, wy + 1.1, wp.Z + 1.8), 0.55, RUST, false)
-		smoke(emitterHost(g, Hh(0, 8.5, -3).Position), RGB(60, 56, 54), 3.4, 3, 8, 5)
+		smoke(emitterHost(g, Hh(0, 8.5, -3).Position), RGB(42, 38, 38), 3.6, 3, 8, 5)
+		-- tall dark-iron extraction signal mast beside the hauler (clear of LZ, bold east-horizon silhouette)
+		local mp = Hh(10.5, 0, -4).Position
+		local my = lowAt(mp.X, mp.Z, 2.5)
+		part(g, Vector3.new(3.6, 2.2, 3.6), CFrame.new(mp.X, my + 0.9, mp.Z), STEEL_D, true)
+		vcyl(g, 1.1, 27, CFrame.new(mp.X, my + 14.5, mp.Z), STEEL_D, false)
+		part(g, Vector3.new(7.5, 0.75, 0.75), CFrame.new(mp.X, my + 23.5, mp.Z) * CFrame.Angles(0, hauler.a, 0), STEEL, false)
+		part(g, Vector3.new(5.2, 0.65, 0.65), CFrame.new(mp.X, my + 26.2, mp.Z) * CFrame.Angles(0, hauler.a + PI / 2, 0), STEEL_L, false)
+		glow(g, Vector3.new(1.5, 1.5, 1.5), CFrame.new(mp.X, my + 28.6, mp.Z), TEAL, true)
 	end
 
-	-- inner tactical cover ring (r = 31-39): low field barricades & stacked supply crates facing around the LZ
+	-- inner tactical cover ring (r = 31-39): waist-high modular dark-steel Jersey barricades & crates facing around the LZ
 	for i = 1, 3 do
 		local c = takeFrom(innerCands, math.rad(36))
 		if c then
@@ -1463,20 +1576,19 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 			local base = Vector3.new(pos.X, lowAt(pos.X, pos.Z, 4) - 0.15, pos.Z)
 			local inward = dirTo(pos, P)
 			local fr = CFrame.lookAt(base, base + inward) * CFrame.Angles(0, rnd:NextNumber(-0.22, 0.22), 0)
-			-- low weathered COG blast barrier with angled brace struts
-			part(g, Vector3.new(8.6, 3.6, 1.8), fr * CFrame.new(0, 1.8, 0), jit(STEEL, 0.05), true)
-			part(g, Vector3.new(8.8, 0.75, 1.9), fr * CFrame.new(0, 2.75, 0), HAZ, false)
-			part(g, Vector3.new(8.4, 1.1, 2.1), fr * CFrame.new(0, 0.55, 0), RUST, false)
-			for _, sx in { -3.1, 3.1 } do
-				pipe(g, (fr * CFrame.new(sx, 0.2, -1.7)).Position, (fr * CFrame.new(sx, 2.9, -0.4)).Position, 0.45, STEEL_D, false)
+			-- waist-high weathered COG blast barrier (4.6 studs tall) with bright metallic cap & brace struts
+			part(g, Vector3.new(9.6, 4.6, 2.0), fr * CFrame.new(0, 2.3, 0), jit(STEEL_D, 0.06), true)
+			local cap = part(g, Vector3.new(9.7, 0.42, 1.7), fr * CFrame.new(0, 4.7, 0), STEEL_L, false, { Material = Enum.Material.Metal, CastShadow = false })
+			cap:SetAttribute("KeepMat", true)
+			part(g, Vector3.new(9.8, 0.75, 2.1), fr * CFrame.new(0, 3.25, 0), HAZ, false)
+			part(g, Vector3.new(9.4, 1.2, 2.3), fr * CFrame.new(0, 0.6, 0), STEEL, false)
+			for _, sx in { -3.4, 3.4 } do
+				pipe(g, (fr * CFrame.new(sx, 0.2, -1.8)).Position, (fr * CFrame.new(sx, 3.5, -0.5)).Position, 0.45, STEEL_D, false)
 			end
 			if i == 1 then
-				-- small LZ relay mast beside the first barricade
-				local mp = (fr * CFrame.new(5.3, 0, -0.4)).Position
-				local my = gy(mp.X, mp.Z)
-				vcyl(g, 0.7, 9.5, CFrame.new(mp.X, my + 4.5, mp.Z), STEEL_D, true)
-				part(g, Vector3.new(1.8, 0.45, 1.2), CFrame.new(mp.X, my + 8.6, mp.Z) * CFrame.Angles(0, c.a, 0), STEEL_L, false)
-				glow(g, Vector3.new(0.7, 0.7, 0.7), CFrame.new(mp.X, my + 9.4, mp.Z), TEAL, true)
+				-- vertical sector banner beside the primary LZ barricade
+				local bp = (fr * CFrame.new(6.2, 0, -0.5)).Position
+				poiBanner(g, Vector3.new(bp.X, gy(bp.X, bp.Z), bp.Z), c.a, false)
 			end
 		end
 	end

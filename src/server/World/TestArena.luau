@@ -83,12 +83,17 @@ local function buildTerrain()
 	local t = Workspace.Terrain
 	t:Clear()
 	t:FillBlock(CFrame.new(0, Y0 - 8, 0), Vector3.new(SLAB * 2, 16, SLAB * 2), Enum.Material.Sand)
-	-- ground variety: a few flat patches of other desert materials (colours come from the desert biome via applyBiomeLook)
-	local rng = Random.new(77)
-	local mats = { Enum.Material.Sandstone, Enum.Material.Ground, Enum.Material.Mud, Enum.Material.Rock, Enum.Material.Slate }
-	for i = 1, 18 do
-		local x, z = rng:NextNumber(-SLAB + 40, SLAB - 40), rng:NextNumber(-SLAB + 40, SLAB - 40)
-		t:FillCylinder(CFrame.new(x, Y0 - 1.1, z), 2.4, rng:NextNumber(7, 20), mats[(i - 1) % #mats + 1])
+	-- broad low-saturation desert value bands + central compacted lane (clean deck, zero micro-clutter)
+	t:FillBlock(CFrame.new(0, Y0 - 1.1, 0), Vector3.new(26, 2.4, HALF * 2), Enum.Material.Concrete)
+	local bands = {
+		{ x = -96, z = 40, r = 54, mat = Enum.Material.Ground },
+		{ x = 92, z = -34, r = 58, mat = Enum.Material.Sandstone },
+		{ x = -72, z = -78, r = 42, mat = Enum.Material.Sandstone },
+		{ x = 78, z = 76, r = 46, mat = Enum.Material.Ground },
+		{ x = 0, z = 96, r = 38, mat = Enum.Material.Slate },
+	}
+	for _, b in bands do
+		t:FillCylinder(CFrame.new(b.x, Y0 - 1.1, b.z), 2.4, b.r, b.mat)
 	end
 	-- low rock rim around the playable square (the invisible walls sit just inside it)
 	local e = HALF + 4
@@ -117,29 +122,92 @@ local function buildFolder()
 	wall(folder, Vector3.new(4, h, wl), CFrame.new(HALF + 2, Y0 + h / 2 - 2, 0))
 	wall(folder, Vector3.new(4, h, wl), CFrame.new(-HALF - 2, Y0 + h / 2 - 2, 0))
 
-	-- low cover (desert wall / rust palette; Slate / Rock / CorrodedMetal, nothing neon)
-	local stone = Color3.fromRGB(127, 104, 77)
-	local stoneDark = Color3.fromRGB(99, 81, 62)
-	local rust = Color3.fromRGB(122, 84, 58)
-	local rustDark = Color3.fromRGB(92, 70, 56)
-	local rock = Color3.fromRGB(104, 78, 62)
-	-- 1: long low wall in the middle
-	prop(props, "CoverWall", Vector3.new(26, 3.6, 2.6), Vector3.new(0, 0, 4), 0, stone, Enum.Material.Slate)
-	-- 2: crate stack
-	prop(props, "Crate", Vector3.new(5.5, 4.2, 5.5), Vector3.new(-48, 0, 22), 12, rust, Enum.Material.CorrodedMetal)
-	prop(props, "Crate", Vector3.new(5.5, 4.2, 5.5), Vector3.new(-41.5, 0, 24.5), -8, rustDark, Enum.Material.CorrodedMetal)
-	prop(props, "Crate", Vector3.new(5, 3.6, 5), Vector3.new(-45, 4.2, 23), 33, rust, Enum.Material.CorrodedMetal)
-	-- 3: boulder pair
-	prop(props, "Boulder", Vector3.new(11, 6.5, 8.5), Vector3.new(52, 0, 18), 27, rock, Enum.Material.Rock)
-	prop(props, "Boulder", Vector3.new(5.5, 3.4, 5), Vector3.new(60, 0, 11), -40, rock, Enum.Material.Rock)
-	-- 4: L-shaped low wall
-	prop(props, "CoverWall", Vector3.new(17, 3.4, 2.4), Vector3.new(-32, 0, -42), 0, stoneDark, Enum.Material.Slate)
-	prop(props, "CoverWall", Vector3.new(2.4, 3.4, 12), Vector3.new(-39.3, 0, -36), 0, stoneDark, Enum.Material.Slate)
-	-- 5: crate pair
-	prop(props, "Crate", Vector3.new(5.5, 4.2, 5.5), Vector3.new(38, 0, 58), 20, rustDark, Enum.Material.CorrodedMetal)
-	prop(props, "Crate", Vector3.new(5.5, 4.2, 5.5), Vector3.new(44.5, 0, 56), -15, rust, Enum.Material.CorrodedMetal)
-	-- 6: angled wall far side
-	prop(props, "CoverWall", Vector3.new(19, 3.2, 2.4), Vector3.new(-6, 0, 78), 18, stone, Enum.Material.Slate)
+	-- stylized low-saturation cover & modular Jersey barriers (Band 2 dark slate/concrete + bright metallic trim)
+	local concrete = Color3.fromRGB(82, 78, 74)
+	local concreteDark = Color3.fromRGB(64, 62, 60)
+	local steelDark = Color3.fromRGB(44, 48, 56)
+	local steelLight = Color3.fromRGB(132, 138, 148)
+	local rust = Color3.fromRGB(102, 74, 58)
+	local haz = Color3.fromRGB(228, 178, 44)
+	local rock = Color3.fromRGB(84, 76, 68)
+
+	local function jerseyBarrier(pos: Vector3, len: number, yawDeg: number)
+		local body = prop(props, "JerseyBarrier", Vector3.new(len, 4.8, 2.4), pos, yawDeg, concrete, Enum.Material.Concrete)
+		local cf = body.CFrame
+		local trim = Instance.new("Part")
+		trim.Name = "BarrierCap"
+		trim.Anchored = true
+		trim.CanCollide = false
+		trim.CanQuery = false
+		trim.CanTouch = false
+		trim.CastShadow = false
+		trim.Size = Vector3.new(len + 0.15, 0.5, 2.0)
+		trim.CFrame = cf * CFrame.new(0, 2.25, 0)
+		trim.Color = steelLight
+		trim.Material = Enum.Material.Metal
+		trim.Parent = props
+		local stripe = Instance.new("Part")
+		stripe.Name = "BarrierStripe"
+		stripe.Anchored = true
+		stripe.CanCollide = false
+		stripe.CanQuery = false
+		stripe.CanTouch = false
+		stripe.CastShadow = false
+		stripe.Size = Vector3.new(len * 0.28, 0.7, 2.52)
+		stripe.CFrame = cf * CFrame.new(0, 0.9, 0)
+		stripe.Color = haz
+		stripe.Material = Enum.Material.SmoothPlastic
+		stripe.Parent = props
+	end
+
+	-- ribbed metallic grating deck under player spawn
+	local pad = prop(props, "SpawnGratePad", Vector3.new(18, 0.35, 14), Vector3.new(0, -0.1, SPAWN_Z), 0, steelDark, Enum.Material.DiamondPlate)
+	pad.CanCollide = false
+	pad.CanQuery = false
+	for _, xOff in { -8.6, 8.6 } do
+		local rail = prop(props, "SpawnGrateEdge", Vector3.new(0.6, 0.45, 14.2), Vector3.new(xOff, -0.05, SPAWN_Z), 0, steelLight, Enum.Material.Metal)
+		rail.CanCollide = false
+		rail.CanQuery = false
+	end
+	for _, zOff in { -4.5, 0, 4.5 } do
+		local rib = prop(props, "SpawnGrateRib", Vector3.new(16.6, 0.4, 0.45), Vector3.new(0, -0.06, SPAWN_Z + zOff), 0, steelLight, Enum.Material.Metal)
+		rib.CanCollide = false
+		rib.CanQuery = false
+	end
+
+	-- 1: staggered center modular Jersey barriers (clean 22-stud flanking gap down the middle)
+	jerseyBarrier(Vector3.new(-17, 0, 6), 14, 0)
+	jerseyBarrier(Vector3.new(17, 0, 6), 14, 0)
+	-- 2: crate stack left flank
+	prop(props, "Crate", Vector3.new(5.5, 4.4, 5.5), Vector3.new(-48, 0, 22), 12, steelDark, Enum.Material.Metal)
+	prop(props, "Crate", Vector3.new(5.5, 4.4, 5.5), Vector3.new(-41.5, 0, 24.5), -8, rust, Enum.Material.CorrodedMetal)
+	prop(props, "Crate", Vector3.new(5, 3.8, 5), Vector3.new(-45, 4.4, 23), 33, steelDark, Enum.Material.Metal)
+	-- 3: boulder pair right flank
+	prop(props, "Boulder", Vector3.new(11, 6.5, 8.5), Vector3.new(52, 0, 18), 27, rock, Enum.Material.Sandstone)
+	prop(props, "Boulder", Vector3.new(6, 4.2, 5.5), Vector3.new(60, 0, 11), -40, rock, Enum.Material.Sandstone)
+	-- 4: L-shaped tactical retaining wall near player half
+	jerseyBarrier(Vector3.new(-32, 0, -44), 16, 0)
+	prop(props, "CoverWall", Vector3.new(2.4, 4.8, 12), Vector3.new(-39.2, 0, -37), 0, concreteDark, Enum.Material.Concrete)
+	-- 5: right mid-lane cover wall + crate pair
+	jerseyBarrier(Vector3.new(36, 0, -32), 13, -12)
+	prop(props, "Crate", Vector3.new(5.5, 4.4, 5.5), Vector3.new(38, 0, 58), 20, rust, Enum.Material.CorrodedMetal)
+	prop(props, "Crate", Vector3.new(5.5, 4.4, 5.5), Vector3.new(44.5, 0, 56), -15, steelDark, Enum.Material.Metal)
+	-- 6: angled far modular barrier
+	jerseyBarrier(Vector3.new(-8, 0, 76), 18, 14)
+
+	-- outer brutalist skyline silhouettes outside the walls (Band 2 landmarks against pale sky)
+	for _, s in {
+		{ x = -72, z = 158, w = 22, h = 92, d = 22 },
+		{ x = -46, z = 166, w = 16, h = 118, d = 16 },
+		{ x = 86, z = 162, w = 26, h = 104, d = 24 },
+		{ x = 164, z = 36, w = 22, h = 88, d = 44 },
+		{ x = -164, z = -22, w = 24, h = 96, d = 38 },
+	} do
+		local sil = prop(props, "HorizonSilhouette", Vector3.new(s.w, s.h, s.d), Vector3.new(s.x, -4, s.z), 0, steelDark, Enum.Material.SmoothPlastic)
+		sil.CanCollide = false
+		sil.CanQuery = false
+		sil.CastShadow = false
+	end
 
 	folder.Parent = Workspace
 	return folder, props
