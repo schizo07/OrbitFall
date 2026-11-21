@@ -1455,6 +1455,63 @@ local function startHorizon()
 	end
 	local cruiserT0 = os.clock()
 	local nextCruiserStep = 0
+
+	-- low-altitude rolling golden-dust valley mist (desert missions only; wide, soft, phone-safe, cleaned up with folder)
+	type ValleyMistRec = { host: Part, ahead: number, lift: number }
+	local valleyMist: { ValleyMistRec } = {}
+	local nextMistStep = 0
+	local mapInst = Workspace:FindFirstChild("Map")
+	if mapInst and mapInst:GetAttribute("Biome") == "desert" then
+		local mistColor = ColorSequence.new(Color3.fromRGB(240, 206, 156), Color3.fromRGB(198, 158, 110))
+		local mistSpecs = {
+			{
+				name = "DesertValleyMistMid",
+				size = Vector3.new(190, 5, 190),
+				ahead = 65,
+				lift = 3.5,
+				rate = if q < 0.5 then 4 elseif q < 0.8 then 7 else 10,
+				life = NumberRange.new(7, 10),
+				speed = NumberRange.new(3, 7),
+				partSize = NS({ 0, 26, 0.45, 44, 1, 58 }),
+				trans = NS({ 0, 1, 0.25, 0.86, 0.72, 0.88, 1, 1 }),
+			},
+			{
+				name = "DesertValleyMistFar",
+				size = Vector3.new(280, 7, 280),
+				ahead = 145,
+				lift = 6.0,
+				rate = if q < 0.5 then 3 else 6,
+				life = NumberRange.new(9, 13),
+				speed = NumberRange.new(2.5, 5.5),
+				partSize = NS({ 0, 42, 0.5, 68, 1, 88 }),
+				trans = NS({ 0, 1, 0.25, 0.82, 0.75, 0.86, 1, 1 }),
+			},
+		}
+		for _, ms in mistSpecs do
+			local mh = anchorPart(Vector3.new(0, 12, 0), ms.size)
+			mh.Name = ms.name
+			mh.Parent = folder
+			local me = Instance.new("ParticleEmitter")
+			me.Texture = SMOKE
+			me.Shape = Enum.ParticleEmitterShape.Box
+			me.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+			me.EmissionDirection = Enum.NormalId.Right
+			me.Rate = ms.rate
+			me.Lifetime = ms.life
+			me.Speed = ms.speed
+			me.SpreadAngle = Vector2.new(18, 4)
+			me.Size = ms.partSize
+			me.Transparency = ms.trans
+			me.Color = mistColor
+			me.Rotation = NumberRange.new(0, 360)
+			me.RotSpeed = NumberRange.new(-5, 5)
+			me.Acceleration = Vector3.new(1.4, -0.15, 0.7)
+			me.LightInfluence = 0.85
+			me.Parent = mh
+			valleyMist[#valleyMist + 1] = { host = mh, ahead = ms.ahead, lift = ms.lift }
+		end
+	end
+
 	local count = if q < 0.6 then 3 else HORIZON_COLUMNS
 	for i = 1, count do
 		local a = (if i <= 2 then sunAngle + (i - 1.5) * 0.7 else (i / count) * math.pi * 2 + sunAngle + 1.2) + rnd:NextNumber(-0.25, 0.25)
@@ -1584,6 +1641,23 @@ local function startHorizon()
 					local rollWob = math.sin(elapsed * 0.16 + cr.phase) * 0.025
 					local p = cr.basePos + cr.dir * drift + Vector3.new(0, bob, 0)
 					cr.model:PivotTo(CFrame.new(p) * CFrame.Angles(cr.pitch, cr.yaw, cr.roll + rollWob))
+				end
+			end
+		end
+		if #valleyMist > 0 and now >= nextMistStep then
+			nextMistStep = now + 0.25 -- 4 Hz canyon floor tracking
+			local cam = Workspace.CurrentCamera
+			if cam then
+				local camPos = cam.CFrame.Position
+				local look = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+				local fwd = if look.Magnitude > 0.05 then look.Unit else Vector3.new(0, 0, -1)
+				for _, vm in valleyMist do
+					if vm.host.Parent then
+						local probe = Vector3.new(camPos.X + fwd.X * vm.ahead, camPos.Y, camPos.Z + fwd.Z * vm.ahead)
+						local hit = groundAt(probe)
+						local y = if hit then hit.Y + vm.lift else camPos.Y - 4
+						vm.host.CFrame = CFrame.new(probe.X, y, probe.Z)
+					end
 				end
 			end
 		end

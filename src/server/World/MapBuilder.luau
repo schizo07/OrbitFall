@@ -197,26 +197,26 @@ type Biome = {
 }
 local M = Enum.Material
 local BIOMES: { [string]: Biome } = {
-	desert = { -- 3-band stylized desert: bright bleached-gold sky, dark slate-sandstone silhouettes, muted low-sat ochre-slate deck
+	desert = { -- warm golden-dust alien wilderness: sunlit ochre-amber haze, dark craggy rock silhouettes, grounded low-value desert earth
 		terrain = {
-			[M.Sand] = RGB(114, 98, 80), [M.Sandstone] = RGB(96, 82, 68), [M.Rock] = RGB(74, 68, 62),
-			[M.Basalt] = RGB(54, 50, 48), [M.Ground] = RGB(88, 78, 66), [M.Slate] = RGB(66, 62, 58),
-			[M.Grass] = RGB(86, 82, 66), [M.Mud] = RGB(74, 64, 54), [M.Salt] = RGB(156, 148, 134),
-			[M.Asphalt] = RGB(58, 56, 54), [M.Cobblestone] = RGB(92, 84, 74), [M.Limestone] = RGB(122, 112, 98),
+			[M.Sand] = RGB(126, 100, 74), [M.Sandstone] = RGB(98, 78, 58), [M.Rock] = RGB(70, 61, 53),
+			[M.Basalt] = RGB(48, 44, 42), [M.Ground] = RGB(92, 76, 58), [M.Slate] = RGB(62, 56, 50),
+			[M.Grass] = RGB(84, 74, 56), [M.Mud] = RGB(74, 60, 48), [M.Salt] = RGB(166, 152, 130),
+			[M.Asphalt] = RGB(54, 52, 50), [M.Cobblestone] = RGB(90, 78, 66), [M.Limestone] = RGB(128, 112, 92),
 		},
-		rocks = { RGB(96, 86, 76), RGB(80, 72, 66), RGB(108, 96, 84) },
-		rockMat = M.Sandstone,
+		rocks = { RGB(82, 70, 58), RGB(64, 56, 48), RGB(96, 80, 64) },
+		rockMat = M.Rock,
 		crystal = RGB(220, 150, 90),
-		wall = { RGB(94, 88, 82), RGB(80, 76, 72), RGB(68, 66, 64) },
-		plant = { RGB(84, 76, 62), RGB(98, 88, 70) },
-		smoke = RGB(42, 38, 36),
-		mood = { -- Band 1 high-key sunlit bleached-haze / pale-gold overcast sky: washes horizon into clean silhouettes, pops dark smoke & combat emissives
-			clock = 17.3, elev = 0.17, bright = 3.1, expo = -0.02, amb = RGB(58, 56, 54), out = RGB(114, 108, 98),
-			top = RGB(236, 228, 210), bottom = RGB(122, 112, 100),
-			atmDensity = 0.32, atmOffset = 0.12, haze = 2.1, glare = 0.12, atm = RGB(224, 214, 194), decay = RGB(194, 182, 162),
-			tint = RGB(250, 246, 238), sat = -0.14, contrast = 0.28, bloom = 0.68, rays = 0.08, sun = 10, stars = 0,
-			cloudCover = 0.58, cloudDensity = 0.52, cloudColor = RGB(222, 214, 200),
-			envDiffuse = 0.24, shadowSoft = 0.18,
+		wall = { RGB(94, 88, 80), RGB(78, 74, 68), RGB(64, 62, 58) },
+		plant = { RGB(84, 74, 58), RGB(96, 84, 66) },
+		smoke = RGB(40, 35, 32),
+		mood = { -- warm golden-ochre / dusty amber low-sun haze: separates foreground dark rock from misty layered distant ridges
+			clock = 17.4, elev = 0.32, bright = 3.2, expo = -0.04, amb = RGB(62, 50, 38), out = RGB(118, 96, 74),
+			top = RGB(255, 224, 174), bottom = RGB(112, 88, 66),
+			atmDensity = 0.38, atmOffset = 0.14, haze = 2.4, glare = 0.55, atm = RGB(236, 198, 146), decay = RGB(186, 138, 86),
+			tint = RGB(255, 240, 218), sat = -0.10, contrast = 0.28, bloom = 0.65, rays = 0.22, sun = 14, stars = 0,
+			cloudCover = 0.52, cloudDensity = 0.48, cloudColor = RGB(236, 208, 168),
+			envDiffuse = 0.26, shadowSoft = 0.22,
 		},
 	},
 	ash = { -- charcoal ground under a burning red sky (red lives in sky, haze and lava only)
@@ -380,30 +380,38 @@ end
 -- 0 on sites and lanes, 1 in the wilds: terrain features are scaled by this so the combat area stays walkable
 local function featureMask(x: number, z: number): number
 	local m = 1
+	local isDesert = biomeName == "desert"
+	local siteExtra = if isDesert then 18 else 30
+	local siteInnerK = if isDesert then 0.85 else 0.7
 	for _, s in siteList do
 		local dx, dz = x - s.x, z - s.z
-		local lim = s.outer + 30
+		local lim = s.outer + siteExtra
 		local d2 = dx * dx + dz * dz
 		if d2 < lim * lim then
-			local k = smooth((math.sqrt(d2) - s.inner * 0.7) / (lim - s.inner * 0.7))
+			local innerLim = s.inner * siteInnerK
+			local k = smooth((math.sqrt(d2) - innerLim) / math.max(lim - innerLim, 1))
 			if k < m then
 				m = k
 			end
 		end
 	end
+	local laneLim = if isDesert then 38 else 62
+	local laneInner = if isDesert then 13 else 12
 	for _, l in lanes do
 		local d = distSeg(x, z, l.ax, l.az, l.bx, l.bz)
-		if d < 62 then
-			local k = smooth((d - 12) / 50) -- a long fade: the ridges rise slowly away from a lane (no steep walls beside it)
+		if d < laneLim then
+			local k = smooth((d - laneInner) / (laneLim - laneInner)) -- keeps 26-stud transit corridors completely smooth while letting canyon spurs rise beside them
 			if k < m then
 				m = k
 			end
 		end
 	end
+	local riverLim = if isDesert then 32 else 52
+	local riverInner = if isDesert then 11 else 12
 	for _, l in riverSegs do
 		local d = distSeg(x, z, l.ax, l.az, l.bx, l.bz)
-		if d < 52 then
-			local k = smooth((d - 12) / 40)
+		if d < riverLim then
+			local k = smooth((d - riverInner) / (riverLim - riverInner))
 			if k < m then
 				m = k
 			end
@@ -471,21 +479,40 @@ local function rawH(x: number, z: number): number
 	local h = 13 + (noise(x / 210 + 11.3, z / 210 + 7.7) * 17 + noise(x / 85 + 3.1, z / 85 + 9.9) * 6) * flat + noise(x / 27 + 1.7, z / 27 + 4.2) * 1.4
 	local F = featureMask(x, z)
 	if F > 0.001 then
-		-- low rounded ridge lines, only in some regions, mostly in the rocky north
-		local rm = smooth((noise(x / 300 + 5.3, z / 300 + 2.2) + 0.12) / 0.45)
-		if rm > 0 then
-			h += ridge(noise(x / 120 + 50.3, z / 90 + 20.1)) * rm * F * 11 * (0.4 + north * 0.9) * flat
-		end
-		h += ridge(noise(x / 52 + 8.8, z / 40 + 3.3)) * F * 3 * (0.6 + north * 0.6)
-		-- soft stepped rises (rounded shoulders, not stairs)
-		local t = (noise(x / 190 + 31.4, z / 190 + 17.9) - 0.06) / 0.5
-		if t > 0 then
-			h += terrace(math.min(t, 1) * 3) * 5.5 * F * (1 - 0.6 * east)
-		end
-		-- long soft dunes in the south: sine crests bent by noise, squared so the crests are round and the troughs wide
-		if south > 0.01 then
-			local s = math.sin(x / 34 + noise(x / 110 + 9.1, z / 110 + 3.3) * 5) * 0.5 + 0.5
-			h += s * s * 4.5 * south * F
+		if biomeName == "desert" then
+			-- dramatic rocky canyon ridges & spurs separating POIs (lanes and pads stay F == 0 and 100% smooth/walkable)
+			local rm = smooth((noise(x / 260 + 5.3, z / 260 + 2.2) + 0.28) / 0.5)
+			if rm > 0 then
+				h += ridge(noise(x / 108 + 50.3, z / 84 + 20.1)) * rm * F * 28 * (0.65 + north * 0.65) * (1 - 0.35 * east)
+			end
+			h += ridge(noise(x / 52 + 8.8, z / 44 + 3.3)) * F * 11 * (0.7 + north * 0.5) * (1 - 0.3 * east)
+			-- bold stepped canyon shoulders between compounds
+			local t = (noise(x / 175 + 31.4, z / 175 + 17.9) + 0.04) / 0.52
+			if t > 0 then
+				h += terrace(math.min(t, 1) * 3) * 10.5 * F * (1 - 0.55 * east)
+			end
+			-- long wind-carved dunes in the south
+			if south > 0.01 then
+				local s = math.sin(x / 34 + noise(x / 110 + 9.1, z / 110 + 3.3) * 5) * 0.5 + 0.5
+				h += s * s * 5.0 * south * F
+			end
+		else
+			-- low rounded ridge lines, only in some regions, mostly in the rocky north
+			local rm = smooth((noise(x / 300 + 5.3, z / 300 + 2.2) + 0.12) / 0.45)
+			if rm > 0 then
+				h += ridge(noise(x / 120 + 50.3, z / 90 + 20.1)) * rm * F * 11 * (0.4 + north * 0.9) * flat
+			end
+			h += ridge(noise(x / 52 + 8.8, z / 40 + 3.3)) * F * 3 * (0.6 + north * 0.6)
+			-- soft stepped rises (rounded shoulders, not stairs)
+			local t = (noise(x / 190 + 31.4, z / 190 + 17.9) - 0.06) / 0.5
+			if t > 0 then
+				h += terrace(math.min(t, 1) * 3) * 5.5 * F * (1 - 0.6 * east)
+			end
+			-- long soft dunes in the south: sine crests bent by noise, squared so the crests are round and the troughs wide
+			if south > 0.01 then
+				local s = math.sin(x / 34 + noise(x / 110 + 9.1, z / 110 + 3.3) * 5) * 0.5 + 0.5
+				h += s * s * 4.5 * south * F
+			end
 		end
 	end
 	for _, c in craters do
@@ -1341,20 +1368,16 @@ local function stoneStack(parent: Instance, x: number, z: number, h: number, dia
 end
 
 local OLD_ROCK_KEYS = { "env_rock_a", "env_rock_b", "env_rock_c" }
--- desert (Dustbowl Ridge): the rounded sandstone kit from art/blender/env_desert.py; tinted per biome like the old rocks
--- but they keep the rough rock material (KeepMat) so they sit with the dark, gritty ground
-local DESERT_ROCK_KEYS = { "desert_boulder_a", "desert_boulder_b", "desert_boulder_a" }
-local DESERT_SKYLINE_KEYS = { "desert_butte", "desert_boulder_a", "desert_boulder_b", "desert_cliff" }
-local DESERT_FALLBACK_KEYS = { "desert_boulder_a", "desert_boulder_b", "desert_cliff" }
+-- desert (Dustbowl Ridge): craggy rock/cliff/spire kit tinted in dark weathered desert-rock / charcoal-ochre tones
+local DESERT_ROCK_KEYS = { "env_rock_a", "env_rock_b", "env_rock_c" }
+local DESERT_SKYLINE_KEYS = { "env_spire_b", "env_spire_a", "desert_cliff", "env_rock_b", "env_rock_c" }
+local DESERT_FALLBACK_KEYS = { "env_rock_a", "env_rock_b", "env_rock_c", "desert_cliff" }
 local ROCK_KEYS = OLD_ROCK_KEYS -- set per biome in MapBuilder.build
 
 local SPIRE_SHADE = 0.6
--- desert spires are flat-topped sandstone buttes (env_desert.py) instead of pointed crags: about this much bigger than
--- the crag scale to stand as tall
-local BUTTE_SCALE = 3.4
 
 local function spireShade(c: Color3): Color3
-	local k = if biomeName == "desert" then 0.74 else SPIRE_SHADE
+	local k = if biomeName == "desert" then 0.82 else SPIRE_SHADE
 	return Color3.new(c.R * k, c.G * k, c.B * k)
 end
 
@@ -1458,15 +1481,13 @@ local function stoneClump(parent: Instance, x: number, z: number, s: number, tin
 	maybeYield()
 end
 
--- NOTE: env_spire_a (Blender "hoodoo": stem + flat overhanging caprock) reads as a mushroom silhouette and is no longer
--- placed anywhere; spires are env_spire_b crags or heaps of big round boulders.
 local function spire(parent: Instance, x: number, z: number, s: number, tint: Color3?, key: string?)
-	if not key and rng:NextNumber() < 0.4 then
-		-- a heap of big round boulders instead of a crag (variety; the rock meshes at 3-5x)
+	if not key and rng:NextNumber() < (if biomeName == "desert" then 0.3 else 0.4) then
+		-- a dramatic cluster of craggy rocks instead of a single spire
 		for i = 1, 3 do
 			local a = rng:NextNumber(0, TAU)
-			local d = if i == 1 then 0 else rng:NextNumber(10, 22) * s
-			rock(parent, x + math.cos(a) * d, z + math.sin(a) * d, (if i == 1 then rng:NextNumber(3.4, 4.6) else rng:NextNumber(1.8, 2.8)) * math.min(s, 1.6), true)
+			local d = if i == 1 then 0 else rng:NextNumber(10, 20) * s
+			rock(parent, x + math.cos(a) * d, z + math.sin(a) * d, (if i == 1 then rng:NextNumber(2.2, 3.2) else rng:NextNumber(1.4, 2.2)) * math.min(s, 1.4), true)
 		end
 		maybeYield()
 		return
@@ -1474,14 +1495,21 @@ local function spire(parent: Instance, x: number, z: number, s: number, tint: Co
 	local k = key or "env_spire_b"
 	local meshScale = s
 	if not key and biomeName == "desert" then
-		k = "desert_butte"
-		meshScale = s * BUTTE_SCALE
+		k = if rng:NextNumber() < 0.65 then "env_spire_b" else "env_spire_a"
+		meshScale = s * rng:NextNumber(0.75, 1.1)
 	end
-	-- the crag's big flat faces wash out to pale peach as SmoothPlastic (sky specular on huge planes, whatever the colour):
-	-- keep the biome's rough rock material (exempt from the flat pass) and tint darker so it sits with the terrain cliffs
 	local t = spireShade(tint or rockTint())
-	-- spires are tall pointed landmarks that can stand on rim slopes: allow steeper ground (lowest-hit placement keeps them planted)
-	local m, skipped = placeMesh(parent, k, x, z, { scale = meshScale, tint = t, material = B.rockMat, paint = keepMat, collide = true, align = 0.35, sink = rng:NextNumber(0.1, 0.16), maxSlope = 55 })
+	local mat = if biomeName == "desert" then Enum.Material.Slate else B.rockMat
+	local m, skipped = placeMesh(parent, k, x, z, {
+		scale = meshScale,
+		tint = t,
+		material = mat,
+		paint = keepMat,
+		collide = true,
+		align = 0.25,
+		sink = rng:NextNumber(0.16, 0.26),
+		maxSlope = 58,
+	})
 	if not m and not skipped then
 		fallbackSpire(parent, x, z, s, tint)
 	end
@@ -1585,7 +1613,7 @@ local function ruinedWall(parent: Instance, x: number, z: number, yaw: number, l
 			if rng:NextNumber() > 0.16 then
 				local h = ({ 3.8, 4.8, 5.8, 7.0 })[rng:NextInteger(1, 4)] * rng:NextNumber(0.9, 1.12)
 				local wp = (base * CFrame.new(rng:NextNumber(-0.4, 0.4), 0, cursor + seg / 2)).Position
-				local k = if h >= 5.6 and rng:NextNumber() < 0.35 then "desert_butte" else DESERT_ROCK_KEYS[rng:NextInteger(1, #DESERT_ROCK_KEYS)]
+				local k = if h >= 5.6 and rng:NextNumber() < 0.4 then "env_rock_b" else DESERT_ROCK_KEYS[rng:NextInteger(1, #DESERT_ROCK_KEYS)]
 				local sz = Assets.size(k)
 				local m, skipped = placeMesh(parent, k, wp.X, wp.Z, {
 					scale = h / (if sz then sz.Y else 6.5),
@@ -1659,20 +1687,30 @@ local function cover(parent: Instance, x: number, z: number, yaw: number, factio
 		crystals(parent, x + rng:NextNumber(-1.5, 1.5), z + rng:NextNumber(-1.5, 1.5), rng:NextNumber(0.5, 0.8), nil, true)
 		return
 	else
+		if biomeName == "desert" then
+			-- stark weathered concrete bunker barrier or craggy desert rock cover (zero red-spiked barricade toys)
+			if rng:NextNumber() < 0.55 then
+				local lo, n = lowestGround(x, z, 4.2)
+				if n.Y >= 0.85 then
+					local h = 4.4
+					local wallH = h + 7
+					local cf = CFrame.new(x, lo + h, z) * CFrame.Angles(0, yaw, 0)
+					local body = part(parent, Vector3.new(8.8, wallH, 2.2), cf * CFrame.new(0, -wallH / 2, 0), jitter(RGB(96, 90, 82), 0.05), Enum.Material.Concrete, { CanCollide = true })
+					keepMat(body)
+					local cap = decor(parent, Vector3.new(9.0, 0.45, 2.4), cf * CFrame.new(0, 0.1, 0), RGB(40, 44, 50), Enum.Material.Metal, { CastShadow = false })
+					keepMat(cap)
+					return
+				end
+			end
+			rock(parent, x, z, rng:NextNumber(0.75, 1.15), true)
+			return
+		end
 		local m, skipped = placeMesh(parent, "env_cog_barricade", x, z, {
 			scale = rng:NextNumber(1, 1.3),
 			yaw = yaw,
 			sink = 0.06,
 			collide = true,
 			align = 0.5,
-			paint = if biomeName == "desert" then function(p: BasePart)
-				if p.Name == "Eye" or p:GetAttribute("Role") == "glow" then
-					p.Material = Enum.Material.SmoothPlastic
-					p.Color = RGB(96, 36, 32)
-				else
-					keepMat(p)
-				end
-			end else nil,
 		})
 		if m or skipped then
 			return
@@ -2366,12 +2404,12 @@ end
 -- Both factions: wreck fields (hulks, shell craters, pods, scrap) clustered on the lane edges, a few wisps of smoke
 local function battlefield(parent: Instance, fac: string)
 	local keys = WRECK_KEYS[fac] or WRECK_KEYS.COG
-	local bigLeft = 2
+	local bigLeft = if biomeName == "desert" then 1 else 2
 	local wisps = 0
-	local fieldCount = if biomeName == "desert" then 7 else 10
+	local fieldCount = if biomeName == "desert" then 3 else 10
 	for _ = 1, fieldCount do
 		local x, z = laneEdgeSpot(238)
-		local hulks = if biomeName == "desert" then rng:NextInteger(1, 2) else rng:NextInteger(1, 3)
+		local hulks = if biomeName == "desert" then 1 else rng:NextInteger(1, 3)
 		for k = 1, hulks do
 			local a, d = rng:NextNumber(0, TAU), if k == 1 then 0 else rng:NextNumber(7, 14)
 			local key, mul = keys[rng:NextInteger(1, #keys)], 1.3
@@ -2380,7 +2418,7 @@ local function battlefield(parent: Instance, fac: string)
 				bigLeft -= 1
 			end
 			local m = wreckHulk(parent, x + math.cos(a) * d, z + math.sin(a) * d, key, mul)
-			if m and wisps < 4 and rng:NextNumber() < 0.45 then
+			if m and wisps < (if biomeName == "desert" then 2 else 4) and rng:NextNumber() < 0.45 then
 				wisps += 1
 				plume(emitterHost(parent, m:GetPivot().Position + Vector3.new(0, 2, 0)), B.smoke, 2.8, 1.8, 7, 5)
 			end
@@ -2395,7 +2433,7 @@ local function battlefield(parent: Instance, fac: string)
 		end
 		task.wait()
 	end
-	for _ = 1, 4 do -- lone craters in the open ground
+	for _ = 1, if biomeName == "desert" then 2 else 4 do -- lone craters in the open ground
 		local x, z = wildSpot(36, 16, 245)
 		shellCrater(parent, x, z, rng:NextNumber(5, 7.5))
 	end
@@ -2504,8 +2542,11 @@ local function rubbleField(parent: Instance)
 	end
 end
 
--- Four big wrecks on the rim (one per side), each with a tall slow smoke column. All within ~560 studs of anywhere.
+-- Four big wrecks on the rim (one per side), each with a tall slow smoke column. Skipped on desert so the canyon rim stays pure natural rock.
 local function rimWrecks(parent: Instance, fac: string)
+	if biomeName == "desert" then
+		return
+	end
 	local big = WRECK_BIG[fac] or "colossus"
 	for side = 0, 3 do
 		local placed = false
@@ -2628,7 +2669,7 @@ local function natureSet(props: Instance, dressing: Instance)
 			end
 		end
 	end
-	if biomeName == "desert" or biomeName == "ash" then
+	if biomeName == "ash" then
 		for _ = 1, 2 do
 			for _ = 1, 8 do
 				local x, z = wildSpot(60, 22, 225)
@@ -2733,7 +2774,7 @@ local function dressSite(parent: Instance, name: string, faction: string)
 	-- deliberate defensive ring: evenly spaced slots on ONE arc around the objective, every piece turned along the arc
 	-- (long side tangent, face radial); slots where a combat lane or trail enters stay open as paths
 	local R = pad[1] + 5
-	local count = 6
+	local count = if biomeName == "desert" then 4 else 6
 	local a0 = rng:NextNumber(0, TAU)
 	local placed = 0
 	for i = 0, count - 1 do
@@ -2804,8 +2845,8 @@ local function dressSite(parent: Instance, name: string, faction: string)
 		crystals(parent, c.X, c.Y, 1.1, nil, true)
 		crystals(parent, c.X + 7, c.Y - 5, 0.8, nil, true)
 	end
-	-- supply crates by the objective: one pair, tucked just inside a ring slot
-	do
+	-- supply crates by the objective: one pair on non-desert biomes (desert keeps side sites stark and uncluttered)
+	if biomeName ~= "desert" then
 		local a = a0 + (0.5 / count) * TAU
 		local x, z = c.X + math.cos(a) * (R - 3), c.Y + math.sin(a) * (R - 3)
 		if not inLane(x, z, 9) then
@@ -2969,15 +3010,13 @@ local function dressLumen(parent: Instance)
 	end
 end
 
--- Desert tactical route checkpoints: 3 memorable fortified roadblocks / canyon choke beats along the main haul
--- corridors back to the Refinery. Grounded deep-skirted concrete bunker walls, corner pillbox fighting positions,
--- sandbag/crate pockets, real uploaded walker-rib & hauler-wreck centerpieces, and framing sandstone rock shoulders.
--- Zero loose barrier spam, zero banners/lamps/Tetris gantries, zero decorative red Neon dots; open sightlines stay crisp.
+-- Desert tactical canyon choke points: 3 natural rocky canyon passes framing the main transit corridors back to
+-- the Refinery. Towering craggy cliff/rock shoulders flanking an 18+ stud open road center + one clean low brutalist
+-- concrete bunker barrier + one sandbag cover pocket per pass (zero tanks, zero yellow stripes, zero industrial clutter).
 local function desertCheckpoints(props: Instance, dressing: Instance)
-	local concrete = RGB(96, 92, 84)
-	local concreteDark = RGB(66, 64, 60)
-	local steelDark = RGB(44, 48, 56)
-	local haz = RGB(224, 174, 42)
+	local concrete = RGB(96, 90, 82)
+	local concreteDark = RGB(62, 59, 55)
+	local steelDark = RGB(40, 44, 50)
 
 	local function groundRange(x: number, z: number, r: number): (number, number, Vector3)
 		local pos, n = surfaceAt(x, z)
@@ -2994,7 +3033,7 @@ local function desertCheckpoints(props: Instance, dressing: Instance)
 		return lo, hi, n
 	end
 
-	-- Deep-sunk battered concrete bunker wall (single clean box collider, zero hill floating, zero red Neon)
+	-- Deep-sunk stark brutalist concrete bunker barrier (single clean box collider, zero yellow stripe clutter)
 	local function bunkerWall(x: number, z: number, dir2: Vector2, len: number, h: number)
 		local lo, hi, n = groundRange(x, z, len * 0.45)
 		if n.Y < 0.85 or hi - lo > 4.2 then
@@ -3003,7 +3042,7 @@ local function desertCheckpoints(props: Instance, dressing: Instance)
 		local topY = math.min(hi + h, lo + h + 2.6)
 		local wallH = (topY - lo) + 9
 		local cf = CFrame.lookAt(Vector3.new(x, topY, z), Vector3.new(x + dir2.X, topY, z + dir2.Y))
-		local body = part(props, Vector3.new(2.4, wallH, len), cf * CFrame.new(0, -wallH / 2, 0), jitter(concrete, 0.05), Enum.Material.Concrete, { CanCollide = true })
+		local body = part(props, Vector3.new(2.4, wallH, len), cf * CFrame.new(0, -wallH / 2, 0), jitter(concrete, 0.04), Enum.Material.Concrete, { CanCollide = true })
 		body.Name = "CheckpointWall"
 		keepMat(body)
 		local skirtH = math.max(wallH - h * 0.62, 2.5)
@@ -3011,41 +3050,10 @@ local function desertCheckpoints(props: Instance, dressing: Instance)
 		keepMat(skirt)
 		local cap = decor(dressing, Vector3.new(2.75, 0.5, len + 0.25), cf * CFrame.new(0, 0.12, 0), steelDark, Enum.Material.Metal, { CastShadow = false })
 		keepMat(cap)
-		decor(dressing, Vector3.new(2.52, 0.65, math.min(len * 0.4, 4.6)), cf * CFrame.new(0, -h * 0.28, 0), haz, Enum.Material.SmoothPlastic, { CastShadow = false })
 	end
 
-	-- Grounded concrete checkpoint pillbox: deep-sunk slab, waist-high firing parapet, sloped roof, wide open rear/flanks
-	local function checkpointPillbox(x: number, z: number, faceDir2: Vector2)
-		local lo, hi, n = groundRange(x, z, 5.4)
-		if n.Y < 0.86 or hi - lo > 4.0 then
-			return
-		end
-		local floorY = hi + 0.26
-		local fr = CFrame.lookAt(Vector3.new(x, floorY, z), Vector3.new(x + faceDir2.X, floorY, z + faceDir2.Y))
-		local plinthH = (floorY - lo) + 10
-		local plinth = part(props, Vector3.new(10.4, plinthH, 9.4), fr * CFrame.new(0, -plinthH / 2, 0), concreteDark, Enum.Material.Concrete, { CanCollide = true })
-		keepMat(plinth)
-		local ramp = part(props, Vector3.new(8.2, 1.3, 3.2), fr * CFrame.new(0, -0.78, 5.7) * CFrame.Angles(math.rad(-15), 0, 0), concrete, Enum.Material.Concrete, { CanCollide = true, CastShadow = false })
-		keepMat(ramp)
-		local parapet = part(props, Vector3.new(9.6, 3.5, 1.6), fr * CFrame.new(0, 1.75, -3.8), concrete, Enum.Material.Concrete, { CanCollide = true })
-		keepMat(parapet)
-		local sill = decor(dressing, Vector3.new(9.75, 0.34, 1.78), fr * CFrame.new(0, 3.58, -3.8), steelDark, Enum.Material.Metal, { CastShadow = false })
-		keepMat(sill)
-		decor(dressing, Vector3.new(4.2, 0.55, 1.7), fr * CFrame.new(0, 2.35, -3.82), haz, Enum.Material.SmoothPlastic, { CastShadow = false })
-		for _, sx in { -3.95, 3.95 } do
-			local fp = part(props, Vector3.new(2.0, 7.6, 2.1), fr * CFrame.new(sx, 3.8, -3.5), concreteDark, Enum.Material.Concrete, { CanCollide = true })
-			keepMat(fp)
-			local rp = part(props, Vector3.new(1.6, 7.2, 1.6), fr * CFrame.new(sx, 3.6, 3.5), concreteDark, Enum.Material.Concrete, { CanCollide = true })
-			keepMat(rp)
-		end
-		local roof = part(props, Vector3.new(11.4, 1.5, 10.4), fr * CFrame.new(0, 8.0, -0.3) * CFrame.Angles(math.rad(-6), 0, 0), concreteDark, Enum.Material.Concrete, { CanCollide = true })
-		keepMat(roof)
-		local brow = decor(dressing, Vector3.new(11.55, 0.45, 0.85), fr * CFrame.new(0, 7.65, -5.45), steelDark, Enum.Material.Metal, { CastShadow = false })
-		keepMat(brow)
-	end
-
-	-- Flanking sandbag / supply crate tactical cover pocket
-	local function coverPocket(x: number, z: number, yaw: number, withCrates: boolean)
+	-- Clean sandbag cover pocket tucked behind the canyon choke
+	local function coverPocket(x: number, z: number, yaw: number)
 		placeMesh(props, "env_sandbags", x, z, {
 			scale = 1.18,
 			yaw = yaw,
@@ -3053,57 +3061,15 @@ local function desertCheckpoints(props: Instance, dressing: Instance)
 			collide = true,
 			align = 0.65,
 			maxSlope = 32,
-			tint = RGB(132, 118, 96),
+			tint = RGB(126, 110, 88),
 			material = Enum.Material.SmoothPlastic,
 		})
-		if withCrates then
-			local sx, sz = x + math.cos(yaw) * 4.8, z - math.sin(yaw) * 4.8
-			placeMesh(props, "env_supply_crate", sx, sz, {
-				scale = 1.15,
-				yaw = yaw + 0.15,
-				sink = 0.05,
-				collide = true,
-				align = 0.5,
-				maxSlope = 30,
-				paint = keepMat,
-			})
-		end
 	end
 
-	-- Grounded industrial setpiece (hauler wreck, walker rib arch, tank) with Glow dimmed off Neon
-	local function placeCheckpointSetpiece(key: string, cf: CFrame, scale: number, collideBody: boolean): boolean
-		local m = Assets.get(key, { anchored = true })
-		if not m then
-			return false
-		end
-		if scale ~= 1 then
-			m:ScaleTo(scale)
-		end
-		m:PivotTo(cf)
-		for _, d in m:GetDescendants() do
-			if d:IsA("BasePart") then
-				d.Anchored = true
-				local isBody = d.Name == "Body"
-				d.CanCollide = collideBody and isBody
-				d.CanQuery = collideBody and isBody
-				d.CanTouch = false
-				if d.Name == "Glow" or d:GetAttribute("Role") == "glow" then
-					d.Material = Enum.Material.SmoothPlastic
-					d.Color = RGB(74, 34, 30)
-				else
-					keepMat(d)
-				end
-				partCount += 1
-			end
-		end
-		m.Parent = if collideBody then props else dressing
-		return true
-	end
-
-	-- Framing sandstone rock shoulder (desert_cliff / desert_butte / desert_boulder_a/b)
+	-- Framing craggy canyon rock shoulder (desert_cliff / env_spire_b / env_rock_a/b/c)
 	local function rockShoulder(x: number, z: number, yaw: number, scale: number, key: string)
 		local sz = Assets.size(key)
-		local r = math.min((if sz then math.max(sz.X, sz.Z) else 10) * scale * 0.3, 12)
+		local r = math.min((if sz then math.max(sz.X, sz.Z) else 12) * scale * 0.3, 14)
 		local lo = lowestGround(x, z, r)
 		local m = Assets.get(key, { anchored = true })
 		if not m then
@@ -3113,9 +3079,10 @@ local function desertCheckpoints(props: Instance, dressing: Instance)
 		if scale ~= 1 then
 			m:ScaleTo(scale)
 		end
-		local h = (if sz then sz.Y else 10) * scale
-		m:PivotTo(CFrame.new(x, lo - h * 0.24, z) * CFrame.Angles(0, yaw, 0))
+		local h = (if sz then sz.Y else 12) * scale
+		m:PivotTo(CFrame.new(x, lo - h * 0.26, z) * CFrame.Angles(0, yaw, 0))
 		local col = spireShade(rockTint())
+		local mat = if key == "env_spire_b" or key == "env_spire_a" then Enum.Material.Slate else B.rockMat
 		for _, d in m:GetDescendants() do
 			if d:IsA("BasePart") then
 				d.Anchored = true
@@ -3123,7 +3090,7 @@ local function desertCheckpoints(props: Instance, dressing: Instance)
 				d.CanQuery = true
 				d.CanTouch = false
 				d.Color = col
-				d.Material = B.rockMat
+				d.Material = mat
 				keepMat(d)
 				partCount += 1
 			end
@@ -3142,7 +3109,7 @@ local function desertCheckpoints(props: Instance, dressing: Instance)
 			local p = a:Lerp(b, math.clamp(tTarget + dt, 0.30, 0.68))
 			if math.max(math.abs(p.X), math.abs(p.Y)) < 218 and farFromSites(p.X, p.Y, 36) then
 				local lo, hi, n = groundRange(p.X, p.Y, 10)
-				if n.Y >= 0.88 and hi - lo <= 5.0 then
+				if n.Y >= 0.88 and hi - lo <= 5.5 then
 					return p, dir2
 				end
 			end
@@ -3151,113 +3118,33 @@ local function desertCheckpoints(props: Instance, dressing: Instance)
 	end
 
 	local ref = MapPlan.places.refinery.at
-	local quarryAt = MapPlan.places.quarry.at
-	local graveAt = MapPlan.places.graveyard.at
-	local mesaAt = MapPlan.places.mesa.at
-
-	-- 1. Quarry Haul-Road Roadblock: chevron concrete bunker walls + jackknifed cog_hauler_wreck + sandbag pockets + cliff shoulders
-	do
-		local cp, dir2 = pickCheckpointSpot(ref, quarryAt, 0.44)
+	local routes = {
+		{ to = MapPlan.places.quarry.at, t = 0.44, leftKey = "desert_cliff", leftSc = 0.92, rightKey = "env_rock_b", rightSc = 1.65, farKey = "env_spire_b", farSc = 0.72 },
+		{ to = MapPlan.places.graveyard.at, t = 0.50, leftKey = "desert_cliff", leftSc = 0.96, rightKey = "desert_cliff", rightSc = 0.84, farKey = "env_rock_c", farSc = 1.6 },
+		{ to = MapPlan.places.mesa.at, t = 0.46, leftKey = "env_rock_b", leftSc = 1.75, rightKey = "desert_cliff", rightSc = 0.90, farKey = "env_spire_a", farSc = 0.68 },
+	}
+	for idx, rt in routes do
+		local cp, dir2 = pickCheckpointSpot(ref, rt.to, rt.t)
 		if cp and dir2 then
 			local perp2 = Vector2.new(-dir2.Y, dir2.X)
 			local yaw = math.atan2(dir2.X, dir2.Y)
-			-- 18+ stud open road center; angled concrete walls on left & right shoulders
-			local wl = cp - perp2 * 13.5 - dir2 * 3
-			local wr = cp + perp2 * 14.0 + dir2 * 4
-			bunkerWall(wl.X, wl.Y, (dir2 + perp2 * 0.32).Unit, 12.0, 4.8)
-			bunkerWall(wr.X, wr.Y, (dir2 - perp2 * 0.28).Unit, 11.5, 4.8)
-			-- cover pockets tucked right behind the bunker walls
-			local sl = wl - dir2 * 6.5 - perp2 * 2.5
-			local sr = wr + dir2 * 6.0 + perp2 * 2.5
-			coverPocket(sl.X, sl.Y, yaw + math.rad(16), true)
-			coverPocket(sr.X, sr.Y, yaw - math.rad(18), false)
-			-- jackknifed dead cog_hauler_wreck hull anchoring the right outer flank (clear of road throat)
-			local hp = cp + perp2 * 23.5 - dir2 * 5
-			if farFromSites(hp.X, hp.Y, 30) then
-				local hlo = lowestGround(hp.X, hp.Y, 8)
-				local hcf = CFrame.new(hp.X, hlo - 0.4, hp.Y) * CFrame.Angles(math.rad(3), yaw + math.rad(58), math.rad(-5))
-				placeCheckpointSetpiece("cog_hauler_wreck", hcf, 1.0, true)
-			end
-			-- framing sandstone canyon shoulders
-			local rl = cp - perp2 * 26 + dir2 * 4
-			local rr = cp + perp2 * 29 + dir2 * 12
-			rockShoulder(rl.X, rl.Y, yaw + math.rad(78), 0.72, "desert_cliff")
-			rockShoulder(rr.X, rr.Y, yaw - math.rad(40), 1.65, "desert_boulder_a")
-		end
-	end
-	maybeYield()
-
-	-- 2. Walker Graveyard Canyon Arch: real cog_walker_rib arch spanning the corridor + bunker cheeks + sandbags + rock shoulders
-	do
-		local cp, dir2 = pickCheckpointSpot(ref, graveAt, 0.50)
-		if cp and dir2 then
-			local perp2 = Vector2.new(-dir2.Y, dir2.X)
-			local yaw = math.atan2(dir2.X, dir2.Y)
-			local loL = lowestGround(cp.X - perp2.X * 14, cp.Y - perp2.Y * 14, 3)
-			local loR = lowestGround(cp.X + perp2.X * 14, cp.Y + perp2.Y * 14, 3)
-			local baseY = math.min(loL, loR) - 1.2
-			local right3 = Vector3.new(perp2.X, 0, perp2.Y)
-			local archCF = CFrame.fromMatrix(Vector3.new(cp.X, baseY, cp.Y), right3, Vector3.yAxis) * CFrame.Angles(math.rad(7), 0, 0)
-			if placeCheckpointSetpiece("cog_walker_rib", archCF, 1.08, false) then
-				-- grounded concrete footing piers under the two arch legs (22-stud center wide open!)
-				for _, s in { -1, 1 } do
-					local fx, fz = cp.X + perp2.X * 14.8 * s, cp.Y + perp2.Y * 14.8 * s
-					local fy = if s < 0 then loL else loR
-					local pier = part(props, Vector3.new(4.2, 11, 5.2), CFrame.lookAt(Vector3.new(fx, fy + 0.5, fz), Vector3.new(fx + dir2.X, fy + 0.5, fz + dir2.Y)), concreteDark, Enum.Material.Concrete, { CanCollide = true })
-					keepMat(pier)
-				end
-			end
-			-- staggered concrete cheek walls & sandbag pockets framing the canyon choke
-			local wl = cp - perp2 * 14.5 - dir2 * 12
-			local wr = cp + perp2 * 14.5 + dir2 * 11
-			bunkerWall(wl.X, wl.Y, (dir2 + perp2 * 0.25).Unit, 11.0, 4.6)
-			bunkerWall(wr.X, wr.Y, (dir2 - perp2 * 0.25).Unit, 11.0, 4.6)
-			local sl = cp - perp2 * 12.5 + dir2 * 10
-			local sr = cp + perp2 * 12.5 - dir2 * 10
-			coverPocket(sl.X, sl.Y, yaw - math.rad(14), true)
-			coverPocket(sr.X, sr.Y, yaw + math.rad(14), false)
-			-- bold sandstone rock shoulders embracing the arch
-			local rl = cp - perp2 * 27 - dir2 * 2
-			local rr = cp + perp2 * 27 + dir2 * 4
-			rockShoulder(rl.X, rl.Y, yaw + math.rad(82), 0.74, "desert_cliff")
-			rockShoulder(rr.X, rr.Y, yaw - math.rad(68), 1.45, "desert_butte")
-		end
-	end
-	maybeYield()
-
-	-- 3. Signal Mesa Approach Outpost: grounded concrete pillbox + opposing bunker wall + supply bay/tank + butte shoulders
-	do
-		local cp, dir2 = pickCheckpointSpot(ref, mesaAt, 0.46)
-		if cp and dir2 then
-			local perp2 = Vector2.new(-dir2.Y, dir2.X)
-			local yaw = math.atan2(dir2.X, dir2.Y)
-			-- pillbox guarding the left shoulder, facing toward Signal Mesa
-			local pb = cp - perp2 * 16.5
-			if farFromSites(pb.X, pb.Y, 32) then
-				checkpointPillbox(pb.X, pb.Y, (dir2 + perp2 * 0.2).Unit)
-			end
-			-- opposing angled bunker wall + sandbag/crate pocket on right shoulder (18+ stud clear road center)
-			local wr = cp + perp2 * 14.5 + dir2 * 3
-			bunkerWall(wr.X, wr.Y, (dir2 - perp2 * 0.34).Unit, 12.5, 4.8)
-			local sr = wr - dir2 * 6.5 + perp2 * 2.5
-			coverPocket(sr.X, sr.Y, yaw - math.rad(22), true)
-			-- anchored cog_tank_a on concrete plinth beside the outpost flank
-			local tp = cp - perp2 * 27.5 - dir2 * 6
-			if farFromSites(tp.X, tp.Y, 32) then
-				local tlo, thi, tn = groundRange(tp.X, tp.Y, 5)
-				if tn.Y >= 0.88 and thi - tlo <= 4.0 then
-					local tPlinthH = (thi - tlo) + 9
-					local tPlinth = part(props, Vector3.new(12.2, tPlinthH, 11.4), CFrame.new(tp.X, thi + 0.15 - tPlinthH / 2, tp.Y) * CFrame.Angles(0, yaw, 0), concreteDark, Enum.Material.Concrete, { CanCollide = true, CastShadow = false })
-					keepMat(tPlinth)
-					placeCheckpointSetpiece("cog_tank_a", CFrame.new(tp.X, thi + 0.15, tp.Y) * CFrame.Angles(0, yaw + 0.3, 0), 1.0, true)
-				end
-			end
-			-- framing sandstone shoulders
-			local rl = cp - perp2 * 26 + dir2 * 14
+			-- 18+ stud open road center; one clean low concrete bunker barrier on one shoulder + sandbag cover pocket opposite
+			local sideSign = if idx % 2 == 1 then -1 else 1
+			local wb = cp + perp2 * (14.0 * sideSign) - dir2 * 2
+			bunkerWall(wb.X, wb.Y, (dir2 - perp2 * (0.28 * sideSign)).Unit, 11.5, 4.6)
+			local sb = cp - perp2 * (13.0 * sideSign) + dir2 * 4
+			coverPocket(sb.X, sb.Y, yaw + math.rad(16 * sideSign))
+			-- towering craggy canyon walls framing both sides of the road pass
+			local rl = cp - perp2 * 25 + dir2 * 3
 			local rr = cp + perp2 * 26 - dir2 * 4
-			rockShoulder(rl.X, rl.Y, yaw + math.rad(35), 1.45, "desert_butte")
-			rockShoulder(rr.X, rr.Y, yaw - math.rad(82), 0.68, "desert_cliff")
+			local rf = cp - perp2 * (34 * sideSign) + dir2 * 14
+			rockShoulder(rl.X, rl.Y, yaw + math.rad(82), rt.leftSc, rt.leftKey)
+			rockShoulder(rr.X, rr.Y, yaw - math.rad(78), rt.rightSc, rt.rightKey)
+			if farFromSites(rf.X, rf.Y, 32) then
+				rockShoulder(rf.X, rf.Y, yaw + math.rad(28 * sideSign), rt.farSc, rt.farKey)
+			end
 		end
+		maybeYield()
 	end
 end
 
@@ -3729,8 +3616,8 @@ local function crystalSpire(parent: Instance, x: number, z: number, yaw: number)
 	maybeYield()
 end
 
--- Helper: place a real uploaded industrial or sandstone mesh on the 360-degree horizon with Glow parts dimmed off Neon
-local function placeHorizonSetpiece(parent: Instance, key: string, cf: CFrame, scale: number, rockTintCol: Color3?): boolean
+-- Helper: place a craggy horizon rock formation sunk cleanly below terrain (never floating, non-colliding)
+local function placeHorizonSetpiece(parent: Instance, key: string, cf: CFrame, scale: number, rockTintCol: Color3?, matOverride: Enum.Material?): boolean
 	local m = Assets.get(key, { anchored = true })
 	if not m then
 		return false
@@ -3751,7 +3638,7 @@ local function placeHorizonSetpiece(parent: Instance, key: string, cf: CFrame, s
 				d.Color = RGB(52, 46, 48)
 			elseif rockTintCol then
 				d.Color = rockTintCol
-				d.Material = B.rockMat
+				d.Material = matOverride or B.rockMat
 				keepMat(d)
 			else
 				keepMat(d)
@@ -3763,150 +3650,50 @@ local function placeHorizonSetpiece(parent: Instance, key: string, cf: CFrame, s
 	return true
 end
 
--- Deep-sunk sandstone rock shoulder foundation for horizon industrial complexes (never a raw floating box plinth)
-local function horizonRockFoundation(parent: Instance, base: CFrame, g: Vector3)
+-- Natural towering jagged mountain peak on the desert rim (layered spires + cliffs + crags, sunk deep below terrain)
+local function desertMountainPeak(parent: Instance, x: number, z: number, yaw: number)
+	local lo = lowestGround(x, z, 36)
+	local base = CFrame.new(x, lo, z) * CFrame.Angles(0, yaw, 0)
 	local tint = spireShade(rockTint())
 	local placed = false
-	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(0, -14, 6) * CFrame.Angles(0, math.rad(8), 0), 2.35, tint) then
+	if placeHorizonSetpiece(parent, "env_spire_b", base * CFrame.new(0, -28, 10) * CFrame.Angles(0, math.rad(18), 0), 3.1, tint, Enum.Material.Slate) then
 		placed = true
 	end
-	if placeHorizonSetpiece(parent, "desert_butte", base * CFrame.new(-34, -12, 12) * CFrame.Angles(0, math.rad(-28), 0), 4.2, jitter(tint, 0.06)) then
+	if placeHorizonSetpiece(parent, "env_spire_a", base * CFrame.new(-42, -26, 22) * CFrame.Angles(0, math.rad(-34), 0), 2.4, jitter(tint, 0.06), Enum.Material.Slate) then
 		placed = true
 	end
-	if placeHorizonSetpiece(parent, "desert_butte", base * CFrame.new(34, -14, 10) * CFrame.Angles(0, math.rad(36), 0), 3.6, jitter(tint, 0.06)) then
+	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(12, -24, -8) * CFrame.Angles(0, math.rad(8), 0), 2.8, jitter(tint, 0.06), Enum.Material.Rock) then
+		placed = true
+	end
+	if placeHorizonSetpiece(parent, "env_rock_b", base * CFrame.new(48, -22, 14) * CFrame.Angles(0, math.rad(42), 0), 4.6, jitter(tint, 0.06), Enum.Material.Rock) then
 		placed = true
 	end
 	if not placed then
-		rockSkirt(parent, g, 14, 52, 22, 8, tint, B.rockMat)
-	end
-end
-
--- Desert 360-degree skyline landmarks built from oversized real uploaded Blender meshes on sandstone shoulders (zero Neon dot spam)
-local function desertSiloCluster(parent: Instance, x: number, z: number, yaw: number)
-	local g = surfaceAt(x, z)
-	local base = CFrame.new(g.X, g.Y - 6, g.Z) * CFrame.Angles(0, yaw, 0)
-	horizonRockFoundation(parent, base, g)
-	local ok = false
-	if placeHorizonSetpiece(parent, "cog_tank_b", base * CFrame.new(0, 12, -2) * CFrame.Angles(0, math.rad(18), 0), 5.2, nil) then
-		ok = true
-	end
-	if placeHorizonSetpiece(parent, "cog_tank_a", base * CFrame.new(-42, 8, 8) * CFrame.Angles(0, math.rad(-32), 0), 4.5, nil) then
-		ok = true
-	end
-	if placeHorizonSetpiece(parent, "cog_tank_a", base * CFrame.new(40, 10, 6) * CFrame.Angles(0, math.rad(42), 0), 3.8, nil) then
-		ok = true
-	end
-	if placeHorizonSetpiece(parent, "cog_relay_mast", base * CFrame.new(22, 12, -16) * CFrame.Angles(0, math.rad(-14), 0), 2.15, nil) then
-		ok = true
-	end
-	if not ok then
-		-- tapered cylindrical fallback if assets are unavailable
-		local dark, mid, soot = RGB(48, 52, 58), RGB(64, 68, 74), RGB(34, 36, 42)
-		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
-		for _, s in { { ox = -24, d = 24, h = 128, col = dark }, { ox = 0, d = 30, h = 162, col = mid }, { ox = 24, d = 20, h = 110, col = dark } } do
-			local lowH = s.h * 0.62
-			cyl(parent, s.d, lowH, base * CFrame.new(s.ox, lowH / 2 + 8, 0), s.col, Enum.Material.Metal, nc)
-			cyl(parent, s.d * 0.74, s.h - lowH, base * CFrame.new(s.ox, lowH + (s.h - lowH) / 2 + 8, 0), dark, Enum.Material.Metal, nc)
-			cyl(parent, s.d + 3, 3, base * CFrame.new(s.ox, lowH + 8, 0), soot, Enum.Material.Metal, nc)
-		end
+		rockSkirt(parent, Vector3.new(x, lo, z), 14, 58, 42, 8, tint, B.rockMat)
 	end
 	maybeYield()
 end
 
-local function desertGantryCrane(parent: Instance, x: number, z: number, yaw: number)
-	local g = surfaceAt(x, z)
-	local base = CFrame.new(g.X, g.Y - 6, g.Z) * CFrame.Angles(0, yaw, 0)
-	horizonRockFoundation(parent, base, g)
-	local ok = false
-	-- primary oversized cog_crane overhanging inward toward the playable basin
-	if placeHorizonSetpiece(parent, "cog_crane", base * CFrame.new(-8, 12, 0) * CFrame.Angles(0, math.rad(12), 0), 4.7, nil) then
-		ok = true
+-- Sweeping natural desert canyon cliff wall & crag massif on the rim (sunk cleanly below lowest terrain)
+local function desertCanyonRidge(parent: Instance, x: number, z: number, yaw: number)
+	local lo = lowestGround(x, z, 40)
+	local base = CFrame.new(x, lo, z) * CFrame.Angles(0, yaw, 0)
+	local tint = spireShade(rockTint())
+	local placed = false
+	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(-28, -24, 4) * CFrame.Angles(0, math.rad(10), 0), 3.1, tint, Enum.Material.Rock) then
+		placed = true
 	end
-	-- secondary flanking crane + relay mast + tank silhouette
-	if placeHorizonSetpiece(parent, "cog_crane", base * CFrame.new(44, 10, 14) * CFrame.Angles(0, math.rad(-34), 0), 3.4, nil) then
-		ok = true
+	if placeHorizonSetpiece(parent, "desert_cliff", base * CFrame.new(34, -26, 12) * CFrame.Angles(0, math.rad(-14), 0), 2.7, jitter(tint, 0.06), Enum.Material.Rock) then
+		placed = true
 	end
-	if placeHorizonSetpiece(parent, "cog_tank_b", base * CFrame.new(-44, 10, 12) * CFrame.Angles(0, math.rad(25), 0), 3.8, nil) then
-		ok = true
+	if placeHorizonSetpiece(parent, "env_spire_b", base * CFrame.new(6, -30, 26) * CFrame.Angles(0, math.rad(28), 0), 2.5, jitter(tint, 0.05), Enum.Material.Slate) then
+		placed = true
 	end
-	placeHorizonSetpiece(parent, "cog_relay_mast", base * CFrame.new(18, 12, 22) * CFrame.Angles(0, math.rad(-10), 0), 1.9, nil)
-	if not ok then
-		local dark, mid = RGB(44, 48, 56), RGB(62, 66, 74)
-		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
-		for _, sx in { -20, 20 } do
-			beam(parent, (base * CFrame.new(sx, -8, 16)).Position, (base * CFrame.new(sx * 0.55, 144, 0)).Position, 7, dark, Enum.Material.Metal, nc)
-			beam(parent, (base * CFrame.new(sx, -8, -14)).Position, (base * CFrame.new(sx * 0.55, 144, 0)).Position, 7, dark, Enum.Material.Metal, nc)
-		end
-		beam(parent, (base * CFrame.new(0, 148, 34)).Position, (base * CFrame.new(0, 166, -78)).Position, 5.8, mid, Enum.Material.Metal, nc)
+	if placeHorizonSetpiece(parent, "env_rock_c", base * CFrame.new(-54, -18, -6) * CFrame.Angles(0, math.rad(-25), 0), 4.4, jitter(tint, 0.07), Enum.Material.Rock) then
+		placed = true
 	end
-	maybeYield()
-end
-
-local function desertRefineryStacks(parent: Instance, x: number, z: number, yaw: number)
-	local g = surfaceAt(x, z)
-	local base = CFrame.new(g.X, g.Y - 6, g.Z) * CFrame.Angles(0, yaw, 0)
-	horizonRockFoundation(parent, base, g)
-	local ok = false
-	if placeHorizonSetpiece(parent, "cog_smokestack", base * CFrame.new(-22, 10, 0) * CFrame.Angles(0, math.rad(14), 0), 3.0, nil) then
-		ok = true
-		local top = emitterHost(parent, (base * CFrame.new(-22, 192, 0)).Position)
-		smokeEmitter(top, RGB(38, 35, 34), 22, 3.0, 15)
-	end
-	if placeHorizonSetpiece(parent, "cog_smokestack", base * CFrame.new(26, 8, 8) * CFrame.Angles(0, math.rad(-22), 0), 2.4, nil) then
-		ok = true
-		local top = emitterHost(parent, (base * CFrame.new(26, 154, 8)).Position)
-		smokeEmitter(top, RGB(38, 35, 34), 18, 2.0, 14)
-	end
-	placeHorizonSetpiece(parent, "cog_tank_b", base * CFrame.new(2, 10, -18) * CFrame.Angles(0, math.rad(30), 0), 4.2, nil)
-	placeHorizonSetpiece(parent, "cog_tank_a", base * CFrame.new(-52, 8, 12) * CFrame.Angles(0, math.rad(-18), 0), 3.8, nil)
-	if not ok then
-		local dark, mid, soot = RGB(46, 50, 56), RGB(62, 64, 70), RGB(30, 30, 34)
-		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
-		for i, st in { { ox = -20, h = 178, d = 16 }, { ox = 18, h = 144, d = 14 } } do
-			local loH = st.h * 0.58
-			cyl(parent, st.d, loH, base * CFrame.new(st.ox, loH / 2 + 12, 0), dark, Enum.Material.Metal, nc)
-			cyl(parent, st.d * 0.72, st.h - loH, base * CFrame.new(st.ox, loH + (st.h - loH) / 2 + 12, 0), mid, Enum.Material.Metal, nc)
-			cyl(parent, st.d * 0.84, 7, base * CFrame.new(st.ox, st.h + 10, 0), soot, Enum.Material.Metal, nc)
-			local top = emitterHost(parent, (base * CFrame.new(st.ox, st.h + 16, 0)).Position)
-			smokeEmitter(top, RGB(38, 35, 34), 22, if i == 1 then 3.0 else 2.0, 15)
-		end
-	end
-	maybeYield()
-end
-
-local function desertWalkerFrame(parent: Instance, x: number, z: number, yaw: number)
-	local g = surfaceAt(x, z)
-	local base = CFrame.new(g.X, g.Y - 8, g.Z) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(math.rad(-10), 0, math.rad(10))
-	horizonRockFoundation(parent, CFrame.new(g.X, g.Y - 6, g.Z) * CFrame.Angles(0, yaw, 0), g)
-	local ok = false
-	for i, spec in {
-		{ s = -40, key = "cog_walker_rib_half", sc = 3.2, roll = -8 },
-		{ s = -6, key = "cog_walker_rib", sc = 3.9, roll = 5 },
-		{ s = 28, key = "cog_walker_rib", sc = 3.5, roll = -4 },
-		{ s = 58, key = "cog_walker_rib_half", sc = 3.0, roll = 12 },
-	} do
-		if placeHorizonSetpiece(parent, spec.key, base * CFrame.new(0, 6, spec.s) * CFrame.Angles(0, math.rad((i - 2) * 6), math.rad(spec.roll)), spec.sc, nil) then
-			ok = true
-		end
-	end
-	placeHorizonSetpiece(parent, "cog_walker_skull", base * CFrame.new(6, 16, 92) * CFrame.Angles(math.rad(-16), math.rad(18), math.rad(22)), 2.7, nil)
-	if not ok then
-		local dark, mid = RGB(44, 48, 54), RGB(60, 64, 72)
-		local nc = { CanCollide = false, CanQuery = false, CastShadow = false }
-		for i = 0, 2 do
-			local s = (i - 1) * 34
-			local rx = 38 + (if i == 1 then 10 else 0)
-			local ry = 92 + (if i == 1 then 24 else 0)
-			local prev: Vector3? = nil
-			for k = 0, 4 do
-				local th = math.pi * k / 4
-				local p = (base * CFrame.new(math.cos(th) * rx, math.sin(th) * ry, s)).Position
-				if prev then
-					beam(parent, prev, p, 8.5, if i == 1 then dark else mid, Enum.Material.Metal, nc)
-				end
-				prev = p
-			end
-		end
+	if not placed then
+		rockSkirt(parent, Vector3.new(x, lo, z), 16, 62, 36, 8, tint, B.rockMat)
 	end
 	maybeYield()
 end
@@ -3914,14 +3701,14 @@ end
 -- landmark slots in the far ring (rim top) + which landmark per biome
 local LANDMARK_SLOTS = { Vector2.new(55, 292), Vector2.new(292, -55), Vector2.new(0, -292), Vector2.new(-292, 60) }
 local DESERT_RIM_SLOTS = {
-	{ pos = Vector2.new(55, 296), fn = foundryTower }, -- S
-	{ pos = Vector2.new(248, 224), fn = desertWalkerFrame }, -- SE
-	{ pos = Vector2.new(304, -55), fn = desertSiloCluster }, -- E
-	{ pos = Vector2.new(236, -242), fn = desertGantryCrane }, -- NE
-	{ pos = Vector2.new(0, -304), fn = desertRefineryStacks }, -- N
-	{ pos = Vector2.new(-236, -238), fn = mesaArch }, -- NW
-	{ pos = Vector2.new(-302, 58), fn = desertGantryCrane }, -- W
-	{ pos = Vector2.new(-232, 232), fn = desertSiloCluster }, -- SW
+	{ pos = Vector2.new(55, 304), fn = desertMountainPeak }, -- S
+	{ pos = Vector2.new(252, 230), fn = desertCanyonRidge }, -- SE
+	{ pos = Vector2.new(310, -55), fn = desertMountainPeak }, -- E
+	{ pos = Vector2.new(242, -248), fn = desertCanyonRidge }, -- NE
+	{ pos = Vector2.new(0, -310), fn = desertMountainPeak }, -- N
+	{ pos = Vector2.new(-240, -242), fn = mesaArch }, -- NW
+	{ pos = Vector2.new(-308, 58), fn = desertCanyonRidge }, -- W
+	{ pos = Vector2.new(-238, 238), fn = desertMountainPeak }, -- SW
 }
 local BIOME_LANDMARKS: { [string]: { (Instance, number, number, number) -> () } } = {
 	desert = { mesaArch, spireGroup },
@@ -3966,23 +3753,26 @@ local function buildLandmarks(parent: Instance, faction: string)
 	end
 end
 
--- Place a single skyline rock mesh at (x, baseY, z), sunk slightly so its base sits behind the rim cliffs.
-local function placeSkylineMesh(parent: Instance, key: string, x: number, z: number, scale: number, baseY: number, tint: Color3): boolean
+-- Place a single skyline rock mesh at (x, baseY, z), sunk deeply so its base never floats above terrain.
+local function placeSkylineMesh(parent: Instance, key: string, x: number, z: number, scale: number, baseY: number, tint: Color3, yawOverride: number?): boolean
 	local m = Assets.get(key, { anchored = true })
 	if not m then
 		return false
 	end
 	m:ScaleTo(scale)
 	local h = (Assets.size(key) or Vector3.new(30, 45, 30)).Y * scale
-	m:PivotTo(CFrame.new(x, baseY - h * rng:NextNumber(0.1, 0.3), z) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0))
+	local yaw = yawOverride or rng:NextNumber(0, TAU)
+	m:PivotTo(CFrame.new(x, baseY - h * rng:NextNumber(0.16, 0.28), z) * CFrame.Angles(0, yaw, 0))
 	local col = spireShade(tint)
+	local mat = if biomeName == "desert" and (key == "env_spire_a" or key == "env_spire_b") then Enum.Material.Slate else B.rockMat
 	for _, p in m:GetChildren() do
 		if p:IsA("BasePart") then
 			p.Color = col
-			p.Material = B.rockMat
+			p.Material = mat
 			keepMat(p)
 			p.CanCollide = false
 			p.CanQuery = false
+			p.CanTouch = false
 			p.CastShadow = false
 			partCount += 1
 		end
@@ -3991,7 +3781,7 @@ local function placeSkylineMesh(parent: Instance, key: string, x: number, z: num
 	return true
 end
 
--- Part fallback for a desert skyline cluster when meshes are unavailable: 2-3 overlapping rounded domes.
+-- Part fallback for a desert skyline cluster when meshes are unavailable: 2-3 overlapping rock domes.
 local function desertSkylineBlobs(parent: Instance, x: number, z: number, hMain: number, tint: Color3, baseY: number)
 	local n = rng:NextInteger(2, 3)
 	local fan = rng:NextNumber(0, TAU)
@@ -4009,26 +3799,18 @@ local function desertSkylineBlobs(parent: Instance, x: number, z: number, hMain:
 	end
 end
 
--- Desert skyline outcrop: 2-4 varied sandstone rock meshes clustered around (x, z), with a rounded blob fallback.
+-- Desert skyline outcrop: 2-3 varied craggy rock/spire/cliff meshes clustered around (x, z), sunk deeply.
 local function desertSkylineCluster(parent: Instance, x: number, z: number, hMain: number, tint: Color3, baseY: number)
-	local n = rng:NextInteger(2, 4)
+	local n = rng:NextInteger(2, 3)
 	local fan = rng:NextNumber(0, TAU)
 	local placed = 0
-	local cliffUsed = false
 	for i = 1, n do
 		local k = DESERT_SKYLINE_KEYS[rng:NextInteger(1, #DESERT_SKYLINE_KEYS)]
-		if k == "desert_cliff" then
-			if cliffUsed then
-				k = DESERT_SKYLINE_KEYS[rng:NextInteger(1, 3)]
-			else
-				cliffUsed = true
-			end
-		end
 		local a = fan + (if n > 1 then (i - 1) / (n - 1) * TAU else 0) + rng:NextNumber(-0.45, 0.45)
-		local off = if i == 1 then 0 else rng:NextNumber(0.28, 0.55) * hMain
-		local targetH = hMain * (if i == 1 then rng:NextNumber(0.65, 0.95) else rng:NextNumber(0.35, 0.7))
+		local off = if i == 1 then 0 else rng:NextNumber(0.24, 0.48) * hMain
+		local targetH = hMain * (if i == 1 then rng:NextNumber(0.75, 1.05) else rng:NextNumber(0.45, 0.75))
 		local sz = Assets.size(k)
-		local pieceScale = targetH / (if sz then sz.Y else 10)
+		local pieceScale = targetH / (if sz then sz.Y else 22)
 		if placeSkylineMesh(parent, k, x + math.cos(a) * off, z + math.sin(a) * off, pieceScale, baseY, jitter(tint, 0.06)) then
 			placed += 1
 		end
@@ -4039,68 +3821,73 @@ local function desertSkylineCluster(parent: Instance, x: number, z: number, hMai
 	maybeYield()
 end
 
--- giant spires beyond the boundary, standing behind the cliffs: pure silhouette
+-- giant natural mountain ridges & jagged spires beyond the boundary: staggered depth bands fading into atmospheric haze
 local function farMountains(parent: Instance)
-	-- two rings: tall spires (mesh) and broad low massifs between them, at different distances and heights, so the
-	-- silhouettes overlap and the haze fades them in layers instead of one flat band
+	if biomeName == "desert" then
+		-- Band 1 (near-rim canyon cliff wall band, d = 355..465): layered dark craggy cliff & spire massifs sunk below y = 0
+		for i = 1, 18 do
+			local a = (i + rng:NextNumber(-0.3, 0.3)) / 18 * TAU
+			local d = rng:NextNumber(355, 465)
+			local cx, cz = math.cos(a) * d, math.sin(a) * d
+			local hgt = rng:NextNumber(115, 175)
+			local tint = spireShade(rockTint())
+			local spanYaw = a + math.pi / 2 + rng:NextNumber(-0.24, 0.24)
+			local placed = false
+			local cliffSz = Assets.size("desert_cliff")
+			local cliffScale = hgt / (if cliffSz then cliffSz.Y else 22.4)
+			if placeHorizonSetpiece(parent, "desert_cliff", CFrame.new(cx, -18, cz) * CFrame.Angles(0, spanYaw, 0), cliffScale, tint, Enum.Material.Rock) then
+				placed = true
+			end
+			local spireKey = if i % 2 == 0 then "env_spire_b" else "env_spire_a"
+			local spireSz = Assets.size(spireKey)
+			local sScale = (hgt * rng:NextNumber(0.95, 1.32)) / (if spireSz then spireSz.Y else 45)
+			local sideDir = Vector3.new(math.cos(spanYaw), 0, -math.sin(spanYaw))
+			local off = sideDir * rng:NextNumber(42, 78) * (if i % 2 == 0 then 1 else -1)
+			if placeHorizonSetpiece(parent, spireKey, CFrame.new(cx + off.X, -22, cz + off.Z) * CFrame.Angles(0, spanYaw + rng:NextNumber(-0.7, 0.7), 0), sScale, jitter(tint, 0.06), Enum.Material.Slate) then
+				placed = true
+			end
+			if not placed then
+				desertSkylineBlobs(parent, cx, cz, hgt * 0.85, tint, 12)
+			end
+			maybeYield()
+		end
+		-- Band 2 (distant towering misty mountain peaks, d = 510..690): dramatic jagged peaks dissolving into golden haze
+		for i = 1, 24 do
+			local a = (i + rng:NextNumber(-0.35, 0.35)) / 24 * TAU
+			local d = rng:NextNumber(510, 690)
+			local x, z = math.cos(a) * d, math.sin(a) * d
+			local targetH = rng:NextNumber(165, 275)
+			local tint = rockTint()
+			if i % 3 == 0 then
+				desertSkylineCluster(parent, x, z, targetH * 0.82, tint, 4)
+			else
+				local key = if i % 2 == 0 then "env_spire_b" else "env_spire_a"
+				local sz = Assets.size(key)
+				local sc = targetH / (if sz then sz.Y else 45)
+				if not placeSkylineMesh(parent, key, x, z, sc, 6, tint) then
+					desertSkylineCluster(parent, x, z, targetH * 0.8, tint, 4)
+				end
+			end
+			maybeYield()
+		end
+		return
+	end
+	-- non-desert biomes: two rings of spires and massifs
 	local n = 26
 	for i = 1, n do
 		local a = (i + rng:NextNumber(-0.4, 0.4)) / n * TAU
 		local d = rng:NextNumber(370, 600)
 		local x, z = math.cos(a) * d, math.sin(a) * d
 		local s = rng:NextNumber(2.6, 7.4)
-		local key = "env_spire_b"
-		if biomeName == "desert" then
-			key = "desert_butte"
-			s *= BUTTE_SCALE * 0.6 -- flat-topped buttes have far more mass than the pointed crags: smaller on the skyline
-		end
 		local tint = rockTint()
-		if i % 2 == 0 then -- every other slot: a sandstone cluster (desert) or round stone clump (other biomes)
-			if biomeName == "desert" then
-				desertSkylineCluster(parent, x, z, 10 * s, tint, 38 + rng:NextNumber(0, 14))
-			else
-				stoneClump(parent, x, z, s * 0.55, tint, 38 + rng:NextNumber(0, 14), false)
-			end
+		if i % 2 == 0 then
+			stoneClump(parent, x, z, s * 0.55, tint, 38 + rng:NextNumber(0, 14), false)
 			continue
 		end
-		if not placeSkylineMesh(parent, key, x, z, s, 52, tint) then
-			if biomeName == "desert" then
-				desertSkylineCluster(parent, x, z, 10 * s, tint, 42)
-			else
-				stoneStack(parent, x, z, 60 * s, 14 * s, tint, false, 42)
-			end
+		if not placeSkylineMesh(parent, "env_spire_b", x, z, s, 52, tint) then
+			stoneStack(parent, x, z, 60 * s, 14 * s, tint, false, 42)
 		end
 		maybeYield()
-	end
-	-- massifs: on desert, layered real desert_cliff & desert_butte sandstone formations (zero raw rectangular Part slabs);
-	-- other biomes keep overlapping rounded domes
-	if biomeName == "desert" then
-		for i = 1, 18 do
-			local a = (i + rng:NextNumber(-0.32, 0.32)) / 18 * TAU
-			local d = rng:NextNumber(360, 520)
-			local cx, cz = math.cos(a) * d, math.sin(a) * d
-			local hgt = rng:NextNumber(88, 150)
-			local tint = spireShade(rockTint())
-			local spanYaw = a + math.pi / 2 + rng:NextNumber(-0.25, 0.25)
-			local placed = false
-			local cliffSz = Assets.size("desert_cliff")
-			local cliffScale = hgt / (if cliffSz then cliffSz.Y else 22.4)
-			if placeHorizonSetpiece(parent, "desert_cliff", CFrame.new(cx, -10, cz) * CFrame.Angles(0, spanYaw, 0), cliffScale, tint) then
-				placed = true
-			end
-			local butteSz = Assets.size("desert_butte")
-			local bScale = (hgt * rng:NextNumber(0.68, 0.96)) / (if butteSz then butteSz.Y else 10.3)
-			local sideDir = Vector3.new(math.cos(spanYaw), 0, -math.sin(spanYaw))
-			local off = sideDir * rng:NextNumber(46, 84) * (if i % 2 == 0 then 1 else -1)
-			if placeHorizonSetpiece(parent, "desert_butte", CFrame.new(cx + off.X, -8, cz + off.Z) * CFrame.Angles(0, spanYaw + rng:NextNumber(-0.6, 0.6), 0), bScale, jitter(tint, 0.06)) then
-				placed = true
-			end
-			if not placed then
-				desertSkylineBlobs(parent, cx, cz, hgt * 0.85, tint, 24)
-			end
-			maybeYield()
-		end
-		return
 	end
 	for i = 1, 22 do
 		local a = (i + rng:NextNumber(-0.45, 0.45)) / 22 * TAU
@@ -4114,17 +3901,14 @@ local function farMountains(parent: Instance)
 		local centre = Vector3.new(math.cos(a) * d, 0, math.sin(a) * d)
 		local pieces = rng:NextInteger(3, 5)
 		for k = 1, pieces do
-			local f = (k - 0.5) / pieces - 0.5 -- -0.5 .. 0.5 along the span
-			local top = hgt * rng:NextNumber(0.55, 1.05) * (1 - 0.5 * math.abs(f) * 2 * rng:NextNumber(0.3, 1)) -- crest height above y = 0
+			local f = (k - 0.5) / pieces - 0.5
+			local top = hgt * rng:NextNumber(0.55, 1.05) * (1 - 0.5 * math.abs(f) * 2 * rng:NextNumber(0.3, 1))
 			local pw = w / pieces * rng:NextNumber(1.3, 2.0)
 			local pd = depth * rng:NextNumber(0.5, 0.95)
 			local at = centre + span * Vector3.new(f * w, 0, rng:NextNumber(-0.3, 0.3) * depth)
-			local cf = CFrame.new(at.X, 0, at.Z) * span * CFrame.Angles(0, rng:NextNumber(-0.5, 0.5), 0) -- the dome's crest is at y = top
+			local cf = CFrame.new(at.X, 0, at.Z) * span * CFrame.Angles(0, rng:NextNumber(-0.5, 0.5), 0)
 			local b = blob(parent, Vector3.new(pw, top * 2, pd), cf, jitter(tint, 0.1), B.rockMat, false)
 			b.CastShadow = false
-			if biomeName == "desert" then
-				keepMat(b)
-			end
 		end
 		maybeYield()
 	end
@@ -4159,9 +3943,11 @@ end
 -- zone lit at -X / 30 degrees, ~91% at this angle, ~85% of the whole map).
 local SUN_DIR = Vector3.new(0.259, 0, -0.966)
 local SUN_ELEV = 0.707
+local DESERT_SUN_DIR = Vector3.new(0.45, 0, -0.893).Unit
 
-local function alignSun(m: { [string]: any })
-	local target = SUN_DIR
+local function alignSun(m: { [string]: any }, biome: string)
+	local target = if biome == "desert" then DESERT_SUN_DIR else SUN_DIR
+	local wantElev = if biome == "desert" then (m.elev or 0.32) else SUN_ELEV
 	local bestScore, bestLat, bestClock = -math.huge, 35, m.clock
 	local seen: { [string]: boolean } = {}
 	local ok = pcall(function()
@@ -4173,7 +3959,7 @@ local function alignSun(m: { [string]: any })
 				seen[string.format("%.2f,%.2f,%.2f", d.X, d.Y, d.Z)] = true
 				local hm = Vector3.new(d.X, 0, d.Z)
 				local align = if hm.Magnitude > 0.02 then hm.Unit:Dot(target) else 0
-				local score = align - math.abs(d.Y - SUN_ELEV) * 4 - (if d.Y < 0.05 then 3 else 0)
+				local score = align - math.abs(d.Y - wantElev) * 4 - (if d.Y < 0.05 then 3 else 0)
 				if score > bestScore then
 					bestScore, bestLat, bestClock = score, lat, clk
 				end
@@ -4207,12 +3993,12 @@ local function applyLighting(faction: string, biome: string)
 	Lighting.GlobalShadows = true
 	Lighting.EnvironmentDiffuseScale = m.envDiffuse or 0.25 -- low: shadows keep the biome hue and stay dark and contrasty
 	Lighting.EnvironmentSpecularScale = 0.5
-	Lighting.ExposureCompensation = m.expo + 0.15 -- a touch brighter: the old grade was dim and muddy
+	Lighting.ExposureCompensation = if biome == "desert" then m.expo else m.expo + 0.15
 	Lighting.Ambient = m.amb
 	Lighting.OutdoorAmbient = m.out
 	Lighting.ColorShift_Top = m.top
 	Lighting.ColorShift_Bottom = m.bottom
-	alignSun(m)
+	alignSun(m, biome)
 	pcall(function()
 		Lighting.ShadowSoftness = m.shadowSoft or 0.15
 	end)
@@ -4220,8 +4006,7 @@ local function applyLighting(faction: string, biome: string)
 		i:SetAttribute("OrbitfallMap", true)
 		i.Parent = Lighting
 	end
-	-- spectacle pass: dustier, warmer air in every biome (density floor 0.35, +haze, atmosphere colour nudged toward warm dust);
-	-- desert uses its own clear amber-orange atmosphere directly so distant landmarks stay readable and never turn olive
+	-- spectacle pass: dustier, warmer air in every biome; desert uses warm golden-ochre low-sun haze directly
 	local DUST_WARM = RGB(214, 170, 124)
 	local HAZE_WARM = { desert = 0, ash = 0.14, swamp = 0.12, ice = 0.1, crystal = 0.06 }
 	local HAZE_EXTRA = { desert = 0, ash = 0.9, swamp = 1.0, ice = 0.8, crystal = 0.8 }
@@ -4230,7 +4015,7 @@ local function applyLighting(faction: string, biome: string)
 		atm.Density = m.atmDensity
 		atm.Offset = m.atmOffset
 		atm.Haze = m.haze
-		atm.Glare = m.glare or 0
+		atm.Glare = m.glare or 0.55
 		atm.Color = m.atm
 		atm.Decay = m.decay
 		Lighting.FogColor = m.atm
@@ -4238,8 +4023,6 @@ local function applyLighting(faction: string, biome: string)
 		atm.Density = math.max(m.atmDensity, 0.35)
 		atm.Offset = m.atmOffset
 		atm.Haze = math.min(m.haze + (HAZE_EXTRA[biome] or 0.9), 6)
-		-- lighter dust than the first pass, so rocks, cliffs and props read at range (thick haze turned everything to mush),
-		-- and no sun glare in the air
 		atm.Density *= 0.8
 		atm.Haze *= 0.6
 		atm.Glare = 0
@@ -4256,7 +4039,7 @@ local function applyLighting(faction: string, biome: string)
 	local cc = Instance.new("ColorCorrectionEffect")
 	cc.TintColor = m.tint
 	cc.Saturation = if biome == "desert" then m.sat * 0.7 else m.sat * 0.5
-	cc.Contrast = if biome == "desert" then m.contrast * 0.55 else m.contrast * 0.5 -- the old 0.3+ crushed shadows to black once the sun moved off the horizon
+	cc.Contrast = if biome == "desert" then m.contrast * 0.55 else m.contrast * 0.5
 	cc.Brightness = 0.02
 	tag(cc)
 	local bloom = Instance.new("BloomEffect")
@@ -4265,8 +4048,8 @@ local function applyLighting(faction: string, biome: string)
 	bloom.Threshold = if biome == "desert" then 1.15 else 1.5 -- only real light sources / combat emissives bloom, never muted sand
 	tag(bloom)
 	local rays = Instance.new("SunRaysEffect")
-	rays.Intensity = m.rays * 0.25
-	rays.Spread = 0.9
+	rays.Intensity = if biome == "desert" then m.rays else m.rays * 0.25
+	rays.Spread = if biome == "desert" then 0.85 else 0.9
 	tag(rays)
 	local dof = Instance.new("DepthOfFieldEffect") -- soft far blur: makes the horizon feel huge
 	dof.FarIntensity = 0.12
@@ -4550,13 +4333,26 @@ function MapBuilder.build(faction: string?, biome: string?): any
 			pebble(props, x, z)
 		end
 	end
-	-- mid-ring spires / mesas: landmarks you walk around
-	for _ = 1, 14 do
+	-- mid-ring spires / craggy canyon outcrops: landmarks & ridge crests breaking sightlines between POIs
+	for _ = 1, if isDesert then 20 else 14 do
 		local a = rng:NextNumber(0, TAU)
-		local d = rng:NextNumber(185, 290)
-		local x, z = math.clamp(math.cos(a) * d, -272, 272), math.clamp(math.sin(a) * d, -272, 272)
-		if farFromSites(x, z, 70) and not inLane(x, z, 30) then
-			spire(props, x, z, rng:NextNumber(0.9, 2.1))
+		local d = if isDesert then rng:NextNumber(85, 275) else rng:NextNumber(185, 290)
+		local x, z = math.clamp(math.cos(a) * d, -268, 268), math.clamp(math.sin(a) * d, -268, 268)
+		if farFromSites(x, z, if isDesert then 54 else 70) and not inLane(x, z, if isDesert then 22 else 30) then
+			if isDesert and rng:NextNumber() < 0.45 then
+				placeMesh(props, "desert_cliff", x, z, {
+					scale = rng:NextNumber(0.75, 1.25),
+					tint = spireShade(rockTint()),
+					material = B.rockMat,
+					paint = keepMat,
+					collide = true,
+					align = 0.22,
+					sink = rng:NextNumber(0.22, 0.32),
+					maxSlope = 58,
+				})
+			else
+				spire(props, x, z, rng:NextNumber(0.8, 1.7))
+			end
 		end
 	end
 	-- crystal clusters (crystal biome only)
@@ -4907,44 +4703,7 @@ function MapBuilder.build(faction: string?, biome: string?): any
 				pe.Parent = host
 			end
 
-			-- 4. Quarry: pair of warm work lamps standing on opposite sides of the pit rim
-			do
-				local Q = placePos.quarry
-				local qInfo = shapeInfo.quarry
-				local rimR = (qInfo and qInfo.rimRadius or 40) + 3
-				local rampDir = (qInfo and qInfo.rampDir) or Vector3.xAxis
-				local side = Vector3.new(-rampDir.Z, 0, rampDir.X)
-				if side.Magnitude < 0.01 then
-					side = Vector3.zAxis
-				else
-					side = side.Unit
-				end
-				for idx, sgn in { -1, 1 } do
-					local lx, lz = Q.X + side.X * sgn * rimR, Q.Z + side.Z * sgn * rimR
-					local gy = groundY(lx, lz)
-					local poleH = 17
-					cyl(accents, 0.9, poleH, CFrame.new(lx, gy + poleH / 2 - 0.5, lz), RGB(56, 58, 64), Enum.Material.Metal, NOCOL)
-					local topPos = Vector3.new(lx, gy + poleH - 0.3, lz)
-					local lookCF = CFrame.lookAt(topPos, Vector3.new(Q.X, gy - 8, Q.Z))
-					local lampHead = decor(accents, Vector3.new(5.5, 2.0, 1.4), lookCF, RGB(255, 242, 200), Enum.Material.Neon, { CastShadow = false })
-					if idx == 1 then
-						accentLight(lampHead, RGB(255, 232, 180), 60, 3.2)
-						local pe = Instance.new("ParticleEmitter")
-						pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-						pe.Rate = 1.5
-						pe.Lifetime = NumberRange.new(1.5, 2.0)
-						pe.Speed = NumberRange.new(0, 0)
-						pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 14), NumberSequenceKeypoint.new(0.5, 18), NumberSequenceKeypoint.new(1, 14) })
-						pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 0.55), NumberSequenceKeypoint.new(1, 1) })
-						pe.Color = ColorSequence.new(RGB(255, 240, 195))
-						pe.LightEmission = 1
-						pe.LockedToPart = true
-						pe.Parent = lampHead
-					end
-				end
-			end
-
-			-- 5. Salt pan: bright sunlit shimmer / glare hovering over the salt flat
+			-- 4. Salt pan: bright sunlit shimmer / glare hovering over the salt flat
 			do
 				local S = placePos.saltpan
 				local host = emitterHost(accents, S + Vector3.new(0, 3.5, 0))

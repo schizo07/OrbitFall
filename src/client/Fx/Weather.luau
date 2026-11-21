@@ -29,7 +29,7 @@ local TOUCH_RATE = 0.4 -- particle rate cap on touch devices
 
 -- Colour grade per biome: tint, saturation, contrast, brightness (added to the map's own ColorCorrection)
 local GRADE = {
-	desert = { tint = RGB(248, 244, 236), sat = -0.08, contrast = 0.08, bright = 0.01 },
+	desert = { tint = RGB(255, 240, 218), sat = -0.05, contrast = 0.08, bright = 0.01 },
 	ash = { tint = RGB(255, 232, 222), sat = -0.12, contrast = 0.12, bright = -0.02 },
 	swamp = { tint = RGB(232, 255, 236), sat = 0.08, contrast = 0.04, bright = 0 },
 	ice = { tint = RGB(232, 244, 255), sat = -0.06, contrast = 0.05, bright = 0.03 },
@@ -40,10 +40,10 @@ local GRADE_STRONG = 1.9
 -- Storm look per biome (only desert / ash storm)
 local STORM = {
 	desert = {
-		-- bright bleached-tan dust haze (never muddy brown/olive): washes distant silhouettes into pale mist while keeping dark robots & combat emissives sharp
-		dust = RGB(224, 212, 188), atmColor = RGB(228, 218, 196), atmDecay = RGB(198, 188, 168),
-		density = 0.44, hazeAdd = 1.4, offset = 0.14,
-		tint = RGB(248, 242, 230), sat = -0.10, contrast = -0.02, bright = 0.03,
+		-- warm golden-amber dust haze: washes distant cliffs into layered misty silhouettes while keeping dark silhouettes & combat emissives sharp
+		dust = RGB(230, 194, 144), atmColor = RGB(234, 196, 144), atmDecay = RGB(184, 134, 82),
+		density = 0.48, hazeAdd = 1.6, offset = 0.16,
+		tint = RGB(255, 234, 202), sat = -0.08, contrast = -0.02, bright = 0.02,
 	},
 	ash = {
 		dust = RGB(96, 84, 80), atmColor = RGB(92, 78, 74), density = 0.75, hazeAdd = 3,

@@ -26,22 +26,22 @@ local PI = math.pi
 local TAU = math.pi * 2
 
 -- COG palette: Band 2 dark gunmetal silhouettes + bright-edged metallic trim + disciplined hazard/cyan accents
-local STEEL = RGB(66, 72, 82)
-local STEEL_D = RGB(38, 42, 50)
-local STEEL_L = RGB(128, 134, 144)
-local CONCRETE = RGB(96, 92, 84)
-local CONCRETE_D = RGB(66, 64, 60)
-local CRATE = RGB(76, 82, 92)
-local RUST = RGB(108, 72, 54)
+local STEEL = RGB(62, 66, 74)
+local STEEL_D = RGB(36, 39, 46)
+local STEEL_L = RGB(118, 122, 130)
+local CONCRETE = RGB(102, 96, 88)
+local CONCRETE_D = RGB(64, 61, 57)
+local CRATE = RGB(74, 78, 86)
+local RUST = RGB(98, 66, 50)
 local HAZ = RGB(228, 178, 42)
 local TEAL = RGB(70, 235, 225)
 local GLASS = RGB(48, 176, 176)
-local SOOT = RGB(28, 26, 28)
+local SOOT = RGB(26, 24, 26)
 local RED = RGB(255, 56, 46)
 local AMBER = RGB(255, 170, 56)
 
 local BIOME_LOOK = {
-	desert = { sand = RGB(114, 98, 80), rock = RGB(92, 82, 72) },
+	desert = { sand = RGB(126, 100, 74), rock = RGB(76, 65, 54) },
 	ash = { sand = RGB(90, 82, 78), rock = RGB(66, 61, 60) },
 	swamp = { sand = RGB(90, 106, 98), rock = RGB(70, 64, 84) },
 	ice = { sand = RGB(150, 162, 178), rock = RGB(122, 148, 192) },
@@ -357,11 +357,13 @@ local function ribbedDeck(parent: Instance, cf: CFrame, w: number, len: number, 
 		local rib = part(parent, Vector3.new(w - 0.9, 0.36, 0.42), deckCF * CFrame.new(0, 0.04, z), STEEL_L, false, { Material = Enum.Material.Metal, CastShadow = false })
 		keepMat(rib)
 	end
-	part(parent, Vector3.new(w - 0.6, 0.36, 0.55), deckCF * CFrame.new(0, 0.04, -len / 2 + 0.35), HAZ, false, { CastShadow = false })
+	if biomeName ~= "desert" then
+		part(parent, Vector3.new(w - 0.6, 0.36, 0.55), deckCF * CFrame.new(0, 0.04, -len / 2 + 0.35), HAZ, false, { CastShadow = false })
+	end
 	return topY + 0.18
 end
 
--- grounded brutalist concrete bunker wall: deep-sunk plinth, battered toe skirt, dark steel cap, single clean box collider
+-- grounded brutalist concrete bunker wall: deep-sunk plinth, battered toe skirt, angled buttress ribs, dark steel cap
 local function bunkerWall(parent: Instance, cf: CFrame, len: number, h: number, thick: number)
 	local loY = math.huge
 	local hiY = -math.huge
@@ -381,124 +383,90 @@ local function bunkerWall(parent: Instance, cf: CFrame, len: number, h: number, 
 	local topY = math.min(hiY + h, loY + h + 2.8)
 	local wallH = (topY - loY) + 9
 	local wcf = CFrame.new(cf.Position.X, topY, cf.Position.Z) * cf.Rotation
-	local body = part(parent, Vector3.new(thick, wallH, len), wcf * CFrame.new(0, -wallH / 2, 0), jit(CONCRETE, 0.05), true, { Material = Enum.Material.Concrete })
+	local body = part(parent, Vector3.new(thick, wallH, len), wcf * CFrame.new(0, -wallH / 2, 0), jit(CONCRETE, 0.04), true, { Material = Enum.Material.Concrete })
 	keepMat(body)
 	local skirtH = math.max(wallH - h * 0.62, 2.5)
-	local skirt = part(parent, Vector3.new(thick + 1.1, skirtH, len + 0.5), wcf * CFrame.new(0, -h * 0.62 - skirtH / 2, 0), CONCRETE_D, false, { Material = Enum.Material.Concrete, CastShadow = false })
+	local skirt = part(parent, Vector3.new(thick + 1.2, skirtH, len + 0.5), wcf * CFrame.new(0, -h * 0.62 - skirtH / 2, 0), CONCRETE_D, false, { Material = Enum.Material.Concrete, CastShadow = false })
 	keepMat(skirt)
-	local cap = part(parent, Vector3.new(thick + 0.35, 0.5, len + 0.25), wcf * CFrame.new(0, 0.12, 0), STEEL_D, false, { Material = Enum.Material.Metal, CastShadow = false })
+	local cap = part(parent, Vector3.new(thick + 0.35, 0.55, len + 0.25), wcf * CFrame.new(0, 0.14, 0), STEEL_D, false, { Material = Enum.Material.Metal, CastShadow = false })
 	keepMat(cap)
-	part(parent, Vector3.new(thick + 0.12, 0.62, math.min(len * 0.44, 5.2)), wcf * CFrame.new(0, -h * 0.26, 0), HAZ, false, { CastShadow = false })
+	if biomeName == "desert" then
+		-- clean angled brutalist concrete buttress ribs (zero bright yellow accent clutter)
+		for _, sz in { -len * 0.28, len * 0.28 } do
+			local rib = part(
+				parent,
+				Vector3.new(thick + 1.5, h * 0.78, 1.4),
+				wcf * CFrame.new(0, -h * 0.54, sz) * CFrame.Angles(0, 0, math.rad(8)),
+				CONCRETE_D,
+				false,
+				{ Material = Enum.Material.Concrete, CastShadow = false }
+			)
+			keepMat(rib)
+		end
+	else
+		part(parent, Vector3.new(thick + 0.12, 0.62, math.min(len * 0.44, 5.2)), wcf * CFrame.new(0, -h * 0.26, 0), HAZ, false, { CastShadow = false })
+	end
 end
 
--- grounded brutalist corner pillbox fighting position: deep-sunk concrete slab, waist-high firing parapet, wide
--- horizontal firing slit, overhanging sloped roof, wide-open rear & flank access (zero interior snagging, zero red Neon).
-local function cornerPillbox(parent: Instance, pos: Vector3, faceDir: Vector3)
-	local lo = lowAt(pos.X, pos.Z, 5.4)
-	local hi = highAt(pos.X, pos.Z, 5.4)
-	if hi - lo > 4.2 then
-		return
+-- stark monolithic brutalist concrete-and-steel outpost structure: deep-skirted foundation, angled buttresses,
+-- recessed dark blast door, overhanging cornice parapet (zero pipe spaghetti, zero cartoon yellow/red clutter).
+local function brutalistMonolith(parent: Instance, pos: Vector3, faceDir: Vector3, w: number, h: number, d: number, withSlit: boolean?): CFrame?
+	local checkR = math.max(w, d) * 0.45
+	local lo = lowAt(pos.X, pos.Z, checkR)
+	local hi = highAt(pos.X, pos.Z, checkR)
+	if hi - lo > 6.5 then
+		return nil
 	end
-	local floorY = hi + 0.28
+	local floorY = hi + 0.2
 	local dir = Vector3.new(faceDir.X, 0, faceDir.Z)
 	dir = if dir.Magnitude > 0.01 then dir.Unit else Vector3.new(0, 0, -1)
 	local fr = CFrame.lookAt(Vector3.new(pos.X, floorY, pos.Z), Vector3.new(pos.X + dir.X, floorY, pos.Z + dir.Z))
-	local plinthH = (floorY - lo) + 10
-	local plinth = part(parent, Vector3.new(10.6, plinthH, 9.6), fr * CFrame.new(0, -plinthH / 2, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete, CastShadow = true })
+	local plinthH = (floorY - lo) + 12
+	local plinth = part(parent, Vector3.new(w + 2.6, plinthH, d + 2.6), fr * CFrame.new(0, -plinthH / 2 + 0.4, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete, CastShadow = true })
 	keepMat(plinth)
-	local entryRamp = part(parent, Vector3.new(8.6, 1.3, 3.2), fr * CFrame.new(0, -0.78, 5.8) * CFrame.Angles(math.rad(-15), 0, 0), CONCRETE, true, { Material = Enum.Material.Concrete, CastShadow = false })
-	keepMat(entryRamp)
-	-- waist-high front parapet (-Z faces threat) with clear overhead firing slit (y = 3.5..7.2)
-	local parapet = part(parent, Vector3.new(9.8, 3.5, 1.6), fr * CFrame.new(0, 1.75, -3.9), CONCRETE, true, { Material = Enum.Material.Concrete })
-	keepMat(parapet)
-	local sill = part(parent, Vector3.new(9.95, 0.34, 1.78), fr * CFrame.new(0, 3.58, -3.9), STEEL_D, false, { Material = Enum.Material.Metal, CastShadow = false })
-	keepMat(sill)
-	part(parent, Vector3.new(4.4, 0.55, 1.7), fr * CFrame.new(0, 2.35, -3.92), HAZ, false, { CastShadow = false })
-	-- sturdy corner piers supporting overhanging roof (open rear & flanks for fast egress)
-	for _, sx in { -4.05, 4.05 } do
-		local frontPier = part(parent, Vector3.new(2.1, 7.6, 2.2), fr * CFrame.new(sx, 3.8, -3.6), CONCRETE_D, true, { Material = Enum.Material.Concrete })
-		keepMat(frontPier)
-		local rearPier = part(parent, Vector3.new(1.7, 7.2, 1.7), fr * CFrame.new(sx, 3.6, 3.6), CONCRETE_D, true, { Material = Enum.Material.Concrete })
-		keepMat(rearPier)
-	end
-	local roof = part(parent, Vector3.new(11.6, 1.5, 10.6), fr * CFrame.new(0, 8.0, -0.3) * CFrame.Angles(math.rad(-6), 0, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete })
-	keepMat(roof)
-	local brow = part(parent, Vector3.new(11.75, 0.45, 0.85), fr * CFrame.new(0, 7.65, -5.55), STEEL_D, false, { Material = Enum.Material.Metal, CastShadow = false })
-	keepMat(brow)
-end
-
--- grounded concrete supply bay holding clustered env_supply_crate meshes (and optional cog_tank_a/b on an adjoining pad)
-local function supplyBay(parent: Instance, pos: Vector3, faceDir: Vector3, tankKey: string?)
-	local lo = lowAt(pos.X, pos.Z, 5.5)
-	local hi = highAt(pos.X, pos.Z, 5.5)
-	if hi - lo > 3.8 then
-		return
-	end
-	local floorY = hi + 0.25
-	local dir = Vector3.new(faceDir.X, 0, faceDir.Z)
-	dir = if dir.Magnitude > 0.01 then dir.Unit else Vector3.new(0, 0, -1)
-	local fr = CFrame.lookAt(Vector3.new(pos.X, floorY, pos.Z), Vector3.new(pos.X + dir.X, floorY, pos.Z + dir.Z))
-	local plinthH = (floorY - lo) + 10
-	local plinth = part(parent, Vector3.new(11.4, plinthH, 8.8), fr * CFrame.new(0, -plinthH / 2, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete, CastShadow = true })
-	keepMat(plinth)
-	local apron = part(parent, Vector3.new(9.2, 1.2, 2.8), fr * CFrame.new(0, -0.75, -5.2) * CFrame.Angles(math.rad(15), 0, 0), CONCRETE, true, { Material = Enum.Material.Concrete, CastShadow = false })
+	-- main monolithic concrete volume
+	local body = part(parent, Vector3.new(w, h, d), fr * CFrame.new(0, h / 2, 0), CONCRETE, true, { Material = Enum.Material.Concrete, CastShadow = true })
+	keepMat(body)
+	-- battered lower concrete apron hugging the ground
+	local apron = part(parent, Vector3.new(w + 1.6, math.min(h * 0.28, 3.6), d + 1.6), fr * CFrame.new(0, math.min(h * 0.14, 1.8), 0), CONCRETE_D, false, { Material = Enum.Material.Concrete, CastShadow = false })
 	keepMat(apron)
-	local backWall = part(parent, Vector3.new(11.0, 3.2, 1.4), fr * CFrame.new(0, 1.6, 3.6), CONCRETE, true, { Material = Enum.Material.Concrete })
-	keepMat(backWall)
-	local cap = part(parent, Vector3.new(11.15, 0.36, 1.56), fr * CFrame.new(0, 3.32, 3.6), STEEL_D, false, { Material = Enum.Material.Metal, CastShadow = false })
+	-- heavy stepped roof cornice + dark steel cap
+	local cornice = part(parent, Vector3.new(w + 1.4, 1.6, d + 1.4), fr * CFrame.new(0, h + 0.5, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete, CastShadow = true })
+	keepMat(cornice)
+	local cap = part(parent, Vector3.new(w + 0.4, 0.55, d + 0.4), fr * CFrame.new(0, h + 1.5, 0), STEEL_D, false, { Material = Enum.Material.Metal, CastShadow = false })
 	keepMat(cap)
-	for _, spec in {
-		{ x = -3.1, z = 1.1, yaw = 0.08 },
-		{ x = 2.4, z = 1.2, yaw = -0.14 },
-		{ x = -0.3, z = -0.8, yaw = 0.22 },
-	} do
-		local ccf = fr * CFrame.new(spec.x, 0, spec.z) * CFrame.Angles(0, spec.yaw, 0)
-		local cm = Assets.get("env_supply_crate", { anchored = true })
-		if cm then
-			cm:ScaleTo(1.15)
-			cm:PivotTo(ccf)
-			for _, d in cm:GetDescendants() do
-				if d:IsA("BasePart") then
-					d.Anchored = true
-					d.CanCollide = d.Name == "Body"
-					d.CanQuery = d.Name == "Body"
-					d.CanTouch = false
-					keepMat(d)
-					count += 1
-				end
-			end
-			cm.Parent = parent
-		else
-			crate(parent, ccf.Position, spec.yaw, 4.4, 2.8, 3.2, true)
+	-- 4 angled brutalist corner buttresses leaning cleanly into the facade
+	for _, sx in { -1, 1 } do
+		for _, sz in { -1, 1 } do
+			local bH = h * 0.88
+			local bcf = fr
+				* CFrame.new(sx * (w * 0.5 + 0.5), bH * 0.46, sz * (d * 0.5 - 1.2))
+				* CFrame.Angles(0, 0, sx * math.rad(9))
+			local buttress = part(parent, Vector3.new(2.2, bH, 2.8), bcf, CONCRETE_D, false, { Material = Enum.Material.Concrete, CastShadow = false })
+			keepMat(buttress)
 		end
 	end
-	if tankKey then
-		local tp = (fr * CFrame.new(10.8, 0, 0.8)).Position
-		local tlo, thi = lowAt(tp.X, tp.Z, 5), highAt(tp.X, tp.Z, 5)
-		if thi - tlo <= 4.5 then
-			local tPlinthH = (thi - tlo) + 9
-			local tPlinth = part(parent, Vector3.new(12.2, tPlinthH, 11.4), CFrame.new(tp.X, thi + 0.15 - tPlinthH / 2, tp.Z) * fr.Rotation, CONCRETE_D, true, { Material = Enum.Material.Concrete, CastShadow = false })
-			keepMat(tPlinth)
-			local tm = Assets.get(tankKey, { anchored = true })
-			if tm then
-				tm:PivotTo(CFrame.new(tp.X, thi + 0.15, tp.Z) * fr.Rotation)
-				for _, d in tm:GetDescendants() do
-					if d:IsA("BasePart") then
-						d.Anchored = true
-						d.CanCollide = d.Name == "Body"
-						d.CanQuery = d.Name == "Body"
-						d.CanTouch = false
-						keepMat(d)
-						count += 1
-					end
-				end
-				tm.Parent = parent
-			end
-		end
+	-- recessed dark charcoal-steel blast door on the -Z front face
+	local doorW = math.clamp(w * 0.36, 5.2, 8.6)
+	local doorH = math.clamp(h * 0.46, 5.6, 8.2)
+	local frame = part(parent, Vector3.new(doorW + 1.4, doorH + 1.0, 1.2), fr * CFrame.new(0, doorH / 2 + 0.3, -d / 2 - 0.15), STEEL_D, false, { Material = Enum.Material.Metal, CastShadow = false })
+	keepMat(frame)
+	local leaf = part(parent, Vector3.new(doorW, doorH, 0.7), fr * CFrame.new(0, doorH / 2 + 0.15, -d / 2 - 0.52), SOOT, false, { Material = Enum.Material.Metal, CastShadow = false })
+	keepMat(leaf)
+	-- heavy overhanging concrete lintel brow above the blast door
+	local brow = part(parent, Vector3.new(doorW + 3.2, 1.4, 2.2), fr * CFrame.new(0, doorH + 1.3, -d / 2 - 0.8), CONCRETE_D, false, { Material = Enum.Material.Concrete, CastShadow = false })
+	keepMat(brow)
+	-- optional horizontal dark observation slit high on the front wall (for overlook bunkers)
+	if withSlit then
+		local slit = part(parent, Vector3.new(w * 0.68, 1.5, 0.8), fr * CFrame.new(0, h * 0.76, -d / 2 - 0.15), SOOT, false, { Material = Enum.Material.Metal, CastShadow = false })
+		keepMat(slit)
+		local visor = part(parent, Vector3.new(w * 0.76, 0.9, 2.4), fr * CFrame.new(0, h * 0.76 + 1.15, -d / 2 - 0.9), CONCRETE_D, false, { Material = Enum.Material.Concrete, CastShadow = false })
+		keepMat(visor)
 	end
+	return fr
 end
 
--- terrain-hugging sandstone cliff/butte/boulder framing a POI approach
+-- terrain-hugging craggy desert cliff/rock outcrop framing a POI approach
 local function rockLedge(parent: Instance, pos: Vector3, yaw: number, scale: number, key: string, tint: Color3, collide: boolean?)
 	local sz = Assets.size(key)
 	local r = (if sz then math.max(sz.X, sz.Z) else 10) * scale * 0.35
@@ -521,7 +489,7 @@ local function rockLedge(parent: Instance, pos: Vector3, yaw: number, scale: num
 			d.CanQuery = solid
 			d.CanTouch = false
 			d.Color = col
-			d.Material = Enum.Material.Sandstone
+			d.Material = Enum.Material.Rock
 			keepMat(d)
 			count += 1
 		end
@@ -545,7 +513,7 @@ local function poiBanner(parent: Instance, base: Vector3, yaw: number, isCrimson
 	glow(parent, Vector3.new(0.85, 0.85, 0.85), cf * CFrame.new(-1.6, h + 0.1, 0), if isCrimson then RED else AMBER, true)
 end
 
-local DESERT_ROCK_KEYS = { "desert_boulder_a", "desert_boulder_b", "desert_boulder_a" }
+local DESERT_ROCK_KEYS = { "env_rock_a", "env_rock_b", "env_rock_c" }
 
 local function placeMesh(parent: Instance, key: string, x: number, z: number, scale: number, tint: Color3, collide: boolean, maxSlope: number?): (Model?, boolean?)
 	local size = Assets.size(key)
@@ -563,7 +531,7 @@ local function placeMesh(parent: Instance, key: string, x: number, z: number, sc
 		m:ScaleTo(scale)
 	end
 	local h = (if size then size.Y else 6) * scale
-	local sink = rnd:NextNumber(0.12, 0.2)
+	local sink = rnd:NextNumber(0.14, 0.24)
 	m:PivotTo(CFrame.new(x, lo - h * sink, z) * CFrame.Angles(0, rnd:NextNumber(0, TAU), 0))
 	for _, p in m:GetDescendants() do
 		if p:IsA("BasePart") then
@@ -572,7 +540,7 @@ local function placeMesh(parent: Instance, key: string, x: number, z: number, sc
 			p.CanQuery = collide
 			p.CanTouch = false
 			p.Color = tint
-			p.Material = Enum.Material.Sandstone
+			p.Material = Enum.Material.Rock
 			p:SetAttribute("KeepMat", true)
 			count += 1
 		end
@@ -586,38 +554,38 @@ local function placeMesh(parent: Instance, key: string, x: number, z: number, sc
 	return m
 end
 
--- a cluster of rounded rocks (cover); in the desert, uses sandstone rock meshes with a rounded boulder fallback
+-- a cluster of craggy rocks (cover); in the desert, uses craggy env_rock meshes with a rock fallback
 local function rockCluster(parent: Instance, c: Vector3, radius: number, n: number, color: Color3)
 	if biomeName == "desert" then
 		for i = 1, n do
 			local a = rnd:NextNumber(0, TAU)
 			local d = if i == 1 then 0 else rnd:NextNumber(radius * 0.35, radius)
 			local x, z = c.X + math.cos(a) * d, c.Z + math.sin(a) * d
-			local w = rnd:NextNumber(4, 8.5)
+			local w = rnd:NextNumber(5, 9.5)
 			local h = w * rnd:NextNumber(0.55, 0.85)
 			local k = DESERT_ROCK_KEYS[rnd:NextInteger(1, #DESERT_ROCK_KEYS)]
 			local sz = Assets.size(k)
-			local scale = w / (if sz then math.max(sz.X, sz.Z) else 9)
+			local scale = w / (if sz then math.max(sz.X, sz.Z) else 12)
 			local col = jit(color, 0.08)
 			local m, skipped = placeMesh(parent, k, x, z, scale, col, true, 45)
 			if not m and not skipped then
 				local y = lowAt(x, z, w * 0.4) + h * 0.32
-				local b = ball(parent, Vector3.new(w, h, w * rnd:NextNumber(0.8, 1.1)), CFrame.new(x, y, z) * CFrame.Angles(0, rnd:NextNumber(0, TAU), 0), col, true, { Material = Enum.Material.Sandstone })
+				local b = ball(parent, Vector3.new(w, h, w * rnd:NextNumber(0.8, 1.1)), CFrame.new(x, y, z) * CFrame.Angles(0, rnd:NextNumber(0, TAU), 0), col, true, { Material = Enum.Material.Rock })
 				b:SetAttribute("KeepMat", true)
 			end
 		end
-		-- one taller sandstone outcrop for cover
+		-- one taller craggy rock outcrop for cover
 		local a = rnd:NextNumber(0, TAU)
 		local x, z = c.X + math.cos(a) * radius * 0.5, c.Z + math.sin(a) * radius * 0.5
-		local ph = rnd:NextNumber(7, 10)
-		local sz = Assets.size("desert_butte")
-		local scale = ph / (if sz then sz.Y else 10.3)
+		local ph = rnd:NextNumber(8, 12)
+		local sz = Assets.size("env_rock_b")
+		local scale = ph / (if sz then sz.Y else 14.2)
 		local col = jit(color, 0.06)
-		local m, skipped = placeMesh(parent, "desert_butte", x, z, scale, col, true, 45)
+		local m, skipped = placeMesh(parent, "env_rock_b", x, z, scale, col, true, 45)
 		if not m and not skipped then
 			local dia = ph * 0.72
 			local base = lowAt(x, z, dia * 0.4)
-			local b = ball(parent, Vector3.one * dia, CFrame.new(x, base + dia * 0.25, z), col, true, { Material = Enum.Material.Sandstone })
+			local b = ball(parent, Vector3.one * dia, CFrame.new(x, base + dia * 0.25, z), col, true, { Material = Enum.Material.Rock })
 			b:SetAttribute("KeepMat", true)
 		end
 		return
@@ -845,13 +813,15 @@ local function buildDrone(root: Instance, crashP: Vector3, spillP: Vector3, refP
 		partWreck(g, L, W)
 	end
 
-	-- a third container that fell and lies on the ground beside the wreck
+	-- a fallen dark-steel container beside the wreck (non-desert keeps yellow stripe)
 	local side = tailH:Cross(Vector3.yAxis)
 	local fx, fz = nose.X + tailH.X * 27 + side.X * 6, nose.Z + tailH.Z * 27 + side.Z * 6
 	local fallen = CFrame.new(fx, gy(fx, fz) + 2.0, fz) * CFrame.Angles(0, rnd:NextNumber(0, TAU), math.rad(16))
-	part(g, Vector3.new(6.4, 5.4, 6.6), fallen, CRATE, true)
-	for _, z in { -2.1, 2.1 } do
-		part(g, Vector3.new(6.5, 5.5, 1.1), fallen * CFrame.new(0, 0, z), HAZ, false)
+	part(g, Vector3.new(6.4, 5.4, 6.6), fallen, if biomeName == "desert" then STEEL_D else CRATE, true)
+	if biomeName ~= "desert" then
+		for _, z in { -2.1, 2.1 } do
+			part(g, Vector3.new(6.5, 5.5, 1.1), fallen * CFrame.new(0, 0, z), HAZ, false)
+		end
 	end
 
 	-- crash scar: scorched ground (painted terrain, soft edges) and kicked-up mounds around the nose
@@ -893,18 +863,25 @@ local function buildDrone(root: Instance, crashP: Vector3, spillP: Vector3, refP
 	anchors.flightLog = CFrame.lookAt(pp + out * 0.5, pp + out * 5)
 	anchors.flightLogPart = screen
 
-	-- debris along the line from the crash to the spilled crate
+	-- scorched crash wash along the line from the crash to the spilled crate (clean & sparse on desert)
 	local a0 = crashP + toSpill * 20
 	local a1 = spillP - toSpill * 18
 	local len = (a1 - a0).Magnitude
 	if len > 12 then
-		local n = math.clamp(math.floor(len / 9), 5, 18)
+		local n = if biomeName == "desert" then math.clamp(math.floor(len / 24), 3, 7) else math.clamp(math.floor(len / 9), 5, 18)
 		local lat = Vector3.new(-toSpill.Z, 0, toSpill.X)
 		for i = 1, n do
 			local t = (i - 0.5) / n
-			local base = a0:Lerp(a1, t) + lat * rnd:NextNumber(-7, 7)
+			local base = a0:Lerp(a1, t) + lat * rnd:NextNumber(-6, 6)
 			local x, z = base.X, base.Z
 			local y = gy(x, z)
+			if biomeName == "desert" then
+				scorch(Vector3.new(x, 0, z), rnd:NextNumber(4, 6.5))
+				if i % 2 == 0 then
+					part(g, Vector3.new(rnd:NextNumber(2.8, 4.6), 0.35, rnd:NextNumber(2.2, 3.6)), CFrame.new(x, y + 0.3, z) * CFrame.Angles(math.rad(rnd:NextNumber(-10, 10)), rnd:NextNumber(0, TAU), math.rad(rnd:NextNumber(-10, 10))), STEEL_D, false)
+				end
+				continue
+			end
 			local kind = rnd:NextInteger(1, 6)
 			if kind == 1 then
 				scorch(Vector3.new(x, 0, z), rnd:NextNumber(3, 5))
@@ -920,7 +897,7 @@ local function buildDrone(root: Instance, crashP: Vector3, spillP: Vector3, refP
 				local a = rnd:NextNumber(0, TAU)
 				local d = Vector3.new(math.cos(a), 0.12, math.sin(a)) * rnd:NextNumber(2.5, 4)
 				pipe(g, Vector3.new(x, y + 0.5, z) - d, Vector3.new(x, y + 0.5, z) + d, 0.6, STEEL_D, false)
-			elseif biomeName ~= "desert" then
+			else
 				local w = rnd:NextNumber(1.4, 2.2)
 				ball(g, Vector3.new(w, w, w), CFrame.new(x, y + w * 0.4, z), STEEL_L, false)
 			end
@@ -935,13 +912,18 @@ local function buildSpill(root: Instance, S: Vector3, crashP: Vector3, anchors: 
 	local function Wp(x: number, y: number, z: number): CFrame
 		return f * CFrame.new(x, y, z)
 	end
+	local plateCol = if biomeName == "desert" then STEEL else STEEL_L
 	part(g, Vector3.new(8, 0.8, 6), Wp(0, 0.4, 0), STEEL_D, false)
-	part(g, Vector3.new(8, 4.4, 0.7), Wp(0, 2.2, 3), STEEL_L, true)
-	part(g, Vector3.new(8.1, 1, 0.8), Wp(0, 3.4, 3), HAZ, false)
-	part(g, Vector3.new(0.7, 4, 6), Wp(-4, 2, 0) * CFrame.Angles(0, 0, math.rad(6)), STEEL_L, false)
-	part(g, Vector3.new(0.7, 4, 6), Wp(5.9, 0.9, 0) * CFrame.Angles(0, 0, math.rad(-74)), STEEL_L, false) -- the wall that burst outward
-	part(g, Vector3.new(7.6, 0.5, 5.6), Wp(-8.5, 0.6, 2) * CFrame.Angles(0, math.rad(70), math.rad(6)), STEEL, false) -- flung lid
-	part(g, Vector3.new(7.7, 0.2, 1.1), Wp(-8.5, 0.9, 2) * CFrame.Angles(0, math.rad(70), math.rad(6)), HAZ, false)
+	part(g, Vector3.new(8, 4.4, 0.7), Wp(0, 2.2, 3), plateCol, true)
+	if biomeName ~= "desert" then
+		part(g, Vector3.new(8.1, 1, 0.8), Wp(0, 3.4, 3), HAZ, false)
+	end
+	part(g, Vector3.new(0.7, 4, 6), Wp(-4, 2, 0) * CFrame.Angles(0, 0, math.rad(6)), plateCol, false)
+	part(g, Vector3.new(0.7, 4, 6), Wp(5.9, 0.9, 0) * CFrame.Angles(0, 0, math.rad(-74)), plateCol, false) -- the wall that burst outward
+	part(g, Vector3.new(7.6, 0.5, 5.6), Wp(-8.5, 0.6, 2) * CFrame.Angles(0, math.rad(70), math.rad(6)), STEEL_D, false) -- flung lid
+	if biomeName ~= "desert" then
+		part(g, Vector3.new(7.7, 0.2, 1.1), Wp(-8.5, 0.9, 2) * CFrame.Angles(0, math.rad(70), math.rad(6)), HAZ, false)
+	end
 	local deckTopY: number? = nil
 	if biomeName ~= "desert" then
 		for _ = 1, 5 do
@@ -1010,12 +992,17 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 		return Vector3.new(mx, topY + h, mz)
 	end
 
-	-- relay mast (~84 studs with extended spire, art/blender/cog_sites.py): bold dark armored base buttresses so the
-	-- silhouette reads strongly across the basin; the blinking beacon stays a part
+	-- relay mast (~84 studs with extended spire): stark dark armored base on desert (zero yellow collar clutter)
 	setPiece(g, "cog_relay_mast", CFrame.lookAt(Y(0), Y(0) + u))
-	-- dark brutalist base collar + 4 raking buttress fins + extended upper telemetry spire
-	vcyl(g, 11.5, 5.5, CFrame.new(Y(2.2)), STEEL_D, true)
-	vcyl(g, 12.2, 0.9, CFrame.new(Y(4.6)), HAZ, false)
+	if biomeName == "desert" then
+		local basePad = part(g, Vector3.new(12, 8.5, 12), CFrame.lookAt(Y(-1.2), Y(-1.2) + u), CONCRETE_D, true, { Material = Enum.Material.Concrete })
+		keepMat(basePad)
+		local cap = part(g, Vector3.new(12.4, 0.7, 12.4), CFrame.lookAt(Y(3.2), Y(3.2) + u), STEEL_D, false, { Material = Enum.Material.Metal })
+		keepMat(cap)
+	else
+		vcyl(g, 11.5, 5.5, CFrame.new(Y(2.2)), STEEL_D, true)
+		vcyl(g, 12.2, 0.9, CFrame.new(Y(4.6)), HAZ, false)
+	end
 	for k = 0, 3 do
 		local a = k / 4 * TAU + math.rad(45)
 		local dir = Vector3.new(math.cos(a), 0, math.sin(a))
@@ -1037,52 +1024,68 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 	blink(lamp, lt)
 	anchors.mastLight = lamp
 
-	-- generator housing beside the mast, sockets in front (facing the ramp)
+	-- stark brutalist listening monolith on desert (or generator housing on other biomes), cell sockets in front facing the ramp
 	local gpos
-	for _, cand in { m + pr * 13, m - pr * 13, m - u * 12 } do
+	for _, cand in { m + pr * 14, m - pr * 14, m - u * 13 } do
 		if math.abs(gy(cand.X, cand.Z) - topY) < 1.8 and math.abs(highAt(cand.X, cand.Z, 7) - topY) < 2.6 then
 			gpos = cand
 			break
 		end
 	end
-	gpos = gpos or (m + pr * 13)
+	gpos = gpos or (m + pr * 14)
 	local gb = Vector3.new(gpos.X, lowAt(gpos.X, gpos.Z, 6.5) - 0.2, gpos.Z)
 	local hf = CFrame.lookAt(gb, gb + u)
 	local function H(x: number, y: number, z: number): CFrame
 		return hf * CFrame.new(x, y, z)
 	end
-	local genPlinth = part(g, Vector3.new(13.6, 10.9, 15.6), H(0, -4.6, -1.2), CONCRETE_D, true, { Material = Enum.Material.Concrete })
-	keepMat(genPlinth)
-	local genDeckTop = ribbedDeck(g, H(0, 0.92, -6.2), 12.6, 5.4, false)
-	xcyl(g, 6.2, 10, H(0, 4.3, 1), STEEL, true)
-	for _, s in { -1, 1 } do
-		ball(g, Vector3.new(6.4, 6.4, 6.4), H(5 * s, 4.3, 1), STEEL, false)
-		xcyl(g, 6.5, 1.2, H(2.6 * s, 4.3, 1), HAZ, false)
-	end
-	part(g, Vector3.new(4.2, 5.4, 3.6), H(0, 3.2, 5), STEEL_L, true)
-	part(g, Vector3.new(5, 3.4, 1.2), H(0, 2.6, -2.7), STEEL_D, true)
-	for i, c in { TEAL, HAZ, if biomeName == "desert" then STEEL_L else RED } do
-		if biomeName == "desert" and i == 3 then
-			part(g, Vector3.new(0.6, 0.6, 0.6), H(-1.4 + i * 1.1, 3.6, -3.4), RGB(92, 34, 30), false)
-		else
+	local genDeckTop: number
+	if biomeName == "desert" then
+		local monoCF = brutalistMonolith(g, gpos, u, 16, 12.5, 11, true)
+		local deckAnchor = if monoCF then monoCF * CFrame.new(0, 0.1, -8.8) else H(0, 0.92, -6.4)
+		genDeckTop = ribbedDeck(g, deckAnchor, 13.0, 5.4, false)
+		local firstRing: Part? = nil
+		for _, x in { -3.8, 0, 3.8 } do
+			local sockPos = (deckAnchor * CFrame.new(x, 0.8, 0)).Position
+			local sockY = math.max(gy(sockPos.X, sockPos.Z), genDeckTop + 0.45)
+			vcyl(g, 3.2, 0.9, CFrame.new(sockPos.X, sockY - 0.45, sockPos.Z), STEEL_D, false)
+			local r = glow(g, Vector3.new(0.12, 3.5, 3.5), CFrame.new(sockPos.X, sockY + 0.03, sockPos.Z) * CFrame.Angles(0, 0, PI / 2), TEAL, false, 0.2)
+			r.Shape = Enum.PartType.Cylinder
+			firstRing = firstRing or r
+			table.insert(anchors.cellSpots.mesa, spot(Vector3.new(sockPos.X, sockY, sockPos.Z), u))
+		end
+		if firstRing then
+			light(firstRing, TEAL, 16, 1.0)
+		end
+	else
+		local genPlinth = part(g, Vector3.new(13.6, 10.9, 15.6), H(0, -4.6, -1.2), CONCRETE_D, true, { Material = Enum.Material.Concrete })
+		keepMat(genPlinth)
+		genDeckTop = ribbedDeck(g, H(0, 0.92, -6.2), 12.6, 5.4, false)
+		xcyl(g, 6.2, 10, H(0, 4.3, 1), STEEL, true)
+		for _, s in { -1, 1 } do
+			ball(g, Vector3.new(6.4, 6.4, 6.4), H(5 * s, 4.3, 1), STEEL, false)
+			xcyl(g, 6.5, 1.2, H(2.6 * s, 4.3, 1), HAZ, false)
+		end
+		part(g, Vector3.new(4.2, 5.4, 3.6), H(0, 3.2, 5), STEEL_L, true)
+		part(g, Vector3.new(5, 3.4, 1.2), H(0, 2.6, -2.7), STEEL_D, true)
+		for i, c in { TEAL, HAZ, RED } do
 			glow(g, Vector3.new(0.6, 0.6, 0.6), H(-1.4 + i * 1.1, 3.6, -3.4), c, true)
 		end
-	end
-	local ex = vcyl(g, 1.1, 4, H(2.8, 8.2, 1), STEEL_D, false)
-	smoke(emitterHost(g, ex.CFrame.Position + Vector3.new(0, 2.2, 0)), RGB(46, 42, 40), 2.4, 2, 7, 5)
-	pipe(g, H(0, 6, 5).Position, Y(3.5), 0.6, SOOT, false)
-	local firstRing: Part? = nil
-	for _, x in { -3.6, 0, 3.6 } do
-		local sockPos = H(x, 1.75, -6.4).Position
-		local sockY = math.max(sockPos.Y, genDeckTop + 0.45)
-		vcyl(g, 3.2, 0.9, CFrame.new(sockPos.X, sockY - 0.45, sockPos.Z), STEEL_D, false)
-		local r = glow(g, Vector3.new(0.12, 3.5, 3.5), CFrame.new(sockPos.X, sockY + 0.03, sockPos.Z) * CFrame.Angles(0, 0, PI / 2), TEAL, false, 0.2)
-		r.Shape = Enum.PartType.Cylinder
-		firstRing = firstRing or r
-		table.insert(anchors.cellSpots.mesa, spot(Vector3.new(sockPos.X, sockY, sockPos.Z), u))
-	end
-	if firstRing then
-		light(firstRing, TEAL, 16, 1.0)
+		local ex = vcyl(g, 1.1, 4, H(2.8, 8.2, 1), STEEL_D, false)
+		smoke(emitterHost(g, ex.CFrame.Position + Vector3.new(0, 2.2, 0)), RGB(46, 42, 40), 2.4, 2, 7, 5)
+		pipe(g, H(0, 6, 5).Position, Y(3.5), 0.6, SOOT, false)
+		local firstRing: Part? = nil
+		for _, x in { -3.6, 0, 3.6 } do
+			local sockPos = H(x, 1.75, -6.4).Position
+			local sockY = math.max(sockPos.Y, genDeckTop + 0.45)
+			vcyl(g, 3.2, 0.9, CFrame.new(sockPos.X, sockY - 0.45, sockPos.Z), STEEL_D, false)
+			local r = glow(g, Vector3.new(0.12, 3.5, 3.5), CFrame.new(sockPos.X, sockY + 0.03, sockPos.Z) * CFrame.Angles(0, 0, PI / 2), TEAL, false, 0.2)
+			r.Shape = Enum.PartType.Cylinder
+			firstRing = firstRing or r
+			table.insert(anchors.cellSpots.mesa, spot(Vector3.new(sockPos.X, sockY, sockPos.Z), u))
+		end
+		if firstRing then
+			light(firstRing, TEAL, 16, 1.0)
+		end
 	end
 
 	-- cover at the top of the ramp: find where the top ends, back off from it, leave the middle open
@@ -1103,24 +1106,13 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 	local rampLip = atRamp(dTop + 1, 0)
 	ribbedDeck(g, CFrame.lookAt(rampLip + Vector3.new(0, 0.14, 0), rampLip + Vector3.new(0, 0.14, 0) + u), 10.5, 6.2, false)
 	if biomeName == "desert" then
-		-- fortified brutalist mesa bastion: corner pillbox + flanking concrete bunker walls + supply bay + rock rim shoulders
-		local pbPos = atRamp(dTop - 2, -13.5)
-		cornerPillbox(g, pbPos, (u + pr * 0.25).Unit)
+		-- ONE clean concrete parapet cheek wall flanking the ramp + craggy rock rim shoulders (no pillbox/supplyBay clutter)
 		local wRight = atRamp(dTop - 1, 11.5)
-		bunkerWall(g, CFrame.lookAt(wRight, wRight + pr) * CFrame.Angles(0, math.rad(-14), 0), 10.5, 4.6, 2.2)
-		local wFlank = m - u * 16 + pr * 13
-		if math.abs(gy(wFlank.X, wFlank.Z) - topY) < 2.2 then
-			bunkerWall(g, CFrame.lookAt(wFlank, wFlank + u) * CFrame.Angles(0, math.rad(22), 0), 11.5, 5.0, 2.2)
-		end
-		local bayPos = m - u * 15 - pr * 11
-		if math.abs(gy(bayPos.X, bayPos.Z) - topY) < 2.2 then
-			supplyBay(g, bayPos, u, nil)
-		end
-		-- terrain-hugging sandstone ledges framing the mesa shoulders away from the ramp
+		bunkerWall(g, CFrame.lookAt(wRight, wRight + pr) * CFrame.Angles(0, math.rad(-14), 0), 11.0, 4.6, 2.2)
 		for _, off in {
-			{ ang = angOf(-u) + 0.55, r = 28, key = "desert_boulder_a", sc = 1.6 },
-			{ ang = angOf(-u) - 0.55, r = 29, key = "desert_butte", sc = 1.15 },
-			{ ang = angOf(u) + 1.25, r = 30, key = "desert_boulder_b", sc = 1.75 },
+			{ ang = angOf(-u) + 0.55, r = 29, key = "env_rock_b", sc = 1.15 },
+			{ ang = angOf(-u) - 0.55, r = 30, key = "desert_cliff", sc = 0.65 },
+			{ ang = angOf(u) + 1.25, r = 30, key = "env_rock_c", sc = 1.25 },
 		} do
 			local lp = polar(m, off.ang, off.r)
 			rockLedge(g, lp, off.ang + PI / 2, off.sc, off.key, look.rock, true)
@@ -1141,6 +1133,10 @@ local function buildMesa(root: Instance, m: Vector3, refP: Vector3, anchors: any
 end
 
 local function buildPowerLine(root: Instance, m: Vector3, refP: Vector3)
+	-- open wilderness on desert: zero valley telephone poles & overhead wires
+	if biomeName == "desert" then
+		return
+	end
 	local g = folder(root, "PowerLine")
 	local u = dirTo(m, refP)
 	local total = (Vector3.new(refP.X, 0, refP.Z) - Vector3.new(m.X, 0, m.Z)).Magnitude
@@ -1194,72 +1190,7 @@ local function buildQuarry(root: Instance, Q: Vector3, refP: Vector3, anchors: a
 	R0 = if R0 >= 40 then 22 else R0
 	local half = math.clamp(R0 - 4, 7, 16)
 
-	-- conveyor belt across the pit floor
-	local bf = CFrame.lookAt(Vector3.new(Q.X, 0, Q.Z), Vector3.new(Q.X, 0, Q.Z) + pr)
-	local function Bp(s: number, lat: number): Vector3
-		local p = bf:PointToWorldSpace(Vector3.new(lat, 0, -s))
-		return Vector3.new(p.X, 0, p.Z)
-	end
-	local topY = floorY
-	for _, s in { -half, -half / 2, 0, half / 2, half } do
-		local p = Bp(s, 0)
-		topY = math.max(topY, gy(p.X, p.Z))
-	end
-	topY += 1.3
-	local function B(s: number, lat: number, y: number): CFrame
-		local p = Bp(s, lat)
-		return CFrame.lookAt(Vector3.new(p.X, y, p.Z), Vector3.new(p.X, y, p.Z) + pr)
-	end
-	part(g, Vector3.new(4.6, 0.9, half * 2), B(0, 0, topY - 0.45), STEEL_L, true)
-	for _, lat in { -2.4, 2.4 } do
-		part(g, Vector3.new(0.5, 0.7, half * 2), B(0, lat, topY + 0.2), STEEL_D, false)
-	end
-	for s = -half + 1.5, half - 1, 3.2 do
-		xcyl(g, 0.9, 4.4, B(s, 0, topY - 0.2), STEEL_D, false)
-	end
-	for _, s in { -half, half } do
-		xcyl(g, 2, 5, B(s, 0, topY - 0.6), STEEL_D, false)
-	end
-	for _, s in { -half * 0.8, -half * 0.27, half * 0.27, half * 0.8 } do
-		for _, lat in { -2, 2 } do
-			local p = Bp(s, lat)
-			local gh = gy(p.X, p.Z)
-			local h = math.max(topY - 0.9 - gh, 0.5)
-			vcyl(g, 0.8, h, CFrame.new(p.X, gh + h / 2, p.Z), STEEL_D, false)
-		end
-	end
-	-- hopper over one end
-	local hp = Bp(-half * 0.55, 0)
-	vcyl(g, 5.4, 2.4, CFrame.new(hp.X, topY + 4.4, hp.Z), STEEL, false)
-	vcyl(g, 2.6, 2.4, CFrame.new(hp.X, topY + 2.6, hp.Z), STEEL_D, false)
-	for _, o in { { 2.2, 2.2 }, { -2.2, 2.2 }, { 2.2, -2.2 }, { -2.2, -2.2 } } do
-		local gh = gy(hp.X + o[1], hp.Z + o[2])
-		pipe(g, Vector3.new(hp.X + o[1], gh - 0.2, hp.Z + o[2]), Vector3.new(hp.X + o[1] * 0.8, topY + 3.6, hp.Z + o[2] * 0.8), 0.7, STEEL_D, false)
-	end
-	-- ore lumps on the belt, a marker under each resting cell
-	for _, s in { half * 0.78, -half * 0.8 } do
-		for _ = 1, 3 do
-			local p = Bp(s + rnd:NextNumber(-1.2, 1.2), rnd:NextNumber(-1.4, 1.4))
-			local w = rnd:NextNumber(1.1, 2)
-			ball(g, Vector3.new(w, w * 0.8, w), CFrame.new(p.X, topY + w * 0.3, p.Z), jit(RGB(70, 60, 64), 0.1), false)
-		end
-		local p = Bp(s, 0.4)
-		glow(g, Vector3.new(0.5, 0.5, 0.5), CFrame.new(p.X, topY + 1.1, p.Z), TEAL, true)
-	end
-	local step = if half >= 9 then 5 else half * 0.55
-	for _, s in { -step, 0, step } do
-		local p = Bp(s, 0)
-		vcyl(g, 2.8, 0.1, CFrame.new(p.X, topY + 0.07, p.Z), HAZ, false)
-		table.insert(anchors.cellSpots.quarry, spot(Vector3.new(p.X, topY, p.Z), u))
-	end
-
-	-- parked digger, nose toward the belt
-	local dpos = Q - u * math.clamp(R0 - 8, 6, 14)
-	local dg = Vector3.new(dpos.X, lowAt(dpos.X, dpos.Z, 4), dpos.Z)
-	local df = CFrame.lookAt(dg, dg + dirTo(dpos, Q))
-	setPiece(g, "cog_digger", df) -- art/blender/cog_sites.py: boom and bucket reach ~17 toward the belt
-
-	-- crane on the rim, its jib hanging over the belt
+	-- pit floor cell cradles & machinery
 	local rimR = 36
 	for r = R0, 70, 2 do
 		local p = Q + pr * r
@@ -1268,16 +1199,121 @@ local function buildQuarry(root: Instance, Q: Vector3, refP: Vector3, anchors: a
 			break
 		end
 	end
-	local cp = Q + pr * (rimR + 6)
-	local cb = Vector3.new(cp.X, lowAt(cp.X, cp.Z, 3.5), cp.Z)
-	local cf = CFrame.lookAt(cb, cb - pr)
-	setPiece(g, "cog_crane", cf) -- art/blender/cog_sites.py: jib 27 forward, hook hanging at 25 over the belt
 
-	-- opposite rim overlook: grounded concrete supply bay + cog_tank_b (desert) or hoist gantry (other biomes), strictly outside pit
-	local hpRim = Q - pr * (rimR + 8)
 	if biomeName == "desert" then
-		supplyBay(g, Vector3.new(hpRim.X, gy(hpRim.X, hpRim.Z), hpRim.Z), pr, "cog_tank_b")
+		-- dramatic rocky cliff excavation basin: clean dark extraction plinth on floor (100% clear for Pylon Lockdown)
+		-- + ONE stark brutalist concrete overlook bunker on the rim (zero crane/digger/tank/conveyor clutter)
+		local bf = CFrame.lookAt(Vector3.new(Q.X, floorY + 0.14, Q.Z), Vector3.new(Q.X + pr.X, floorY + 0.14, Q.Z + pr.Z))
+		local deckTop = ribbedDeck(g, bf, 8.6, 15.0, false)
+		local step = 5.0
+		local firstRing: Part? = nil
+		for _, s in { -step, 0, step } do
+			local wp = (bf * CFrame.new(0, 0, -s)).Position
+			local y = math.max(gy(wp.X, wp.Z), deckTop)
+			vcyl(g, 3.2, 0.18, CFrame.new(wp.X, y + 0.08, wp.Z), STEEL_D, false)
+			local r = glow(g, Vector3.new(0.12, 3.4, 3.4), CFrame.new(wp.X, y + 0.2, wp.Z) * CFrame.Angles(0, 0, PI / 2), TEAL, false, 0.22)
+			r.Shape = Enum.PartType.Cylinder
+			firstRing = firstRing or r
+			table.insert(anchors.cellSpots.quarry, spot(Vector3.new(wp.X, y + 0.1, wp.Z), u))
+		end
+		if firstRing then
+			light(firstRing, TEAL, 16, 1.0)
+		end
+
+		-- ONE clean brutalist concrete overlook bunker on the rim facing into the pit (strictly clear of pit & ramp)
+		local bunkerP = Q - pr * (rimR + 9)
+		brutalistMonolith(g, Vector3.new(bunkerP.X, gy(bunkerP.X, bunkerP.Z), bunkerP.Z), pr, 20, 12.5, 12, true)
+
+		-- clean ramp top apron + craggy perimeter cliff ledges framing the rocky basin
+		local rampTopP = Q + u * (rimR + 3)
+		local rampTopY = gy(rampTopP.X, rampTopP.Z)
+		ribbedDeck(g, CFrame.lookAt(Vector3.new(rampTopP.X, rampTopY + 0.14, rampTopP.Z), Vector3.new(rampTopP.X + u.X, rampTopY + 0.14, rampTopP.Z + u.Z)), 11.5, 6.8, false)
+		local rampA0 = angOf(u)
+		for _, off in {
+			{ ang = rampA0 + 2.35, r = rimR + 14, key = "desert_cliff", sc = 0.85 },
+			{ ang = rampA0 - 2.35, r = rimR + 13, key = "desert_cliff", sc = 0.78 },
+			{ ang = rampA0 + 1.05, r = rimR + 12, key = "env_rock_b", sc = 1.35 },
+			{ ang = rampA0 - 0.95, r = rimR + 12, key = "env_rock_c", sc = 1.3 },
+		} do
+			local lp = polar(Q, off.ang, off.r)
+			if math.max(math.abs(lp.X), math.abs(lp.Z)) <= 232 then
+				rockLedge(g, lp, off.ang + PI / 2, off.sc, off.key, look.rock, true)
+			end
+		end
 	else
+		-- conveyor belt across the pit floor
+		local bf = CFrame.lookAt(Vector3.new(Q.X, 0, Q.Z), Vector3.new(Q.X, 0, Q.Z) + pr)
+		local function Bp(s: number, lat: number): Vector3
+			local p = bf:PointToWorldSpace(Vector3.new(lat, 0, -s))
+			return Vector3.new(p.X, 0, p.Z)
+		end
+		local topY = floorY
+		for _, s in { -half, -half / 2, 0, half / 2, half } do
+			local p = Bp(s, 0)
+			topY = math.max(topY, gy(p.X, p.Z))
+		end
+		topY += 1.3
+		local function B(s: number, lat: number, y: number): CFrame
+			local p = Bp(s, lat)
+			return CFrame.lookAt(Vector3.new(p.X, y, p.Z), Vector3.new(p.X, y, p.Z) + pr)
+		end
+		part(g, Vector3.new(4.6, 0.9, half * 2), B(0, 0, topY - 0.45), STEEL_L, true)
+		for _, lat in { -2.4, 2.4 } do
+			part(g, Vector3.new(0.5, 0.7, half * 2), B(0, lat, topY + 0.2), STEEL_D, false)
+		end
+		for s = -half + 1.5, half - 1, 3.2 do
+			xcyl(g, 0.9, 4.4, B(s, 0, topY - 0.2), STEEL_D, false)
+		end
+		for _, s in { -half, half } do
+			xcyl(g, 2, 5, B(s, 0, topY - 0.6), STEEL_D, false)
+		end
+		for _, s in { -half * 0.8, -half * 0.27, half * 0.27, half * 0.8 } do
+			for _, lat in { -2, 2 } do
+				local p = Bp(s, lat)
+				local gh = gy(p.X, p.Z)
+				local h = math.max(topY - 0.9 - gh, 0.5)
+				vcyl(g, 0.8, h, CFrame.new(p.X, gh + h / 2, p.Z), STEEL_D, false)
+			end
+		end
+		-- hopper over one end
+		local hp = Bp(-half * 0.55, 0)
+		vcyl(g, 5.4, 2.4, CFrame.new(hp.X, topY + 4.4, hp.Z), STEEL, false)
+		vcyl(g, 2.6, 2.4, CFrame.new(hp.X, topY + 2.6, hp.Z), STEEL_D, false)
+		for _, o in { { 2.2, 2.2 }, { -2.2, 2.2 }, { 2.2, -2.2 }, { -2.2, -2.2 } } do
+			local gh = gy(hp.X + o[1], hp.Z + o[2])
+			pipe(g, Vector3.new(hp.X + o[1], gh - 0.2, hp.Z + o[2]), Vector3.new(hp.X + o[1] * 0.8, topY + 3.6, hp.Z + o[2] * 0.8), 0.7, STEEL_D, false)
+		end
+		-- ore lumps on the belt, a marker under each resting cell
+		for _, s in { half * 0.78, -half * 0.8 } do
+			for _ = 1, 3 do
+				local p = Bp(s + rnd:NextNumber(-1.2, 1.2), rnd:NextNumber(-1.4, 1.4))
+				local w = rnd:NextNumber(1.1, 2)
+				ball(g, Vector3.new(w, w * 0.8, w), CFrame.new(p.X, topY + w * 0.3, p.Z), jit(RGB(70, 60, 64), 0.1), false)
+			end
+			local p = Bp(s, 0.4)
+			glow(g, Vector3.new(0.5, 0.5, 0.5), CFrame.new(p.X, topY + 1.1, p.Z), TEAL, true)
+		end
+		local step = if half >= 9 then 5 else half * 0.55
+		for _, s in { -step, 0, step } do
+			local p = Bp(s, 0)
+			vcyl(g, 2.8, 0.1, CFrame.new(p.X, topY + 0.07, p.Z), HAZ, false)
+			table.insert(anchors.cellSpots.quarry, spot(Vector3.new(p.X, topY, p.Z), u))
+		end
+
+		-- parked digger, nose toward the belt
+		local dpos = Q - u * math.clamp(R0 - 8, 6, 14)
+		local dg = Vector3.new(dpos.X, lowAt(dpos.X, dpos.Z, 4), dpos.Z)
+		local df = CFrame.lookAt(dg, dg + dirTo(dpos, Q))
+		setPiece(g, "cog_digger", df)
+
+		-- crane on the rim, its jib hanging over the belt
+		local cp = Q + pr * (rimR + 6)
+		local cb = Vector3.new(cp.X, lowAt(cp.X, cp.Z, 3.5), cp.Z)
+		local cf = CFrame.lookAt(cb, cb - pr)
+		setPiece(g, "cog_crane", cf)
+
+		-- opposite rim hoist gantry
+		local hpRim = Q - pr * (rimR + 8)
 		local hb = Vector3.new(hpRim.X, lowAt(hpRim.X, hpRim.Z, 4), hpRim.Z)
 		local hcf = CFrame.lookAt(hb, hb + pr)
 		part(g, Vector3.new(10, 3.2, 8), hcf * CFrame.new(0, 1.2, 0), STEEL_D, true)
@@ -1290,35 +1326,15 @@ local function buildQuarry(root: Instance, Q: Vector3, refP: Vector3, anchors: a
 		pipe(g, (hcf * CFrame.new(0, 33.5, -14.5)).Position, (hcf * CFrame.new(0, 20, -14.5)).Position, 0.45, SOOT, false)
 		part(g, Vector3.new(3.2, 2.6, 3.2), hcf * CFrame.new(0, 18.8, -14.5), STEEL_D, false)
 		glow(g, Vector3.new(1.6, 1.6, 1.6), hcf * CFrame.new(0, 36.6, -1.5), AMBER, true)
-	end
 
-	-- deep-skirted ribbed metallic grating deck at the top lip of the quarry ramp (facing refinery, center clear)
-	local rampTopP = Q + u * (rimR + 3)
-	local rampTopY = gy(rampTopP.X, rampTopP.Z)
-	ribbedDeck(g, CFrame.lookAt(Vector3.new(rampTopP.X, rampTopY + 0.14, rampTopP.Z), Vector3.new(rampTopP.X + u.X, rampTopY + 0.14, rampTopP.Z + u.Z)), 11.5, 6.8, false)
-	if biomeName == "desert" then
-		-- fortified quarry entrance: corner pillbox + flanking concrete bunker cheek walls + framing sandstone ledges
-		local pbP = rampTopP + pr * 13.5 + u * 2
-		cornerPillbox(g, Vector3.new(pbP.X, gy(pbP.X, pbP.Z), pbP.Z), (u - pr * 0.2).Unit)
-		local wlP = rampTopP - pr * 12.0 + u * 1.5
-		bunkerWall(g, CFrame.lookAt(Vector3.new(wlP.X, gy(wlP.X, wlP.Z), wlP.Z), Vector3.new(wlP.X + pr.X, gy(wlP.X, wlP.Z), wlP.Z + pr.Z)) * CFrame.Angles(0, math.rad(16), 0), 10.5, 4.8, 2.2)
-		local rampA0 = angOf(u)
-		for _, off in {
-			{ ang = rampA0 + 2.35, r = rimR + 13, key = "desert_cliff", sc = 0.72 },
-			{ ang = rampA0 - 2.25, r = rimR + 12, key = "desert_butte", sc = 1.4 },
-			{ ang = rampA0 - 0.95, r = rimR + 11, key = "desert_boulder_a", sc = 1.5 },
-		} do
-			local lp = polar(Q, off.ang, off.r)
-			if math.max(math.abs(lp.X), math.abs(lp.Z)) <= 232 then
-				rockLedge(g, lp, off.ang + PI / 2, off.sc, off.key, look.rock, true)
-			end
-		end
-	else
+		local rampTopP = Q + u * (rimR + 3)
+		local rampTopY = gy(rampTopP.X, rampTopP.Z)
+		ribbedDeck(g, CFrame.lookAt(Vector3.new(rampTopP.X, rampTopY + 0.14, rampTopP.Z), Vector3.new(rampTopP.X + u.X, rampTopY + 0.14, rampTopP.Z + u.Z)), 11.5, 6.8, false)
 		local bannerP = rampTopP + pr * 8.5
 		poiBanner(g, Vector3.new(bannerP.X, gy(bannerP.X, bannerP.Z), bannerP.Z), angOf(u), true)
 	end
 
-	-- terraces: standing spots on the upper steps, rail along the lip, cover between spots
+	-- terraces: standing spots on the upper steps (clean rock ledges on desert, rails/crates on other biomes)
 	local rampA = angOf(u)
 	local cand = {}
 	for k = 0, 23 do
@@ -1368,22 +1384,33 @@ local function buildQuarry(root: Instance, Q: Vector3, refP: Vector3, anchors: a
 	for i, c in chosen do
 		local sp = polar(Q, c.a, c.r + 3.2)
 		table.insert(anchors.terraces, CFrame.lookAt(sp, Vector3.new(qc.X, sp.Y, qc.Z)))
-		local tan = Vector3.new(-math.sin(c.a), 0, math.cos(c.a))
-		local lip = polar(Q, c.a, c.r + 1.2)
-		for _, s in { -3.5, 3.5 } do
-			local px, pz = lip.X + tan.X * s, lip.Z + tan.Z * s
-			vcyl(g, 0.5, 2.5, CFrame.new(px, gy(px, pz) + 1.0, pz), STEEL_L, false)
-		end
-		pipe(g, lip + tan * -3.5 + Vector3.new(0, 2.3, 0), lip + tan * 3.5 + Vector3.new(0, 2.3, 0), 0.4, HAZ, false)
-		pipe(g, lip + tan * -3.5 + Vector3.new(0, 1.2, 0), lip + tan * 3.5 + Vector3.new(0, 1.2, 0), 0.35, STEEL_L, false)
-		if i % 2 == 1 then
-			local ca = c.a + math.rad(8)
-			local cp2 = polar(Q, ca, c.r + 2.2)
-			local ctan = Vector3.new(-math.sin(ca), 0, math.cos(ca))
-			local low = lowAt(cp2.X, cp2.Z, 2.4)
-			local bcf = CFrame.lookAt(Vector3.new(cp2.X, low + 1.1, cp2.Z), Vector3.new(cp2.X, low + 1.1, cp2.Z) + ctan)
-			part(g, Vector3.new(2, 2.8, 5.2), bcf, jit(CRATE, 0.05), true)
-			zcyl(g, 2.2, 5.2, bcf * CFrame.new(0, 1.4, 0), STEEL_L, false)
+		if biomeName == "desert" then
+			-- sparse low dark-concrete cover slabs on alternating terraces (zero yellow rails or toy crates)
+			if i % 3 == 1 then
+				local ca = c.a + math.rad(6)
+				local cp2 = polar(Q, ca, c.r + 2.4)
+				local ctan = Vector3.new(-math.sin(ca), 0, math.cos(ca))
+				local bcf = CFrame.lookAt(cp2, cp2 + ctan)
+				bunkerWall(g, bcf, 6.2, 3.4, 1.8)
+			end
+		else
+			local tan = Vector3.new(-math.sin(c.a), 0, math.cos(c.a))
+			local lip = polar(Q, c.a, c.r + 1.2)
+			for _, s in { -3.5, 3.5 } do
+				local px, pz = lip.X + tan.X * s, lip.Z + tan.Z * s
+				vcyl(g, 0.5, 2.5, CFrame.new(px, gy(px, pz) + 1.0, pz), STEEL_L, false)
+			end
+			pipe(g, lip + tan * -3.5 + Vector3.new(0, 2.3, 0), lip + tan * 3.5 + Vector3.new(0, 2.3, 0), 0.4, HAZ, false)
+			pipe(g, lip + tan * -3.5 + Vector3.new(0, 1.2, 0), lip + tan * 3.5 + Vector3.new(0, 1.2, 0), 0.35, STEEL_L, false)
+			if i % 2 == 1 then
+				local ca = c.a + math.rad(8)
+				local cp2 = polar(Q, ca, c.r + 2.2)
+				local ctan = Vector3.new(-math.sin(ca), 0, math.cos(ca))
+				local low = lowAt(cp2.X, cp2.Z, 2.4)
+				local bcf = CFrame.lookAt(Vector3.new(cp2.X, low + 1.1, cp2.Z), Vector3.new(cp2.X, low + 1.1, cp2.Z) + ctan)
+				part(g, Vector3.new(2, 2.8, 5.2), bcf, jit(CRATE, 0.05), true)
+				zcyl(g, 2.2, 5.2, bcf * CFrame.new(0, 1.4, 0), STEEL_L, false)
+			end
 		end
 	end
 end
@@ -1511,14 +1538,16 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 		table.insert(anchors.dormant, CFrame.lookAt(p, p - side * math.sign(d[2])))
 	end
 
-	-- plates, gears and sand drifts (cleaner floor on desert so cells and dormant robots read effortlessly)
-	for _ = 1, if biomeName == "desert" then 3 else 7 do
-		local s, l = rnd:NextNumber(-34, 38), rnd:NextNumber(-26, 26)
-		local p = onG(s, l)
-		if rnd:NextNumber() < 0.7 then
-			part(g, Vector3.new(rnd:NextNumber(3.5, 6), 0.5, rnd:NextNumber(2.5, 4)), CFrame.new(p + Vector3.new(0, 0.5, 0)) * CFrame.Angles(math.rad(rnd:NextNumber(-14, 14)), rnd:NextNumber(0, TAU), math.rad(rnd:NextNumber(-14, 14))), if rnd:NextNumber() < 0.3 then HAZ else STEEL, false)
-		else
-			xcyl(g, rnd:NextNumber(3, 5), 0.9, CFrame.new(p + Vector3.new(0, 1.3, 0)) * CFrame.Angles(rnd:NextNumber(-0.4, 0.4), rnd:NextNumber(0, TAU), rnd:NextNumber(1, 1.4)), RUST, false)
+	-- solemn misty gorge on desert: zero bright yellow toy gears or outpost clutter; sand drifts + craggy rock walls only
+	if biomeName ~= "desert" then
+		for _ = 1, 7 do
+			local s, l = rnd:NextNumber(-34, 38), rnd:NextNumber(-26, 26)
+			local p = onG(s, l)
+			if rnd:NextNumber() < 0.7 then
+				part(g, Vector3.new(rnd:NextNumber(3.5, 6), 0.5, rnd:NextNumber(2.5, 4)), CFrame.new(p + Vector3.new(0, 0.5, 0)) * CFrame.Angles(math.rad(rnd:NextNumber(-14, 14)), rnd:NextNumber(0, TAU), math.rad(rnd:NextNumber(-14, 14))), if rnd:NextNumber() < 0.3 then HAZ else STEEL, false)
+			else
+				xcyl(g, rnd:NextNumber(3, 5), 0.9, CFrame.new(p + Vector3.new(0, 1.3, 0)) * CFrame.Angles(rnd:NextNumber(-0.4, 0.4), rnd:NextNumber(0, TAU), rnd:NextNumber(1, 1.4)), RUST, false)
+			end
 		end
 	end
 	for _, d in { { 28, -8 }, { 16, 14 }, { -8, 16 }, { -24, -12 }, { 4, -16 }, { 36, 9 } } do
@@ -1531,18 +1560,12 @@ local function buildGraveyard(root: Instance, G: Vector3, refP: Vector3, anchors
 		end
 	end
 	if biomeName == "desert" then
-		-- grounded salvage outpost perimeter facing the Refinery approach (strictly outside ribs & dormant spots)
-		local pbP = onG(-14, -28)
-		cornerPillbox(g, pbP, toRef)
-		local bayP = onG(16, -27)
-		supplyBay(g, bayP, toRef, nil)
-		local wallP = onG(2, -31)
-		bunkerWall(g, CFrame.lookAt(wallP, wallP + axis), 11.5, 4.6, 2.2)
-		-- terrain-hugging sandstone ledges anchoring the fallen titan into the basin
+		-- craggy canyon rock walls framing the solemn fallen titan gorge (strictly outside ribs & dormant spots)
 		for _, off in {
-			{ s = -34, l = -26, yaw = angOf(axis) + 0.4, sc = 0.72, key = "desert_cliff" },
-			{ s = 30, l = 28, yaw = angOf(axis) - 0.5, sc = 1.45, key = "desert_butte" },
-			{ s = -18, l = 28, yaw = angOf(axis) + 1.1, sc = 1.65, key = "desert_boulder_a" },
+			{ s = -34, l = -26, yaw = angOf(axis) + 0.4, sc = 0.85, key = "desert_cliff" },
+			{ s = 30, l = 28, yaw = angOf(axis) - 0.5, sc = 0.75, key = "desert_cliff" },
+			{ s = -18, l = 29, yaw = angOf(axis) + 1.1, sc = 1.4, key = "env_rock_b" },
+			{ s = 22, l = -28, yaw = angOf(axis) - 1.2, sc = 1.35, key = "env_rock_c" },
 		} do
 			local lp = onG(off.s, off.l)
 			if math.max(math.abs(lp.X), math.abs(lp.Z)) <= 232 then
@@ -1646,15 +1669,14 @@ local function buildRefinery(root: Instance, R: Vector3, Q: Vector3, anchors: an
 				local y0 = lowAt(px, pz, 1.8)
 				if biomeName == "desert" then
 					local pcf = CFrame.lookAt(Vector3.new(px, y0, pz), Vector3.new(R.X, y0, R.Z))
-					local pier = part(g, Vector3.new(4.4, 21, 4.4), pcf * CFrame.new(0, 4.5, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete })
+					local pier = part(g, Vector3.new(5.0, 22, 5.0), pcf * CFrame.new(0, 4.8, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete })
 					keepMat(pier)
-					local cap = part(g, Vector3.new(4.8, 1.2, 4.8), pcf * CFrame.new(0, 15.2, 0), STEEL_D, false, { Material = Enum.Material.Metal })
+					local cap = part(g, Vector3.new(5.5, 1.3, 5.5), pcf * CFrame.new(0, 15.8, 0), STEEL_D, false, { Material = Enum.Material.Metal })
 					keepMat(cap)
-					part(g, Vector3.new(4.6, 1.0, 4.6), pcf * CFrame.new(0, 3.4, 0), HAZ, false)
-					-- recessed hooded amber gate guide bar (no raw Neon ball)
-					local strip = glow(g, Vector3.new(2.2, 0.55, 0.35), pcf * CFrame.new(0, 13.6, 2.25), AMBER, false)
+					-- subtle recessed amber gate slit (zero bright yellow bands or raw Neon balls)
+					local strip = glow(g, Vector3.new(2.0, 0.45, 0.35), pcf * CFrame.new(0, 13.8, 2.55), AMBER, false)
 					if e == 1 then
-						light(strip, AMBER, 24, 1.2)
+						light(strip, AMBER, 24, 1.1)
 					end
 				else
 					vcyl(g, 3.8, 15.5, CFrame.new(px, y0 + 6.25, pz), STEEL_D, true)
@@ -1732,35 +1754,49 @@ local function buildRefinery(root: Instance, R: Vector3, Q: Vector3, anchors: an
 	smoke(top, RGB(40, 36, 36), 10, 7, 16, 11)
 	light(top, AMBER, 30, 1.0)
 
-	-- outer-ring lifter crane gantry (r = 48, strictly clear of interior lifter pad & both gates)
+	if biomeName == "desert" then
+		-- ONE stark monolithic brutalist concrete-and-steel bunker compound opposite the stack
+		-- (zero pipe spaghetti, zero tank farm, zero crane/pillbox/supplyBay clutter; Cargo Lifter plaza 100% clear)
+		local bunkerAngles = pickAngles({ gateAngles[1], gateAngles[2], stackA }, math.rad(42), stackA + PI, 1, math.rad(40))
+		if #bunkerAngles > 0 then
+			local ba = bunkerAngles[1]
+			local bp = polar(R, ba, RING + 10)
+			if not nearSide(bp.X, bp.Z, 22) then
+				brutalistMonolith(g, bp, dirTo(bp, R), 24, 16, 15, true)
+			end
+		end
+		local rockAngles = pickAngles({ gateAngles[1], gateAngles[2] }, math.rad(34), stackA + math.rad(24), 3, math.rad(88))
+		local rockKeys = { "desert_cliff", "env_rock_b", "env_rock_c" }
+		local rockScales = { 0.8, 1.35, 1.3 }
+		for ri, ra in rockAngles do
+			local rp = polar(R, ra, RING + 22)
+			if not nearSide(rp.X, rp.Z, 24) then
+				rockLedge(g, rp, ra + PI / 2, rockScales[ri], rockKeys[ri], look.rock, true)
+			end
+		end
+		return
+	end
+
+	-- outer-ring lifter crane gantry (non-desert biomes)
 	local gantryAngles = pickAngles({ gateAngles[1], gateAngles[2], stackA }, math.rad(42), stackA + PI, 1, math.rad(40))
 	if #gantryAngles > 0 then
 		local ga = gantryAngles[1]
 		local gp = polar(R, ga, RING + 4)
 		local gy0 = lowAt(gp.X, gp.Z, 4.5)
-		local gyHi = highAt(gp.X, gp.Z, 4.5)
-		local gcf = CFrame.lookAt(Vector3.new(gp.X, gyHi + 0.2, gp.Z), Vector3.new(R.X, gyHi + 0.2, R.Z))
-		if biomeName == "desert" then
-			local pierH = (gyHi - gy0) + 10
-			local pier = part(g, Vector3.new(11, pierH, 11), gcf * CFrame.new(0, -pierH / 2, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete })
-			keepMat(pier)
-			setPiece(g, "cog_crane", gcf, true, 1.35)
-		else
-			local gcf0 = CFrame.lookAt(Vector3.new(gp.X, gy0, gp.Z), Vector3.new(R.X, gy0, R.Z))
-			part(g, Vector3.new(9, 4, 9), gcf0 * CFrame.new(0, 1.6, 0), STEEL_D, true)
-			for _, sx in { -3.4, 3.4 } do
-				pipe(g, (gcf0 * CFrame.new(sx, 2, 2.6)).Position, (gcf0 * CFrame.new(sx * 0.55, 44, 0)).Position, 1.8, STEEL_D, false)
-				pipe(g, (gcf0 * CFrame.new(sx, 2, -2.6)).Position, (gcf0 * CFrame.new(sx * 0.55, 44, 0)).Position, 1.8, STEEL_D, false)
-			end
-			part(g, Vector3.new(7.5, 2.8, 26), gcf0 * CFrame.new(0, 44.5, -8), STEEL_D, false)
-			part(g, Vector3.new(7.8, 0.9, 18), gcf0 * CFrame.new(0, 42.9, -6), HAZ, false)
-			pipe(g, (gcf0 * CFrame.new(0, 44, -19.5)).Position, (gcf0 * CFrame.new(0, 29, -19.5)).Position, 0.5, SOOT, false)
-			part(g, Vector3.new(3.6, 3.0, 3.6), gcf0 * CFrame.new(0, 27.5, -19.5), STEEL, false)
-			glow(g, Vector3.new(1.8, 1.8, 1.8), gcf0 * CFrame.new(0, 47.0, 0), RED, true)
+		local gcf0 = CFrame.lookAt(Vector3.new(gp.X, gy0, gp.Z), Vector3.new(R.X, gy0, R.Z))
+		part(g, Vector3.new(9, 4, 9), gcf0 * CFrame.new(0, 1.6, 0), STEEL_D, true)
+		for _, sx in { -3.4, 3.4 } do
+			pipe(g, (gcf0 * CFrame.new(sx, 2, 2.6)).Position, (gcf0 * CFrame.new(sx * 0.55, 44, 0)).Position, 1.8, STEEL_D, false)
+			pipe(g, (gcf0 * CFrame.new(sx, 2, -2.6)).Position, (gcf0 * CFrame.new(sx * 0.55, 44, 0)).Position, 1.8, STEEL_D, false)
 		end
+		part(g, Vector3.new(7.5, 2.8, 26), gcf0 * CFrame.new(0, 44.5, -8), STEEL_D, false)
+		part(g, Vector3.new(7.8, 0.9, 18), gcf0 * CFrame.new(0, 42.9, -6), HAZ, false)
+		pipe(g, (gcf0 * CFrame.new(0, 44, -19.5)).Position, (gcf0 * CFrame.new(0, 29, -19.5)).Position, 0.5, SOOT, false)
+		part(g, Vector3.new(3.6, 3.0, 3.6), gcf0 * CFrame.new(0, 27.5, -19.5), STEEL, false)
+		glow(g, Vector3.new(1.8, 1.8, 1.8), gcf0 * CFrame.new(0, 47.0, 0), RED, true)
 	end
 
-	-- tanks and pipes
+	-- tanks and pipes (non-desert biomes)
 	local nTanks = if haul then 4 else 3
 	local rTank = if haul then 58 else 42
 	local avoid = { gateAngles[1], gateAngles[2], stackA }
@@ -1774,39 +1810,6 @@ local function buildRefinery(root: Instance, R: Vector3, Q: Vector3, anchors: an
 		if not nearSide(p.X, p.Z, 20) then
 			tank(g, p, i % 2)
 			table.insert(tpos, { p = p, a = a })
-		end
-	end
-	if biomeName == "desert" then
-		-- fortified outer pillboxes, concrete supply bay, and framing rock ledges (strictly outside gates & lifter plaza)
-		local pbAvoid = { gateAngles[1], gateAngles[2], stackA }
-		if #gantryAngles > 0 then
-			table.insert(pbAvoid, gantryAngles[1])
-		end
-		for _, t in tpos do
-			table.insert(pbAvoid, t.a)
-		end
-		local pbAngles = pickAngles(pbAvoid, math.rad(24), gateAngles[1] + math.rad(34), 2, math.rad(95))
-		for _, pa in pbAngles do
-			local pp = polar(R, pa, RING + 10)
-			if not nearSide(pp.X, pp.Z, 24) then
-				cornerPillbox(g, pp, dirTo(R, pp))
-			end
-		end
-		local bayAngles = pickAngles(pbAvoid, math.rad(24), gateAngles[2] - math.rad(38), 1, math.rad(45))
-		if #bayAngles > 0 then
-			local bp = polar(R, bayAngles[1], RING + 11)
-			if not nearSide(bp.X, bp.Z, 24) then
-				supplyBay(g, bp, dirTo(R, bp), nil)
-			end
-		end
-		local rockAngles = pickAngles({ gateAngles[1], gateAngles[2] }, math.rad(34), stackA + math.rad(20), 3, math.rad(88))
-		local rockKeys = { "desert_cliff", "desert_boulder_a", "desert_butte" }
-		local rockScales = { 0.7, 1.55, 1.25 }
-		for ri, ra in rockAngles do
-			local rp = polar(R, ra, RING + 20)
-			if not nearSide(rp.X, rp.Z, 24) then
-				rockLedge(g, rp, ra + PI / 2, rockScales[ri], rockKeys[ri], look.rock, true)
-			end
 		end
 	end
 	if haul then
@@ -1842,7 +1845,7 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 		ribbedDeck(g, fr, 5.6, 3.8, false)
 	end
 
-	-- perimeter LZ marker stanchions at r = 27.5 (taller silhouetted bollards + disciplined pennants; 1 PointLight within LIGHT_CAP)
+	-- perimeter LZ marker bollards at r = 27.5 (clean low concrete bollards on desert; stanchions elsewhere; 24-stud LZ 100% clear)
 	local litBeacon = false
 	for i = 0, 5 do
 		local a = math.rad(15 + i * 60)
@@ -1852,16 +1855,29 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 			if hi - lo <= 1.8 then
 				local base = Vector3.new(p.X, lo - 0.1, p.Z)
 				local fr = CFrame.lookAt(base, Vector3.new(P.X, base.Y, P.Z))
-				local stPlinth = part(g, Vector3.new(2.8, 6.2, 2.8), fr * CFrame.new(0, -2.1, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete })
-				keepMat(stPlinth)
-				vcyl(g, 1.15, 5.8, fr * CFrame.new(0, 3.4, 0), STEEL_D, true)
-				vcyl(g, 1.32, 0.7, fr * CFrame.new(0, 4.4, 0), HAZ, false)
-				part(g, Vector3.new(1.8, 0.4, 1.8), fr * CFrame.new(0, 6.2, 0), STEEL_L, false)
-				local lampCol = if i % 2 == 0 then AMBER else TEAL
-				local cap = glow(g, Vector3.new(1.0, 0.85, 1.0), fr * CFrame.new(0, 6.8, 0), lampCol, true)
-				if not litBeacon and i % 2 == 0 then
-					litBeacon = true
-					light(cap, AMBER, 30, 1.4)
+				if biomeName == "desert" then
+					local bollard = part(g, Vector3.new(2.4, 7.6, 2.4), fr * CFrame.new(0, -1.1, 0), CONCRETE, true, { Material = Enum.Material.Concrete })
+					keepMat(bollard)
+					local collar = part(g, Vector3.new(2.7, 0.45, 2.7), fr * CFrame.new(0, 2.7, 0), STEEL_D, false, { Material = Enum.Material.Metal })
+					keepMat(collar)
+					local lampCol = if i % 2 == 0 then AMBER else TEAL
+					local cap = glow(g, Vector3.new(1.1, 0.35, 1.1), fr * CFrame.new(0, 3.05, 0), lampCol, false)
+					if not litBeacon and i % 2 == 0 then
+						litBeacon = true
+						light(cap, AMBER, 28, 1.2)
+					end
+				else
+					local stPlinth = part(g, Vector3.new(2.8, 6.2, 2.8), fr * CFrame.new(0, -2.1, 0), CONCRETE_D, true, { Material = Enum.Material.Concrete })
+					keepMat(stPlinth)
+					vcyl(g, 1.15, 5.8, fr * CFrame.new(0, 3.4, 0), STEEL_D, true)
+					vcyl(g, 1.32, 0.7, fr * CFrame.new(0, 4.4, 0), HAZ, false)
+					part(g, Vector3.new(1.8, 0.4, 1.8), fr * CFrame.new(0, 6.2, 0), STEEL_L, false)
+					local lampCol = if i % 2 == 0 then AMBER else TEAL
+					local cap = glow(g, Vector3.new(1.0, 0.85, 1.0), fr * CFrame.new(0, 6.8, 0), lampCol, true)
+					if not litBeacon and i % 2 == 0 then
+						litBeacon = true
+						light(cap, AMBER, 30, 1.4)
+					end
 				end
 			end
 		end
@@ -1901,10 +1917,37 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 		return nil
 	end
 
-	local innerCands = candsAt({ 31, 35, 39 }, 15, 4.5, 1.8)
-	local outerCands = candsAt({ 43, 47, 51 }, 10, 7, 2.2)
+	local innerCands = candsAt({ 33, 37, 40 }, 15, 4.5, 1.8)
+	local outerCands = candsAt({ 45, 49, 53 }, 10, 7, 2.4)
 
-	-- outer anchor: wrecked COG hauler + scorched ground + detached wheel/axle + cargo crate
+	if biomeName == "desert" then
+		-- wide stark alkali extraction basin: 2 clean low concrete cover walls + craggy perimeter cliffs (zero hauler/pillbox clutter)
+		for _ = 1, 2 do
+			local c = takeFrom(innerCands, math.rad(95))
+			if c then
+				local inward = dirTo(c.p, P)
+				local tan = Vector3.new(-inward.Z, 0, inward.X)
+				local fr = CFrame.lookAt(c.p, c.p + tan) * CFrame.Angles(0, rnd:NextNumber(-0.15, 0.15), 0)
+				bunkerWall(g, fr, 11.5, 4.4, 2.2)
+			end
+		end
+		local cliffSpecs = {
+			{ key = "desert_cliff", sc = 0.88 },
+			{ key = "env_rock_b", sc = 1.45 },
+			{ key = "desert_cliff", sc = 0.78 },
+			{ key = "env_rock_c", sc = 1.4 },
+			{ key = "env_rock_b", sc = 1.25 },
+		}
+		for _, cs in cliffSpecs do
+			local c = takeFrom(outerCands, math.rad(55))
+			if c then
+				rockLedge(g, c.p, c.a + PI / 2, cs.sc, cs.key, look.rock, true)
+			end
+		end
+		return
+	end
+
+	-- outer anchor (non-desert biomes): wrecked COG hauler + scorched ground + detached wheel/axle + cargo crate
 	local hauler = takeFrom(outerCands, math.rad(45))
 	if hauler then
 		local c = hauler.p
@@ -1914,13 +1957,11 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 		local function Hh(x: number, y: number, z: number): CFrame
 			return fr * CFrame.new(x, y, z)
 		end
-		-- the hauler (art/blender/cog_sites.py): cab at the front (-Z), a rear wheel torn off, a crate still on the bed
 		setPiece(g, "cog_hauler_wreck", Hh(0, 0, 0) * CFrame.Angles(math.rad(3), 0, math.rad(4)))
 		scorch(base, 7)
 		local cb2 = Hh(-8.5, 2.6, 9) * CFrame.Angles(0, 0.4, math.rad(8))
 		part(g, Vector3.new(6.2, 5, 7), cb2, CRATE, true)
 		part(g, Vector3.new(6.3, 5.1, 1.1), cb2 * CFrame.new(0, 0, 1.8), HAZ, false)
-		-- detached heavy wheel + bent axle strut lying in the alkali dust
 		local wp = Hh(6.5, 0, 6.2).Position
 		local wy = gy(wp.X, wp.Z)
 		local wcf = CFrame.new(wp.X, wy + 0.75, wp.Z) * CFrame.Angles(math.rad(72), 0.6, math.rad(18))
@@ -1928,7 +1969,6 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 		vcyl(g, 2.2, 1.9, wcf, STEEL_L, false)
 		pipe(g, Vector3.new(wp.X - 1.2, wy + 0.5, wp.Z - 0.6), Vector3.new(wp.X + 2.4, wy + 1.1, wp.Z + 1.8), 0.55, RUST, false)
 		smoke(emitterHost(g, Hh(0, 8.5, -3).Position), RGB(42, 38, 38), 3.6, 3, 8, 5)
-		-- tall dark-iron extraction signal mast beside the hauler (clear of LZ, bold east-horizon silhouette)
 		local mp = Hh(10.5, 0, -4).Position
 		local my = lowAt(mp.X, mp.Z, 2.5)
 		part(g, Vector3.new(3.6, 2.2, 3.6), CFrame.new(mp.X, my + 0.9, mp.Z), STEEL_D, true)
@@ -1938,65 +1978,41 @@ local function buildSaltPan(root: Instance, P: Vector3, look: { sand: Color3, ro
 		glow(g, Vector3.new(1.5, 1.5, 1.5), CFrame.new(mp.X, my + 28.6, mp.Z), TEAL, true)
 	end
 
-	-- inner tactical defense perimeter (r = 31-39, keeping the 24-stud Skiff LZ 100% clear)
-	if biomeName == "desert" then
-		for _ = 1, 2 do
-			local c = takeFrom(innerCands, math.rad(68))
-			if c then
-				cornerPillbox(g, c.p, dirTo(P, c.p))
+	for i = 1, 3 do
+		local c = takeFrom(innerCands, math.rad(36))
+		if c then
+			local pos = c.p
+			local base = Vector3.new(pos.X, lowAt(pos.X, pos.Z, 4) - 0.15, pos.Z)
+			local inward = dirTo(pos, P)
+			local fr = CFrame.lookAt(base, base + inward) * CFrame.Angles(0, rnd:NextNumber(-0.22, 0.22), 0)
+			part(g, Vector3.new(9.6, 4.6, 2.0), fr * CFrame.new(0, 2.3, 0), jit(STEEL_D, 0.06), true)
+			local cap = part(g, Vector3.new(9.7, 0.42, 1.7), fr * CFrame.new(0, 4.7, 0), STEEL_L, false, { Material = Enum.Material.Metal, CastShadow = false })
+			cap:SetAttribute("KeepMat", true)
+			part(g, Vector3.new(9.8, 0.75, 2.1), fr * CFrame.new(0, 3.25, 0), HAZ, false)
+			part(g, Vector3.new(9.4, 1.2, 2.3), fr * CFrame.new(0, 0.6, 0), STEEL, false)
+			for _, sx in { -3.4, 3.4 } do
+				pipe(g, (fr * CFrame.new(sx, 0.2, -1.8)).Position, (fr * CFrame.new(sx, 3.5, -0.5)).Position, 0.45, STEEL_D, false)
+			end
+			if i == 1 then
+				local bp = (fr * CFrame.new(6.2, 0, -0.5)).Position
+				poiBanner(g, Vector3.new(bp.X, gy(bp.X, bp.Z), bp.Z), c.a, false)
 			end
 		end
-		for _ = 1, 2 do
-			local c = takeFrom(innerCands, math.rad(42))
-			if c then
-				local inward = dirTo(c.p, P)
-				local tan = Vector3.new(-inward.Z, 0, inward.X)
-				local fr = CFrame.lookAt(c.p, c.p + tan) * CFrame.Angles(0, rnd:NextNumber(-0.18, 0.18), 0)
-				bunkerWall(g, fr, 10.6, 4.6, 2.2)
-			end
-		end
-		local bayC = takeFrom(innerCands, math.rad(40))
-		if bayC then
-			supplyBay(g, bayC.p, dirTo(bayC.p, P), nil)
-		end
-	else
-		for i = 1, 3 do
-			local c = takeFrom(innerCands, math.rad(36))
-			if c then
-				local pos = c.p
-				local base = Vector3.new(pos.X, lowAt(pos.X, pos.Z, 4) - 0.15, pos.Z)
-				local inward = dirTo(pos, P)
-				local fr = CFrame.lookAt(base, base + inward) * CFrame.Angles(0, rnd:NextNumber(-0.22, 0.22), 0)
-				-- waist-high weathered COG blast barrier (4.6 studs tall) with bright metallic cap & brace struts
-				part(g, Vector3.new(9.6, 4.6, 2.0), fr * CFrame.new(0, 2.3, 0), jit(STEEL_D, 0.06), true)
-				local cap = part(g, Vector3.new(9.7, 0.42, 1.7), fr * CFrame.new(0, 4.7, 0), STEEL_L, false, { Material = Enum.Material.Metal, CastShadow = false })
-				cap:SetAttribute("KeepMat", true)
-				part(g, Vector3.new(9.8, 0.75, 2.1), fr * CFrame.new(0, 3.25, 0), HAZ, false)
-				part(g, Vector3.new(9.4, 1.2, 2.3), fr * CFrame.new(0, 0.6, 0), STEEL, false)
-				for _, sx in { -3.4, 3.4 } do
-					pipe(g, (fr * CFrame.new(sx, 0.2, -1.8)).Position, (fr * CFrame.new(sx, 3.5, -0.5)).Position, 0.45, STEEL_D, false)
-				end
-				if i == 1 then
-					local bp = (fr * CFrame.new(6.2, 0, -0.5)).Position
-					poiBanner(g, Vector3.new(bp.X, gy(bp.X, bp.Z), bp.Z), c.a, false)
-				end
-			end
-		end
-		for _ = 1, 2 do
-			local c = takeFrom(innerCands, math.rad(32))
-			if c then
-				local pos = c.p
-				local y0 = lowAt(pos.X, pos.Z, 3.5)
-				local base = Vector3.new(pos.X, y0, pos.Z)
-				local yaw = c.a + rnd:NextNumber(-0.4, 0.4)
-				crate(g, base, yaw, 4.6, 3.2, 3.8, true)
-				local sideOff = Vector3.new(math.cos(yaw + 1.1) * 4.2, 0, math.sin(yaw + 1.1) * 4.2)
-				local sp = Vector3.new(base.X + sideOff.X, gy(base.X + sideOff.X, base.Z + sideOff.Z), base.Z + sideOff.Z)
-				crate(g, sp, yaw + 0.5, 3.2, 2.5, 3.2, true)
-				crate(g, base + Vector3.new(0, 3.0, 0), yaw - 0.25, 3.0, 2.2, 2.8, true)
-				local drum = base + Vector3.new(-math.cos(yaw) * 3.4, 0, -math.sin(yaw) * 3.4)
-				vcyl(g, 1.7, 2.5, CFrame.new(drum.X, gy(drum.X, drum.Z) + 1.15, drum.Z), RUST, true)
-			end
+	end
+	for _ = 1, 2 do
+		local c = takeFrom(innerCands, math.rad(32))
+		if c then
+			local pos = c.p
+			local y0 = lowAt(pos.X, pos.Z, 3.5)
+			local base = Vector3.new(pos.X, y0, pos.Z)
+			local yaw = c.a + rnd:NextNumber(-0.4, 0.4)
+			crate(g, base, yaw, 4.6, 3.2, 3.8, true)
+			local sideOff = Vector3.new(math.cos(yaw + 1.1) * 4.2, 0, math.sin(yaw + 1.1) * 4.2)
+			local sp = Vector3.new(base.X + sideOff.X, gy(base.X + sideOff.X, base.Z + sideOff.Z), base.Z + sideOff.Z)
+			crate(g, sp, yaw + 0.5, 3.2, 2.5, 3.2, true)
+			crate(g, base + Vector3.new(0, 3.0, 0), yaw - 0.25, 3.0, 2.2, 2.8, true)
+			local drum = base + Vector3.new(-math.cos(yaw) * 3.4, 0, -math.sin(yaw) * 3.4)
+			vcyl(g, 1.7, 2.5, CFrame.new(drum.X, gy(drum.X, drum.Z) + 1.15, drum.Z), RUST, true)
 		end
 	end
 

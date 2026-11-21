@@ -123,17 +123,17 @@ local function buildFolder()
 	wall(folder, Vector3.new(4, h, wl), CFrame.new(HALF + 2, Y0 + h / 2 - 2, 0))
 	wall(folder, Vector3.new(4, h, wl), CFrame.new(-HALF - 2, Y0 + h / 2 - 2, 0))
 
-	-- stylized low-saturation cover & modular Jersey barriers (Band 2 dark slate/concrete + bright metallic trim)
-	local concrete = Color3.fromRGB(82, 78, 74)
-	local concreteDark = Color3.fromRGB(64, 62, 60)
-	local steelDark = Color3.fromRGB(44, 48, 56)
-	local steelLight = Color3.fromRGB(132, 138, 148)
-	local rust = Color3.fromRGB(102, 74, 58)
-	local haz = Color3.fromRGB(228, 178, 44)
-	local rock = Color3.fromRGB(84, 76, 68)
+	-- stark brutalist weathered-concrete & dark-charcoal-steel cover (zero bright yellow accent clutter)
+	local concrete = Color3.fromRGB(82, 78, 72)
+	local concreteDark = Color3.fromRGB(60, 58, 55)
+	local steelDark = Color3.fromRGB(42, 46, 52)
+	local steelLight = Color3.fromRGB(118, 122, 130)
+	local rust = Color3.fromRGB(96, 68, 52)
+	local rock = Color3.fromRGB(76, 65, 55)
 
 	local function jerseyBarrier(pos: Vector3, len: number, yawDeg: number)
 		local body = prop(props, "JerseyBarrier", Vector3.new(len, 4.8, 2.4), pos, yawDeg, concrete, Enum.Material.Concrete)
+		body:SetAttribute("KeepMat", true)
 		local cf = body.CFrame
 		local trim = Instance.new("Part")
 		trim.Name = "BarrierCap"
@@ -144,21 +144,10 @@ local function buildFolder()
 		trim.CastShadow = false
 		trim.Size = Vector3.new(len + 0.15, 0.5, 2.0)
 		trim.CFrame = cf * CFrame.new(0, 2.25, 0)
-		trim.Color = steelLight
+		trim.Color = steelDark
 		trim.Material = Enum.Material.Metal
+		trim:SetAttribute("KeepMat", true)
 		trim.Parent = props
-		local stripe = Instance.new("Part")
-		stripe.Name = "BarrierStripe"
-		stripe.Anchored = true
-		stripe.CanCollide = false
-		stripe.CanQuery = false
-		stripe.CanTouch = false
-		stripe.CastShadow = false
-		stripe.Size = Vector3.new(len * 0.28, 0.7, 2.52)
-		stripe.CFrame = cf * CFrame.new(0, 0.9, 0)
-		stripe.Color = haz
-		stripe.Material = Enum.Material.SmoothPlastic
-		stripe.Parent = props
 	end
 
 	-- ribbed metallic grating deck under player spawn on a deep-skirted concrete curb plinth
@@ -187,9 +176,45 @@ local function buildFolder()
 	prop(props, "Crate", Vector3.new(5.5, 4.4, 5.5), Vector3.new(-48, 0, 22), 12, steelDark, Enum.Material.Metal)
 	prop(props, "Crate", Vector3.new(5.5, 4.4, 5.5), Vector3.new(-41.5, 0, 24.5), -8, rust, Enum.Material.CorrodedMetal)
 	prop(props, "Crate", Vector3.new(5, 3.8, 5), Vector3.new(-45, 4.4, 23), 33, steelDark, Enum.Material.Metal)
-	-- 3: boulder pair right flank
-	prop(props, "Boulder", Vector3.new(11, 6.5, 8.5), Vector3.new(52, 0, 18), 27, rock, Enum.Material.Sandstone)
-	prop(props, "Boulder", Vector3.new(6, 4.2, 5.5), Vector3.new(60, 0, 11), -40, rock, Enum.Material.Sandstone)
+	-- 3: craggy rock outcrop right flank
+	do
+		local r1 = Assets.get("env_rock_a", { anchored = true })
+		if r1 then
+			r1:ScaleTo(1.15)
+			r1:PivotTo(CFrame.new(52, Y0 - 1.2, 18) * CFrame.Angles(0, math.rad(27), 0))
+			for _, d in r1:GetDescendants() do
+				if d:IsA("BasePart") then
+					d.Anchored = true
+					d.CanCollide = true
+					d.CanQuery = true
+					d.Color = rock
+					d.Material = Enum.Material.Rock
+					d:SetAttribute("KeepMat", true)
+				end
+			end
+			r1.Parent = props
+		else
+			prop(props, "Boulder", Vector3.new(11, 6.5, 8.5), Vector3.new(52, 0, 18), 27, rock, Enum.Material.Rock)
+		end
+		local r2 = Assets.get("env_rock_c", { anchored = true })
+		if r2 then
+			r2:ScaleTo(0.8)
+			r2:PivotTo(CFrame.new(61, Y0 - 1.0, 10) * CFrame.Angles(0, math.rad(-40), 0))
+			for _, d in r2:GetDescendants() do
+				if d:IsA("BasePart") then
+					d.Anchored = true
+					d.CanCollide = true
+					d.CanQuery = true
+					d.Color = Color3.fromRGB(66, 57, 49)
+					d.Material = Enum.Material.Rock
+					d:SetAttribute("KeepMat", true)
+				end
+			end
+			r2.Parent = props
+		else
+			prop(props, "Boulder", Vector3.new(6, 4.2, 5.5), Vector3.new(60, 0, 11), -40, rock, Enum.Material.Rock)
+		end
+	end
 	-- 4: L-shaped tactical retaining wall near player half
 	jerseyBarrier(Vector3.new(-32, 0, -44), 16, 0)
 	prop(props, "CoverWall", Vector3.new(2.4, 4.8, 12), Vector3.new(-39.2, 0, -37), 0, concreteDark, Enum.Material.Concrete)
@@ -200,9 +225,13 @@ local function buildFolder()
 	-- 6: angled far modular barrier
 	jerseyBarrier(Vector3.new(-8, 0, 76), 18, 14)
 
-	-- outer skyline silhouettes outside the walls using real uploaded meshes on sandstone shoulders
-	local horizonRock = Color3.fromRGB(76, 68, 60)
-	local function placeHorizonMesh(key: string, cf: CFrame, scale: number, rockTint: Color3?): boolean
+	-- 360-degree natural towering mountain & jagged canyon-spire skyline (zero overscaled industrial rim props)
+	local rockPalette = {
+		Color3.fromRGB(78, 66, 54),
+		Color3.fromRGB(64, 55, 47),
+		Color3.fromRGB(88, 74, 60),
+	}
+	local function placeHorizonRock(key: string, cf: CFrame, scale: number, tint: Color3, mat: Enum.Material): boolean
 		local m = Assets.get(key, { anchored = true })
 		if not m then
 			return false
@@ -218,82 +247,60 @@ local function buildFolder()
 				d.CanQuery = false
 				d.CanTouch = false
 				d.CastShadow = false
-				if d.Name == "Glow" or d:GetAttribute("Role") == "glow" then
-					d.Material = Enum.Material.SmoothPlastic
-					d.Color = Color3.fromRGB(52, 46, 48)
-				elseif rockTint then
-					d.Color = rockTint
-					d.Material = Enum.Material.Sandstone
-					d:SetAttribute("KeepMat", true)
-				else
-					d:SetAttribute("KeepMat", true)
-				end
+				d.Color = tint
+				d.Material = mat
+				d:SetAttribute("KeepMat", true)
 			end
 		end
 		m.Parent = props
 		return true
 	end
 
-	local function fallbackTaperedStack(x: number, z: number, dia: number, h: number)
-		local loH = h * 0.6
-		local c1 = Instance.new("Part")
-		c1.Name = "HorizonStackLower"
-		c1.Shape = Enum.PartType.Cylinder
-		c1.Anchored = true
-		c1.CanCollide = false
-		c1.CanQuery = false
-		c1.CastShadow = false
-		c1.Size = Vector3.new(loH, dia, dia)
-		c1.CFrame = CFrame.new(x, Y0 + loH * 0.5 - 4, z) * CFrame.Angles(0, 0, math.pi / 2)
-		c1.Color = steelDark
-		c1.Material = Enum.Material.SmoothPlastic
-		c1.Parent = props
-		local hiH = h - loH
-		local c2 = Instance.new("Part")
-		c2.Name = "HorizonStackUpper"
-		c2.Shape = Enum.PartType.Cylinder
-		c2.Anchored = true
-		c2.CanCollide = false
-		c2.CanQuery = false
-		c2.CastShadow = false
-		c2.Size = Vector3.new(hiH, dia * 0.72, dia * 0.72)
-		c2.CFrame = CFrame.new(x, Y0 + loH + hiH * 0.5 - 4, z) * CFrame.Angles(0, 0, math.pi / 2)
-		c2.Color = concreteDark
-		c2.Material = Enum.Material.SmoothPlastic
-		c2.Parent = props
+	-- Band 1: near-rim jagged canyon cliffs & rock buttresses surrounding the basin (sunk deep below Y0)
+	local nearRim = {
+		{ ang = 0, r = 178, key = "desert_cliff", sc = 2.6, yawOff = 90, sink = 16 },
+		{ ang = 32, r = 186, key = "env_spire_b", sc = 1.9, yawOff = 15, sink = 18 },
+		{ ang = 62, r = 176, key = "desert_cliff", sc = 2.4, yawOff = 84, sink = 15 },
+		{ ang = 94, r = 188, key = "env_rock_b", sc = 4.2, yawOff = -22, sink = 16 },
+		{ ang = 124, r = 180, key = "desert_cliff", sc = 2.7, yawOff = 96, sink = 16 },
+		{ ang = 156, r = 184, key = "env_spire_a", sc = 1.85, yawOff = 40, sink = 18 },
+		{ ang = 186, r = 176, key = "desert_cliff", sc = 2.5, yawOff = 88, sink = 15 },
+		{ ang = 218, r = 190, key = "env_spire_b", sc = 2.0, yawOff = -30, sink = 18 },
+		{ ang = 248, r = 180, key = "desert_cliff", sc = 2.6, yawOff = 94, sink = 16 },
+		{ ang = 280, r = 186, key = "env_rock_b", sc = 4.5, yawOff = 18, sink = 16 },
+		{ ang = 310, r = 178, key = "desert_cliff", sc = 2.5, yawOff = 82, sink = 15 },
+		{ ang = 338, r = 186, key = "env_spire_a", sc = 1.75, yawOff = -12, sink = 18 },
+	}
+	for i, sp in nearRim do
+		local a = math.rad(sp.ang)
+		local x, z = math.cos(a) * sp.r, math.sin(a) * sp.r
+		local tint = rockPalette[(i % #rockPalette) + 1]
+		local mat = if sp.key == "desert_cliff" then Enum.Material.Rock else Enum.Material.Slate
+		placeHorizonRock(sp.key, CFrame.new(x, Y0 - sp.sink, z) * CFrame.Angles(0, a + math.rad(sp.yawOff), 0), sp.sc, tint, mat)
 	end
 
-	-- NW far refinery cluster
-	placeHorizonMesh("desert_cliff", CFrame.new(-74, Y0 - 5, 174) * CFrame.Angles(0, math.rad(16), 0), 2.1, horizonRock)
-	if not placeHorizonMesh("cog_smokestack", CFrame.new(-68, Y0 - 2, 168) * CFrame.Angles(0, math.rad(25), 0), 2.0, nil) then
-		fallbackTaperedStack(-68, 168, 18, 108)
+	-- Band 2: distant towering jagged mountain peaks fading cleanly into golden atmospheric haze
+	local farPeaks = {
+		{ ang = 14, r = 258, key = "env_spire_b", sc = 3.4, yawOff = 24, sink = 24 },
+		{ ang = 48, r = 272, key = "env_spire_a", sc = 3.1, yawOff = -18, sink = 26 },
+		{ ang = 78, r = 250, key = "desert_cliff", sc = 4.2, yawOff = 92, sink = 22 },
+		{ ang = 110, r = 278, key = "env_spire_b", sc = 3.8, yawOff = 45, sink = 26 },
+		{ ang = 140, r = 260, key = "env_spire_a", sc = 3.0, yawOff = -35, sink = 24 },
+		{ ang = 172, r = 268, key = "desert_cliff", sc = 4.5, yawOff = 86, sink = 22 },
+		{ ang = 202, r = 255, key = "env_spire_b", sc = 3.5, yawOff = 12, sink = 24 },
+		{ ang = 234, r = 276, key = "env_spire_a", sc = 3.2, yawOff = -42, sink = 26 },
+		{ ang = 266, r = 262, key = "desert_cliff", sc = 4.1, yawOff = 94, sink = 22 },
+		{ ang = 296, r = 280, key = "env_spire_b", sc = 3.7, yawOff = 30, sink = 26 },
+		{ ang = 326, r = 256, key = "env_spire_a", sc = 2.9, yawOff = -20, sink = 24 },
+		{ ang = 352, r = 270, key = "desert_cliff", sc = 4.3, yawOff = 88, sink = 22 },
+	}
+	for i, sp in farPeaks do
+		local a = math.rad(sp.ang)
+		local x, z = math.cos(a) * sp.r, math.sin(a) * sp.r
+		local tint = rockPalette[((i + 1) % #rockPalette) + 1]
+		local mat = if sp.key == "desert_cliff" then Enum.Material.Rock else Enum.Material.Slate
+		placeHorizonRock(sp.key, CFrame.new(x, Y0 - sp.sink, z) * CFrame.Angles(0, a + math.rad(sp.yawOff), 0), sp.sc, tint, mat)
 	end
-	placeHorizonMesh("cog_tank_a", CFrame.new(-42, Y0 - 2, 172) * CFrame.Angles(0, math.rad(-20), 0), 2.4, nil)
-
-	-- Center far sandstone mesa silhouette
-	placeHorizonMesh("desert_cliff", CFrame.new(-4, Y0 - 6, 204) * CFrame.Angles(0, math.rad(-8), 0), 2.5, horizonRock)
-	placeHorizonMesh("desert_butte", CFrame.new(26, Y0 - 5, 196) * CFrame.Angles(0, math.rad(32), 0), 5.4, horizonRock)
-
-	-- NE far crane & relay complex
-	placeHorizonMesh("desert_butte", CFrame.new(96, Y0 - 5, 178) * CFrame.Angles(0, math.rad(-40), 0), 4.8, horizonRock)
-	if not placeHorizonMesh("cog_crane", CFrame.new(82, Y0 - 2, 164) * CFrame.Angles(0, math.rad(-148), 0), 2.7, nil) then
-		fallbackTaperedStack(82, 164, 16, 94)
-	end
-	placeHorizonMesh("cog_relay_mast", CFrame.new(108, Y0 - 2, 170) * CFrame.Angles(0, math.rad(12), 0), 1.35, nil)
-
-	-- East industrial ridge
-	placeHorizonMesh("desert_cliff", CFrame.new(176, Y0 - 5, 42) * CFrame.Angles(0, math.rad(82), 0), 2.2, horizonRock)
-	if not placeHorizonMesh("cog_smokestack", CFrame.new(168, Y0 - 2, 34) * CFrame.Angles(0, math.rad(95), 0), 1.75, nil) then
-		fallbackTaperedStack(168, 34, 16, 92)
-	end
-	placeHorizonMesh("cog_tank_b", CFrame.new(166, Y0 - 2, 64) * CFrame.Angles(0, math.rad(45), 0), 2.3, nil)
-
-	-- West fallen walker ribs & butte
-	placeHorizonMesh("desert_butte", CFrame.new(-174, Y0 - 5, -34) * CFrame.Angles(0, math.rad(68), 0), 5.0, horizonRock)
-	if not placeHorizonMesh("cog_walker_rib", CFrame.new(-168, Y0 - 4, -14) * CFrame.Angles(math.rad(-10), math.rad(78), math.rad(12)), 2.5, nil) then
-		fallbackTaperedStack(-168, -14, 18, 86)
-	end
-	placeHorizonMesh("cog_walker_rib_half", CFrame.new(-166, Y0 - 4, 12) * CFrame.Angles(math.rad(-8), math.rad(88), math.rad(-10)), 2.2, nil)
 
 	folder.Parent = Workspace
 	return folder, props
