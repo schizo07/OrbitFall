@@ -18,16 +18,6 @@ local Variants = {}
 -- nil-valued keys are written as "clear" (attribute removed -> the code's default is used).
 -- A preset may also carry `sounds = { SoundKey = { [layerIndex] = "rbxassetid://..." } }` to swap sound layers.
 local GROUPS = {
-	{
-		-- client/UI/HudLayout + HudSkin + HUD.rebuild: 3 in-mission HUD presets (A = default in live games)
-		name = "HUD",
-		keys = { "Feel_HudPreset" },
-		presets = {
-			{ name = "A Bold (bigger text, taller banners, larger margins)", set = {} },
-			{ name = "B Clean (big top objective, smaller compass, compact chips)", set = { Feel_HudPreset = "clean" } },
-			{ name = "C Frame (docked solid top + bottom edge bars, high contrast)", set = { Feel_HudPreset = "frame" } },
-		},
-	},
 	-- 2026-11-15 playtest: framing, prone twist, explosions, UI scale, regen, damage fx, uplink arm, call-in cards, enemy aim,
 	-- carry, squad tags, pop sound, shot sound path, prone legs, stim sprint, pad interact, grenade throw, call-in punch,
 	-- armour tag, skiff, player splash, mission time, left shoulder, stim pose, perf saver, ammo pack, colour grade picked
@@ -70,48 +60,6 @@ local GROUPS = {
 			{ name = "A on", set = {} },
 			{ name = "B bigger cap (x1.35)", set = { Feel_Mushroom = "big" } },
 			{ name = "C off", set = { Feel_Mushroom = "off" } },
-		},
-	},
-	{
-		-- client/UI/HudSkin + HUD.rebuild: the in-mission HUD's look and layout, rebuilt live (D = the old HUD)
-		name = "UI STYLE",
-		keys = { "Feel_UiStyle" },
-		presets = {
-			{ name = "A Hairline (thin lines, angled cuts)", set = {} },
-			{ name = "B Soft glass (rounded, translucent)", set = { Feel_UiStyle = "glass" } },
-			{ name = "C Visor (one phosphor colour, mono)", set = { Feel_UiStyle = "visor" } },
-			{ name = "D old HUD", set = { Feel_UiStyle = "old" } },
-		},
-	},
-	{
-		-- client/UI/HUD crosshair satellites (new UI STYLE only): mag count + health arc next to the crosshair
-		name = "CROSSHAIR INFO",
-		keys = { "Feel_XhairInfo" },
-		presets = {
-			{ name = "A on low ammo / low health", set = {} },
-			{ name = "B always", set = { Feel_XhairInfo = "always" } },
-			{ name = "C off", set = { Feel_XhairInfo = "off" } },
-		},
-	},
-	{
-		-- client/UI/GoalLine (new UI STYLE only, PC): what sits under the goal line; the full list is in the mission sheet
-		name = "GOAL LINES",
-		keys = { "Feel_GoalLines" },
-		presets = {
-			{ name = "A current step only (hold Tab for the list)", set = {} },
-			{ name = "B + next 2 steps, smaller", set = { Feel_GoalLines = "next" } },
-		},
-	},
-	{
-		-- client/UI/Theme.applyFont: swaps the face of every HUD / menu text live (sizes stay)
-		name = "UI FONT",
-		keys = { "Feel_Font" },
-		presets = {
-			{ name = "A Oswald + Gotham (current)", set = {} },
-			{ name = "B Builder Sans (Roblox)", set = { Feel_Font = "BuilderSans" } },
-			{ name = "C Titillium Web (techy)", set = { Feel_Font = "TitilliumWeb" } },
-			{ name = "D Sarpanch (sci-fi square)", set = { Feel_Font = "Sarpanch" } },
-			{ name = "E Fredoka One (round cartoon)", set = { Feel_Font = "FredokaOne" } },
 		},
 	},
 	{
@@ -415,15 +363,6 @@ local GROUPS = {
 			{ name = "A on", set = {} },
 			{ name = "B stronger (2x flank + leap chance, wider spread)", set = { Feel_EnemyTactics = "strong" } },
 			{ name = "C off (old straight-in AI)", set = { Feel_EnemyTactics = "off" } },
-		},
-	},
-	{
-		-- touch only (Studio Device Emulator): UI/EventFeed FEED button, UI/HUD beacon prompt / kill streak / barrel ring
-		name = "PHONE HUD",
-		keys = { "Feel_PhoneHud" },
-		presets = {
-			{ name = "A FEED top row, prompt + streak above crosshair, ring x0.7", set = {} },
-			{ name = "B old (FEED bottom-left, prompt low, streak high)", set = { Feel_PhoneHud = "old" } },
 		},
 	},
 	{

@@ -12,7 +12,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CallIns = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("CallIns"))
-local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
 local EventFeed = require(script.Parent.EventFeed)
 local CallInCards = require(script.Parent.CallInCards)
@@ -21,7 +20,6 @@ local Store = require(script.Parent.Parent.Store)
 local SquadComms = {}
 
 local GAP = 2.5 -- min seconds between any two barks
-local HOLD = 2.2 -- how long the own-card line stays
 local COOLDOWN: { [string]: number } = {
 	reload = 6,
 	grenade = 3,
@@ -36,11 +34,9 @@ local CALLOUT_GAP = 6
 local lastCallout: { [string]: number } = {}
 
 local player = Players.LocalPlayer
-local ui: { [string]: any } = {}
 local active = false
 local lastBark = -100
 local lastKind: { [string]: number } = {}
-local lineGen = 0
 local beaconNames: { [any]: string } = {}
 
 -- state seen last time (edge detection)
@@ -76,73 +72,17 @@ local function bearingName(from: Vector3, to: Vector3): string
 	return SHORT[math.floor((deg + 22.5) / 45) % 8 + 1]
 end
 
--- Tiny line above the own card ---------------------------------------------------------------------------------------
--- New layouts (UI STYLE A-C): no line above the card; own radio lines go to the event feed on PC and are skipped on
--- phones (their feed has 2 lines).
-local feedOwn = false
+-- Own radio lines go to the event feed on PC and are skipped on phones (their feed has 2 lines).
 local feedTouch = false
 
-function SquadComms.build(ownCard: Instance?, touch: boolean)
-	feedOwn = EventFeed.isNew()
+function SquadComms.build(_ownCard: Instance?, touch: boolean)
 	feedTouch = touch
-	if feedOwn or not ownCard then
-		ui = {}
-		return
-	end
-	-- Folder: the card's UIListLayout ignores it, its child is positioned against the card frame
-	local folder = Instance.new("Folder")
-	folder.Name = "Chatter"
-	folder.Parent = ownCard
-	local panel = Style.panel({
-		Name = "Bark",
-		Brackets = false,
-		Position = UDim2.new(0, 0, 0, -22),
-		Size = UDim2.fromOffset(0, 18),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Visible = false,
-		Parent = folder,
-	})
-	Theme.pad(panel, 6, 0, 8, 0)
-	ui.panel = panel
-	ui.text = Style.label({
-		Text = "",
-		TextSize = 13,
-		Size = UDim2.fromOffset(0, 18),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Parent = panel,
-	})
 end
 
 local function ownBark(text: string)
-	if feedOwn then
-		if not feedTouch then
-			EventFeed.push(string.format("%s: %s", myTag(), text), Style.Amber, "bark")
-		end
-		return
+	if not feedTouch then
+		EventFeed.push(string.format("%s: %s", myTag(), text), Style.Amber, "bark")
 	end
-	if not ui.panel then
-		return
-	end
-	lineGen += 1
-	local gen = lineGen
-	ui.text.Text = string.format("%s > %s", myTag(), text)
-	ui.text.TextColor3 = Style.Amber
-	ui.text.TextTransparency = 0
-	ui.text.TextStrokeTransparency = 0.65
-	ui.panel.BackgroundTransparency = Style.PANEL_ALPHA
-	ui.panel.Visible = true
-	task.delay(HOLD, function()
-		if gen ~= lineGen then
-			return
-		end
-		Theme.tween(ui.panel, 0.3, { BackgroundTransparency = 1 })
-		Theme.tween(ui.text, 0.3, { TextTransparency = 1, TextStrokeTransparency = 1 })
-		task.delay(0.35, function()
-			if gen == lineGen then
-				ui.panel.Visible = false
-			end
-		end)
-	end)
 end
 
 local function radio(userId: number, text: string)
@@ -164,10 +104,6 @@ function SquadComms.setActive(on: boolean)
 		table.clear(beaconNames)
 		table.clear(lastCallout)
 		CallInCards.clear()
-		if ui.panel then
-			lineGen += 1
-			ui.panel.Visible = false
-		end
 	end
 end
 

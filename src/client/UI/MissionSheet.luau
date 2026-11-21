@@ -76,37 +76,16 @@ function MissionSheet.build(isTouch: boolean)
 	InfoLayer.place(sheet, "sheet", touch)
 	sheet.Parent = root
 	ui.sheet = sheet
-	HudSkin.panel("auto", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = sheet })
-	if InfoLayer.style() == "hairline" then
-		-- the fade backing runs left to right; the sheet is a full card, so it gets an even dark base as well
-		local base = Instance.new("Frame")
-		base.Name = "Base"
-		base.BorderSizePixel = 0
-		base.BackgroundColor3 = Color3.new(0, 0, 0)
-		base.BackgroundTransparency = 0.45
-		base.Size = UDim2.fromScale(1, 1)
-		base.ZIndex = 0
-		base.Parent = sheet
-		-- hairline frame: 1 px lines top and bottom
-		for _, y in { 0, 1 } do
-			local l = Instance.new("Frame")
-			l.BorderSizePixel = 0
-			l.BackgroundColor3 = InfoLayer.col("line")
-			l.BackgroundTransparency = 0.6
-			l.AnchorPoint = Vector2.new(0, y)
-			l.Position = UDim2.fromScale(0, y)
-			l.Size = UDim2.new(1, 0, 0, 1)
-			l.Parent = sheet
-		end
-	elseif InfoLayer.style() == "visor" then
-		local base = Instance.new("Frame")
-		base.Name = "Base"
-		base.BorderSizePixel = 0
-		base.BackgroundColor3 = Color3.fromHex("03211E")
-		base.BackgroundTransparency = 0.35
-		base.Size = UDim2.fromScale(1, 1)
-		base.ZIndex = 0
-		base.Parent = sheet
+	HudSkin.panel("plate", { Name = "Backing", Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = sheet })
+	for _, y in { 0, 1 } do
+		local l = Instance.new("Frame")
+		l.BorderSizePixel = 0
+		l.BackgroundColor3 = InfoLayer.col("own")
+		l.BackgroundTransparency = 0.45
+		l.AnchorPoint = Vector2.new(0, y)
+		l.Position = UDim2.fromScale(0, y)
+		l.Size = UDim2.new(1, 0, 0, 2)
+		l.Parent = sheet
 	end
 	local pad = if touch then 12 else 22
 

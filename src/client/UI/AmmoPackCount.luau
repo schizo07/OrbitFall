@@ -4,7 +4,6 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Store = require(script.Parent.Parent.Store)
-local HudSkin = require(script.Parent.HudSkin)
 local WeaponBlock = require(script.Parent.WeaponBlock)
 
 local AmmoPackCount = {}
@@ -18,30 +17,11 @@ local function ensureLabel(): TextLabel?
 	if label and label.Parent then
 		return label
 	end
-	-- UI STYLE new skins: a count cell in the weapon block (UI/WeaponBlock); a style switch destroys it and a new one is made
-	if HudSkin.isNew() then
-		local l = WeaponBlock.addCount("AmmoPack")
-		if l then
-			label = l
-			lastText = nil
-		end
-		return l
+	local l = WeaponBlock.addCount("AmmoPack")
+	if l then
+		label = l
+		lastText = nil
 	end
-	local hud = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("OrbitHUD")
-	local card = hud and hud:FindFirstChild("OwnCard", true)
-	local counts = card and card:FindFirstChild("Counts")
-	local mags = counts and counts:FindFirstChild("Mags")
-	if not mags or not mags:IsA("TextLabel") then
-		return nil
-	end
-	local l = mags:Clone()
-	l.Name = "AmmoPack"
-	l.LayoutOrder = mags.LayoutOrder + 1
-	l.Text = ""
-	l.Visible = false
-	l.Parent = counts
-	label = l
-	lastText = nil
 	return l
 end
 

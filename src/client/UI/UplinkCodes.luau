@@ -1,33 +1,24 @@
--- Uplink code list (PC + gamepad arm method "Codes"; touch keeps the radial UplinkDial).
--- Hold the dial key, type the arrow code of a call-in; the list filters as you type.
---   init()
---   open() / close() / isOpen()
---   press(dir: "U"|"D"|"L"|"R") -> (kind, entry?)
---       kind = "step"  arrow accepted, more to type
---              "error" no row matches any more: input was reset
---              "match" a full code was typed (entry = { slot = number | "REINFORCE", id, def, available, status, remaining })
---   reset()                      clear the typed arrows
---   setArmed(id: string?)        row with this call-in id shows ACTIVATING (nil = none)
---   setHint(text, color?)        context line at the bottom ("PRESS [LMB] TO THROW")
--- Reads Store "me" (callins.slots, reinforceReadyAt). Feel_UplinkListPos (Studio A/B): "left" = far left; default = left of the crosshair.
+-- Uplink code drawer (PC + gamepad arm method "Codes"; touch keeps the radial UplinkDial).
+-- Docks cleanly at top-left directly under the CALL-INS header chip ONLY while holding the dial key, keeping the
+-- center viewport unobstructed. Typing arrow codes filters and highlights matching call-ins live.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Config = require(Shared:WaitForChild("Config"))
 local CallIns = require(Shared:WaitForChild("Data"):WaitForChild("CallIns"))
 local Store = require(script.Parent.Parent.Store)
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
+local HudLayout = require(script.Parent.HudLayout)
 
 local UplinkCodes = {}
 
-local W = 400
-local ROW_H = 50
-local ARROW = 15
-local ARROW_GAP = 5
+local ROW_H = 38
+local ARROW = 12
+local ARROW_GAP = 4
 local MAX_ARROWS = 6
-local REFRESH = 0.1 -- status text refresh while open (s)
+local REFRESH = 0.1
 
 local DIR_SHAPE = { U = "up", D = "down", L = "left", R = "right" }
 
@@ -43,7 +34,7 @@ local openFlag = false
 local typed: { string } = {}
 local armedId: string? = nil
 local hintText = ""
-local hintColor: Color3 = Style.Grey
+local hintColor: Color3 = HudSkin.color("dim")
 local errorUntil = 0
 local conn: RBXScriptConnection? = nil
 local lastRefresh = 0
@@ -58,52 +49,41 @@ local function build()
 		return
 	end
 	built = true
-	gui = Theme.gui("OrbitUplinkCodes", { DisplayOrder = 70, Enabled = false })
+	local touch = Theme.isTouch()
+	local lay = HudLayout.get("callins", touch)
+	local W: number = lay.DrawerWidth or 304
+
+	gui = Theme.gui("OrbitUplinkCodes", { DisplayOrder = 70, Insets = "CoreUISafeInsets", Enabled = false })
 	local root = Theme.root(gui, "hud")
-	panel = Style.panel({
+	panel = HudSkin.panel("plate", {
 		Name = "CodeList",
+		AnchorPoint = Vector2.new(0, 0),
+		Position = UDim2.fromOffset(lay.Position.X.Offset, lay.Position.Y.Offset + lay.Size.Y.Offset + 5),
 		Size = UDim2.fromOffset(W, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		Transparency = 0.35,
 		Parent = root,
 	})
-	Theme.pad(panel, 8, 8, 10, 8)
+	Theme.pad(panel, 8, 6, 8, 6)
 	Theme.list(panel, Enum.FillDirection.Vertical, 4)
-	Style.label({
-		Text = "UPLINK  -  " .. string.upper(Config.ShipName),
-		TextSize = 14,
-		Color = Style.Grey,
-		Size = UDim2.new(1, 0, 0, 18),
-		LayoutOrder = 0,
-		Parent = panel,
-	})
+
 	listFrame = Instance.new("Frame")
 	listFrame.Name = "Rows"
 	listFrame.BackgroundTransparency = 1
-	listFrame.Size = UDim2.new(1, 0, 0, 0)
+	listFrame.Size = UDim2.fromScale(1, 0)
 	listFrame.AutomaticSize = Enum.AutomaticSize.Y
 	listFrame.LayoutOrder = 1
 	listFrame.Parent = panel
 	Theme.list(listFrame, Enum.FillDirection.Vertical, 3)
-	hintLabel = Style.label({
+
+	hintLabel = HudSkin.label({
 		Text = "",
-		TextSize = 15,
-		Color = Style.Grey,
-		Size = UDim2.new(1, 0, 0, 20),
+		TextSize = 12,
+		ColorRole = "dim",
+		Size = UDim2.new(1, 0, 0, 16),
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		LayoutOrder = 2,
 		Parent = panel,
 	})
-end
-
-local function place()
-	if workspace:GetAttribute("Feel_UplinkListPos") == "left" then
-		panel.AnchorPoint = Vector2.new(0, 0.5)
-		panel.Position = UDim2.new(0, Style.MARGIN + 260, 0.5, 0)
-	else
-		-- left of the crosshair: the aim point stays visible while you type and throw
-		panel.AnchorPoint = Vector2.new(1, 0.5)
-		panel.Position = UDim2.new(0.5, -70, 0.5, 0)
-	end
 end
 
 local function makeRow(def: any, order: number, slot: any): any
@@ -115,62 +95,65 @@ local function makeRow(def: any, order: number, slot: any): any
 	row.Size = UDim2.new(1, 0, 0, ROW_H)
 	row.LayoutOrder = order
 	row.Parent = listFrame
-	local beacon = if slot == "REINFORCE" then Style.Green else Theme.beaconColor(def.beacon)
+
+	local beacon = if slot == "REINFORCE" then HudSkin.color("heal") else Theme.beaconColor(def.beacon)
 	local glyph = Style.glyph(Style.callinShape(def), {
-		Size = 16,
+		Size = 14,
 		Color = beacon,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromOffset(20, 6),
+		Position = UDim2.fromOffset(16, 4),
 		Parent = row,
 	})
-	local abbr = Style.label({
+	local abbr = HudSkin.label({
 		Text = Style.callinCode(def),
-		TextSize = 12,
+		Role = "number",
+		TextSize = 10,
 		Color = beacon,
 		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.fromOffset(40, 14),
-		Position = UDim2.fromOffset(0, 28),
+		Size = UDim2.fromOffset(32, 12),
+		Position = UDim2.fromOffset(0, 22),
 		Parent = row,
 	})
-	local name = Style.label({
+	local name = HudSkin.label({
 		Text = if slot == "REINFORCE" then "REINFORCE" else def.name,
-		TextSize = 17,
-		Size = UDim2.new(1, -170, 0, 22),
-		Position = UDim2.fromOffset(46, 2),
+		TextSize = 14,
+		Size = UDim2.new(1, -112, 0, 17),
+		Position = UDim2.fromOffset(36, 1),
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = row,
 	})
-	local status = Style.label({
+	local status = HudSkin.label({
 		Text = "",
-		TextSize = 16,
+		Role = "number",
+		TextSize = 12,
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -4, 0, 2),
-		Size = UDim2.fromOffset(120, 22),
+		Position = UDim2.new(1, -2, 0, 1),
+		Size = UDim2.fromOffset(72, 17),
 		Parent = row,
 	})
 	local arrowsHost = Instance.new("Frame")
 	arrowsHost.Name = "Code"
 	arrowsHost.BackgroundTransparency = 1
-	arrowsHost.Position = UDim2.fromOffset(46, 28)
-	arrowsHost.Size = UDim2.fromOffset(MAX_ARROWS * (ARROW + ARROW_GAP + 6), ARROW + 4)
+	arrowsHost.Position = UDim2.fromOffset(36, 20)
+	arrowsHost.Size = UDim2.fromOffset(MAX_ARROWS * (ARROW + ARROW_GAP + 4), ARROW + 4)
 	arrowsHost.Parent = row
 	Theme.list(arrowsHost, Enum.FillDirection.Horizontal, ARROW_GAP, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+
 	local code = CallIns.codeOf(def)
 	local arrows = {}
 	for i, d in code do
-		-- small dark box behind each arrow, so lit / unlit reads at a glance
 		local box = Style.rect({
 			Name = "Arrow" .. i,
 			Color = Style.Black,
-			Transparency = 0.4,
-			Size = UDim2.fromOffset(ARROW + 6, ARROW + 4),
+			Transparency = 0.45,
+			Size = UDim2.fromOffset(ARROW + 4, ARROW + 3),
 			LayoutOrder = i,
 			Parent = arrowsHost,
 		})
 		local g = Style.glyph(DIR_SHAPE[d] or "dot", {
 			Size = ARROW - 3,
-			Color = Style.Grey,
+			Color = HudSkin.color("dim"),
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			Parent = box,
@@ -178,8 +161,20 @@ local function makeRow(def: any, order: number, slot: any): any
 		arrows[i] = { box = box, glyph = g }
 	end
 	return {
-		row = row, glyph = glyph, abbr = abbr, name = name, status = status, arrows = arrows, code = code,
-		def = def, slot = slot, beacon = beacon, alive = true, available = false, statusKey = "", remaining = 0,
+		row = row,
+		glyph = glyph,
+		abbr = abbr,
+		name = name,
+		status = status,
+		arrows = arrows,
+		code = code,
+		def = def,
+		slot = slot,
+		beacon = beacon,
+		alive = true,
+		available = false,
+		statusKey = "",
+		remaining = 0,
 	}
 end
 
@@ -200,7 +195,6 @@ local function rebuild(slots: { any })
 	end
 end
 
--- availability + status text for every row (also rebuilds when the loadout changed)
 local function refreshStatus(t: number)
 	local me = Store.get("me")
 	local slots = (me and me.callins and type(me.callins.slots) == "table") and me.callins.slots or {}
@@ -242,43 +236,41 @@ local function refreshStatus(t: number)
 		end
 		r.available, r.remaining, r.statusKey = available, remaining, status
 		if armedId ~= nil and r.def.id == armedId then
-			r.status.Text = "ACTIVATING"
-			r.status.TextColor3 = Style.Amber
+			r.status.Text = "PRIMED"
+			r.status.TextColor3 = HudSkin.color("own")
 		else
 			r.status.Text = text
-			r.status.TextColor3 = if available then Style.White elseif status == "NO USES" then Style.Red else Style.Grey
+			r.status.TextColor3 = if available then HudSkin.color("text") elseif status == "NO USES" then HudSkin.color("danger") else HudSkin.color("dim")
 		end
 	end
 end
 
--- lit arrows / dimmed rows
 local function paint()
 	local n = #typed
 	local err = os.clock() < errorUntil
 	for _, r in rows do
 		local isArmed = armedId ~= nil and r.def.id == armedId
 		local matching = r.alive and #r.code > 0
-		-- dim: rows that can no longer match, or (while one is armed and nothing typed) every other row
 		local dim = if n > 0 then not matching elseif armedId ~= nil then not isArmed else false
 		local unavailable = not r.available
-		local textAlpha = if dim then 0.7 elseif unavailable then 0.45 else 0
+		local textAlpha = if dim then 0.72 elseif unavailable then 0.45 else 0
 		r.name.TextTransparency = textAlpha
 		r.abbr.TextTransparency = textAlpha
-		r.status.TextTransparency = if dim then 0.7 else 0
+		r.status.TextTransparency = if dim then 0.72 else 0
 		Style.glyphAlpha(r.glyph, textAlpha)
-		r.row.BackgroundTransparency = if isArmed then 0.55 elseif (matching and n > 0) then 0.75 else 1
+		r.row.BackgroundTransparency = if isArmed then 0.58 elseif (matching and n > 0) then 0.75 else 1
 		r.row.BackgroundColor3 = if isArmed then r.beacon else Style.Black
 		for i, a in r.arrows do
 			local lit = matching and i <= n
-			local col = if err then Style.Red elseif isArmed and n == 0 then Style.Amber elseif lit then Style.Amber else Style.White
+			local col = if err then HudSkin.color("danger") elseif isArmed and n == 0 then HudSkin.color("own") elseif lit then HudSkin.color("own") else HudSkin.color("text")
 			Style.tint(a.glyph, col)
 			Style.glyphAlpha(a.glyph, if lit or (isArmed and n == 0) then 0 elseif dim then 0.8 else 0.35)
-			a.box.BackgroundTransparency = if lit then 0.15 elseif dim then 0.75 else 0.45
+			a.box.BackgroundTransparency = if lit then 0.15 elseif dim then 0.75 else 0.48
 		end
 	end
 	if err then
 		hintLabel.Text = "WRONG CODE"
-		hintLabel.TextColor3 = Style.Red
+		hintLabel.TextColor3 = HudSkin.color("danger")
 	else
 		hintLabel.Text = hintText
 		hintLabel.TextColor3 = hintColor
@@ -294,7 +286,6 @@ local function step()
 	end
 end
 
--- Public API ----------------------------------------------------------------------------------------------------------------
 function UplinkCodes.init()
 	build()
 end
@@ -319,16 +310,12 @@ function UplinkCodes.open()
 		return
 	end
 	openFlag = true
-	place()
 	UplinkCodes.reset()
 	errorUntil = 0
 	refreshStatus(workspace:GetServerTimeNow())
 	paint()
 	gui.Enabled = true
-	local s = panel:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
-	s.Parent = panel
-	s.Scale = 0.92
-	Theme.tween(s, 0.12, { Scale = 1 }, Enum.EasingStyle.Back)
+	HudSkin.enter(panel, "top")
 	if conn then
 		conn:Disconnect()
 	end
@@ -359,7 +346,7 @@ end
 
 function UplinkCodes.setHint(text: string, color: Color3?)
 	hintText = string.upper(text)
-	hintColor = color or Style.Grey
+	hintColor = color or HudSkin.color("dim")
 	if openFlag and os.clock() >= errorUntil then
 		hintLabel.Text = hintText
 		hintLabel.TextColor3 = hintColor

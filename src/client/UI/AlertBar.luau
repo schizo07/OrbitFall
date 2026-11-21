@@ -1,18 +1,16 @@
--- Top-centre alert stack, directly under the compass tape (HUD/Compass builds the tape at y = 16 and its heading chip
--- down to y ~ 46; the stack starts at AlertBar.TOP).
---   1. ALERT BAR   24 px solid red (85 %), white caps. Sticky alerts (breach / extraction hold / build warnings): the
---                  highest priority one shows for as long as it is set; it pulses twice whenever the shown alert changes.
---   2. CALLOUT     small amber line (HEAVY CONTACT ...), a few seconds.
---   3. NOTICE      smaller coloured title + sub line, queued (HUD.banner routes here).
--- Own ScreenGui "OrbitAlert". Safe to call before init (everything is a no-op until the GUI exists; HUD.init and
--- IntensityFx both call AlertBar.init, which is idempotent).
+-- Top-centre alert stack, directly under the compass bearing chip.
+-- Visible ONLY during active breaches, waves, extraction holds, heavy callouts, or mission notices:
+--   1. ALERT BAR   slim crimson bar (white bold caps, directional arrow, countdown clock, hairline progress)
+--   2. CALLOUT     compact amber line (HEAVY CONTACT ...), a few seconds
+--   3. NOTICE      compact coloured title + sub line, queued (HUD.banner routes here)
+-- Own ScreenGui "OrbitAlert". Safe to call before init (idempotent).
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
 local HudSkin = require(script.Parent.HudSkin)
 local HudLayout = require(script.Parent.HudLayout)
 
 local AlertBar = {}
-AlertBar.TOP = 50
+AlertBar.TOP = 56
 
 local built = false
 local touch = false
@@ -22,13 +20,15 @@ type Alert = { id: string, text: string, color: Color3, priority: number, seq: n
 local sticky: { [string]: Alert } = {}
 local seq = 0
 local shownId: string? = nil
-local shownText = ""
 local pulseToken = 0
 local calloutToken = 0
 local noticeQueue: { { title: string, sub: string?, color: Color3, hold: number } } = {}
 local noticeBusy = false
 local lastNoticeTitle = ""
 local lastNoticeAt = 0
+
+local BAR_ALPHA = 0.14
+local CRIMSON_FILL = Color3.fromHex("A8141C")
 
 local function tw(inst: Instance, t: number, props: { [string]: any }, style: Enum.EasingStyle?)
 	return Theme.tween(inst, t, props, style)
@@ -40,148 +40,76 @@ function AlertBar.init()
 	end
 	built = true
 	touch = Theme.isTouch()
-	local skin = HudSkin.current()
-	local preset = HudLayout.preset()
 	local gui = Theme.gui("OrbitAlert", { DisplayOrder = 12, Insets = "CoreUISafeInsets" })
 	ui.gui = gui
 	local root = Theme.root(gui, "hud")
-	-- new layout: one scale (no 0.8 content frame on phones), place and size from UI/HudLayout
-	local content = if skin then root else Style.content(root, touch)
-	local lay = if skin then HudLayout.get("alert", touch) else nil
-	local barH = if lay then lay.BarHeight else 24
-	local textSize = if lay then lay.TextSize else Style.ALERT
-	local subSize = if lay then (lay.SubSize or lay.TextSize - 3) else Style.TEXT
-	local calloutH = if lay then (lay.CalloutHeight or 28) else 20
+	local lay = HudLayout.get("alert", touch)
+	local barH: number = lay.BarHeight or 26
+	local textSize: number = lay.TextSize or 16
+	local subSize: number = lay.SubSize or 14
+	local calloutH: number = lay.CalloutHeight or 22
 
 	local stack = Instance.new("Frame")
 	stack.Name = "AlertStack"
 	stack.BackgroundTransparency = 1
-	if lay then
-		stack.AnchorPoint = lay.AnchorPoint
-		stack.Position = lay.Position
-		stack.Size = UDim2.fromOffset(lay.Size.X.Offset, 0)
-	else
-		stack.AnchorPoint = Vector2.new(0.5, 0)
-		stack.Position = UDim2.new(0.5, 0, 0, AlertBar.TOP)
-		stack.Size = UDim2.fromScale(0.34, 0)
-	end
+	stack.AnchorPoint = lay.AnchorPoint
+	stack.Position = lay.Position
+	stack.Size = UDim2.fromOffset(lay.Size.X.Offset, 0)
 	stack.AutomaticSize = Enum.AutomaticSize.Y
-	stack.Parent = content
-	if not lay then
-		local lim = Instance.new("UISizeConstraint")
-		lim.MinSize = Vector2.new(340, 0)
-		lim.Parent = stack
-	end
-	Theme.list(stack, Enum.FillDirection.Vertical, 4, Enum.HorizontalAlignment.Center)
+	stack.Parent = root
+	Theme.list(stack, Enum.FillDirection.Vertical, 3, Enum.HorizontalAlignment.Center)
 	ui.stack = stack
 
-	-- 1. alert bar
-	ui.barAlpha = 0.15
+	-- 1. Slim crimson alert bar
 	local bar = Style.rect({
 		Name = "AlertBar",
-		Color = Style.Red,
-		Transparency = 0.15,
+		Color = CRIMSON_FILL,
+		Transparency = BAR_ALPHA,
 		Size = UDim2.new(1, 0, 0, barH),
 		LayoutOrder = 1,
 		Visible = false,
 		Parent = stack,
 	})
-	if skin then
-		if preset == "bold" then
-			ui.barAlpha = 0.08
-			if skin.id == "hairline" then
-				local g = Instance.new("UIGradient")
-				g.Transparency = NumberSequence.new({
-					NumberSequenceKeypoint.new(0, 0.45),
-					NumberSequenceKeypoint.new(0.12, 0),
-					NumberSequenceKeypoint.new(0.88, 0),
-					NumberSequenceKeypoint.new(1, 0.45),
-				})
-				g.Parent = bar
-			elseif skin.id == "glass" then
-				local cr = Instance.new("UICorner")
-				cr.CornerRadius = UDim.new(0.5, 0)
-				cr.Parent = bar
-			end
-			local st = Instance.new("UIStroke")
-			st.Color = Color3.new(1, 1, 1)
-			st.Transparency = 0.5
-			st.Thickness = 2
-			st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-			st.Parent = bar
-		elseif preset == "frame" then
-			ui.barAlpha = 0.05
-			local st = Instance.new("UIStroke")
-			st.Color = Color3.new(1, 1, 1)
-			st.Transparency = 0.35
-			st.Thickness = 2
-			st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-			st.Parent = bar
-		elseif skin.id == "hairline" then
-			local g = Instance.new("UIGradient")
-			g.Transparency = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 1),
-				NumberSequenceKeypoint.new(0.18, 0),
-				NumberSequenceKeypoint.new(0.82, 0),
-				NumberSequenceKeypoint.new(1, 1),
-			})
-			g.Parent = bar
-		elseif skin.id == "glass" then
-			local cr = Instance.new("UICorner")
-			cr.CornerRadius = UDim.new(0.5, 0)
-			cr.Parent = bar
-			ui.barAlpha = 0.18
-		else
-			ui.barAlpha = 0.6
-			local st = Instance.new("UIStroke")
-			st.Color = skin.colors.danger
-			st.Thickness = 1.5
-			st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-			st.Parent = bar
-		end
-		if preset == "clean" and skin.id ~= "glass" then
-			local cr = Instance.new("UICorner")
-			cr.CornerRadius = UDim.new(0.5, 0)
-			cr.Parent = bar
-			ui.barAlpha = 0.12
-		end
-		bar.BackgroundTransparency = ui.barAlpha
-	else
-		Style.brackets(bar, Style.White, 5)
-	end
+	local st = Instance.new("UIStroke")
+	st.Name = "AlertEdge"
+	st.Color = HudSkin.color("danger")
+	st.Transparency = 0.38
+	st.Thickness = 1
+	st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	st.Parent = bar
+	ui.barEdge = st
 	ui.bar = bar
+
 	ui.arrow = Style.glyph("up", {
-		Size = if lay then math.max(12, math.floor(textSize * 0.6)) else 12,
-		Box = UDim2.fromOffset(32, barH),
+		Size = math.max(10, math.floor(textSize * 0.62)),
+		Box = UDim2.fromOffset(26, barH),
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0, 22, 0.5, 0),
+		Position = UDim2.new(0, 18, 0.5, 0),
 		Visible = false,
 		Parent = bar,
 	})
-	ui.text = Style.label({
+	ui.text = HudSkin.label({
 		Text = "",
 		TextSize = textSize,
 		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, -132, 1, 0),
-		Position = UDim2.fromOffset(48, 0),
+		Size = UDim2.new(1, -112, 1, 0),
+		Position = UDim2.fromOffset(40, 0),
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = bar,
 	})
-	ui.time = Style.label({
+	ui.time = HudSkin.label({
 		Text = "",
+		Role = "number",
 		TextSize = subSize,
 		XAlign = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -10, 0.5, 0),
-		Size = UDim2.fromOffset(72, barH),
+		Position = UDim2.new(1, -8, 0.5, 0),
+		Size = UDim2.fromOffset(64, barH),
 		Parent = bar,
 	})
-	if skin then
-		HudSkin.styleText(ui.time, "number")
-	end
 	local prog = Style.bar({
 		Name = "TimeLeft",
-		Size = UDim2.new(1, 0, 0, if lay then 3 else 2),
+		Size = UDim2.new(1, 0, 0, 2),
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.fromScale(0, 1),
 		Color = Style.White,
@@ -190,24 +118,24 @@ function AlertBar.init()
 	prog.back.Visible = false
 	ui.prog = prog
 
-	-- 2. callout (amber line)
+	-- 2. Callout (compact amber line)
 	local callout = Instance.new("Frame")
 	callout.Name = "Callout"
 	callout.BackgroundTransparency = 1
-	callout.Size = UDim2.new(0, 0, 0, calloutH)
+	callout.Size = UDim2.fromOffset(0, calloutH)
 	callout.AutomaticSize = Enum.AutomaticSize.X
 	callout.LayoutOrder = 2
 	callout.Visible = false
 	callout.Parent = stack
-	Theme.list(callout, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+	Theme.list(callout, Enum.FillDirection.Horizontal, 5, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
 	ui.calloutArrow = Style.glyph("up", {
-		Size = math.max(11, math.floor(subSize * 0.58)),
+		Size = math.max(10, math.floor(subSize * 0.6)),
 		Color = Style.Amber,
-		Box = UDim2.fromOffset(20, calloutH),
+		Box = UDim2.fromOffset(18, calloutH),
 		LayoutOrder = 1,
 		Parent = callout,
 	})
-	ui.calloutText = Style.label({
+	ui.calloutText = HudSkin.label({
 		Text = "",
 		TextSize = subSize,
 		Color = Style.Amber,
@@ -218,31 +146,31 @@ function AlertBar.init()
 	})
 	ui.callout = callout
 
-	-- 3. notice (queued banner replacement)
+	-- 3. Notice (queued banner replacement)
 	local notice = Instance.new("Frame")
 	notice.Name = "Notice"
 	notice.BackgroundTransparency = 1
-	notice.Size = UDim2.new(1, 0, 0, 0)
+	notice.Size = UDim2.fromScale(1, 0)
 	notice.AutomaticSize = Enum.AutomaticSize.Y
 	notice.LayoutOrder = 3
 	notice.Visible = false
 	notice.Parent = stack
 	Theme.list(notice, Enum.FillDirection.Vertical, 2, Enum.HorizontalAlignment.Center)
 	ui.notice = notice
-	ui.noticeTitle = Style.label({
+	ui.noticeTitle = HudSkin.label({
 		Text = "",
 		TextSize = textSize,
 		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, 0, 0, textSize + 8),
+		Size = UDim2.new(1, 0, 0, textSize + 6),
 		LayoutOrder = 1,
 		Parent = notice,
 	})
-	ui.noticeSub = Style.label({
+	ui.noticeSub = HudSkin.label({
 		Text = "",
 		TextSize = subSize,
-		Color = Style.Grey,
+		ColorRole = "dim",
 		XAlign = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, 0, 0, subSize + 6),
+		Size = UDim2.new(1, 0, 0, subSize + 4),
 		LayoutOrder = 2,
 		Parent = notice,
 	})
@@ -257,13 +185,13 @@ local function pulse()
 			if my ~= pulseToken or not ui.bar then
 				return
 			end
-			tw(ui.bar, 0.12, { BackgroundTransparency = 0.8 })
-			task.wait(0.15)
+			tw(ui.bar, 0.12, { BackgroundTransparency = 0.72 })
+			task.wait(0.14)
 			if my ~= pulseToken then
 				return
 			end
-			tw(ui.bar, 0.12, { BackgroundTransparency = ui.barAlpha or 0.15 })
-			task.wait(0.15)
+			tw(ui.bar, 0.12, { BackgroundTransparency = BAR_ALPHA })
+			task.wait(0.14)
 		end
 	end)
 end
@@ -280,21 +208,25 @@ local function refresh()
 	end
 	if not best then
 		ui.bar.Visible = false
-		shownId, shownText = nil, ""
+		shownId = nil
 		pulseToken += 1
 		return
 	end
 	local changedAlert = shownId ~= best.id
 	ui.bar.Visible = true
-	ui.bar.BackgroundColor3 = best.color
-	local dark = best.color == Style.Amber
-	ui.text.TextColor3 = if dark then Style.Black else Style.White
-	ui.text.TextStrokeTransparency = if dark then 1 else 0.65
-	Style.tint(ui.arrow, ui.text.TextColor3)
-	ui.time.TextColor3 = ui.text.TextColor3
+	local isRed = best.color == Style.Red
+	local isAmber = best.color == Style.Amber
+	ui.bar.BackgroundColor3 = if isRed then CRIMSON_FILL else best.color
+	if ui.barEdge then
+		ui.barEdge.Color = if isRed then Color3.fromHex("FF5555") else best.color
+	end
+	local textCol = if isAmber then Style.Black else Style.White
+	ui.text.TextColor3 = textCol
+	Style.tint(ui.arrow, textCol)
+	ui.time.TextColor3 = textCol
 	ui.arrow.Visible = best.arrow
 	ui.text.Text = string.upper(best.text)
-	ui.prog.fill.BackgroundColor3 = ui.text.TextColor3
+	ui.prog.fill.BackgroundColor3 = textCol
 	if changedAlert then
 		ui.time.Text = ""
 		ui.prog.back.Visible = false
@@ -304,10 +236,8 @@ local function refresh()
 	if changedAlert then
 		pulse()
 	end
-	shownText = best.text
 end
 
--- id: stable key ("breach", "extract", ...). priority: higher wins (extract 3, breach 2, build 1). opts: color, priority, arrow, seconds
 function AlertBar.set(id: string, text: string, opts: { color: Color3?, priority: number?, arrow: boolean?, seconds: number? }?)
 	local o = opts or {}
 	local prev = sticky[id]
@@ -343,7 +273,6 @@ function AlertBar.clearAll()
 	refresh()
 end
 
--- Per-frame extras for the alert that is showing. rotation in degrees (nil = leave), clock text ("" hides), fraction 0..1 (nil hides)
 function AlertBar.setArrow(rotation: number)
 	if built and ui.arrow.Visible then
 		ui.arrow.Rotation = rotation
@@ -354,7 +283,7 @@ function AlertBar.setClock(text: string, fraction: number?)
 	if not built or not ui.bar.Visible then
 		return
 	end
-	if ui.time.Text ~= text then -- called every frame by IntensityFx; the text only changes about once a second
+	if ui.time.Text ~= text then
 		ui.time.Text = text
 	end
 	if fraction then
@@ -369,16 +298,24 @@ function AlertBar.isShowing(id: string): boolean
 	return shownId == id
 end
 
--- Brief urgency flash on the active alert bar (e.g. final countdown seconds of an inbound wave warning)
+-- True while any alert bar, heavy callout, or notice is visible (Tips hides to avoid overlap).
+function AlertBar.isActive(): boolean
+	if not built or not ui.gui or not ui.gui.Enabled then
+		return false
+	end
+	return (ui.bar ~= nil and ui.bar.Visible)
+		or (ui.callout ~= nil and ui.callout.Visible)
+		or (ui.notice ~= nil and ui.notice.Visible)
+end
+
 function AlertBar.pulseOnce()
 	if not built or not ui.bar or not ui.bar.Visible then
 		return
 	end
-	local base = ui.barAlpha or 0.15
-	tw(ui.bar, 0.08, { BackgroundTransparency = math.min(base + 0.55, 0.82) })
+	tw(ui.bar, 0.08, { BackgroundTransparency = math.min(BAR_ALPHA + 0.55, 0.8) })
 	task.delay(0.1, function()
 		if built and ui.bar and ui.bar.Visible then
-			tw(ui.bar, 0.14, { BackgroundTransparency = base })
+			tw(ui.bar, 0.14, { BackgroundTransparency = BAR_ALPHA })
 		end
 	end)
 end
@@ -468,14 +405,12 @@ function AlertBar.notice(title: string, sub: string?, color: Color3?, hold: numb
 	runNotices()
 end
 
--- Hide the whole stack outside missions
 function AlertBar.setVisible(on: boolean)
 	if built then
 		ui.gui.Enabled = on
 	end
 end
 
--- UI STYLE switch (HUD.rebuild): build the stack again in the new skin; sticky alerts stay set and show again
 function AlertBar.rebuild()
 	if not built then
 		return
@@ -486,7 +421,7 @@ function AlertBar.rebuild()
 	end
 	table.clear(ui)
 	built = false
-	shownId, shownText = nil, ""
+	shownId = nil
 	pulseToken += 1
 	calloutToken += 1
 	table.clear(noticeQueue)

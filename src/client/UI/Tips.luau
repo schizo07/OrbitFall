@@ -20,7 +20,9 @@ local DownedRules = require(Shared.Downed)
 
 local Theme = require(script.Parent.Theme)
 local Style = require(script.Parent.HudStyle)
+local HudSkin = require(script.Parent.HudSkin)
 local InfoLayer = require(script.Parent.InfoLayer)
+local AlertBar = require(script.Parent.AlertBar)
 local Store = require(script.Parent.Parent.Store)
 local Input = require(script.Parent.Parent.Input)
 
@@ -92,7 +94,7 @@ local function downedOnPhone(): boolean
 end
 
 local function canShow(): boolean
-	return inCombat() and not Store.get("menuOpen") and not downedOnPhone()
+	return inCombat() and not Store.get("menuOpen") and not downedOnPhone() and not AlertBar.isActive()
 end
 
 -- ---------------------------------------------------------------- text
@@ -129,65 +131,58 @@ local function build()
 	local gui = Theme.gui("OrbitTips", { DisplayOrder = 12, Insets = "CoreUISafeInsets" })
 	ui.gui = gui
 	local root = Theme.root(gui, "hud")
-	-- new layouts (UI STYLE A-C): one scale, no content x0.8; the card sits at HudLayout "tips" (phone: under the crosshair)
-	local isNew = InfoLayer.isNew()
-	underCrosshair = isNew and touch
-	local content = if isNew then root else Style.content(root, touch)
+	underCrosshair = false
 
+	local lay = InfoLayer.entry("tips", touch)
 	local group = Instance.new("CanvasGroup")
 	group.Name = "TipCard"
 	group.BackgroundTransparency = 1
 	group.BorderSizePixel = 0
-	group.AnchorPoint = Vector2.new(0.5, 0)
-	group.Position = UDim2.fromScale(0.5, 0.24) -- under the alert stack (y 50 + ~100), far above the crosshair
-	group.Size = UDim2.fromScale(0.36, 0)
-	if isNew then
-		InfoLayer.place(group, "tips", touch)
-		group.Size = UDim2.new(group.Size.X.Scale, group.Size.X.Offset, 0, 0)
-	end
+	InfoLayer.place(group, "tips", touch)
+	group.Size = UDim2.new(group.Size.X.Scale, group.Size.X.Offset, 0, 0)
 	group.AutomaticSize = Enum.AutomaticSize.Y
 	group.GroupTransparency = 1
 	group.Visible = false
-	group.Parent = content
+	group.Parent = root
 	local lim = Instance.new("UISizeConstraint")
-	lim.MinSize = Vector2.new(if isNew and touch then 200 else 300, 0)
-	lim.MaxSize = Vector2.new(460, math.huge)
+	lim.MinSize = Vector2.new(if touch then 200 else 280, 0)
+	lim.MaxSize = Vector2.new(if touch then 300 else 440, math.huge)
 	lim.Parent = group
 	ui.group = group
 
-	local panel = Style.panel({
+	local panel = HudSkin.panel("plate", {
 		Name = "Panel",
 		Size = UDim2.fromScale(1, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Parent = group,
 	})
-	Theme.pad(panel, 10, 6, 10, 6)
+	Theme.pad(panel, 8, 5, 10, 5)
 	Theme.list(panel, Enum.FillDirection.Horizontal, 8, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
 
 	local tag = Style.rect({
 		Name = "Tag",
-		Color = Style.Amber,
-		Size = UDim2.fromOffset(34, 18),
+		Color = HudSkin.color("own"),
+		Size = UDim2.fromOffset(30, 16),
 		LayoutOrder = 1,
 		Parent = panel,
 	})
-	Style.label({
+	HudSkin.label({
 		Text = "TIP",
 		Color = Style.Black,
-		TextSize = 12,
+		TextSize = 11,
 		XAlign = Enum.TextXAlignment.Center,
 		Shadow = false,
 		Size = UDim2.fromScale(1, 1),
 		Parent = tag,
 	})
 
-	local tipTextSize = if isNew then (InfoLayer.entry("tips", touch).TextSize or 20) else (Style.TEXT + 1)
-	local text = Style.label({
+	local tipTextSize: number = lay.TextSize or 14
+	local text = HudSkin.label({
 		Name = "Text",
-		Color = Style.White,
+		ColorRole = "text",
 		TextSize = tipTextSize,
 		Wrap = true,
-		Size = UDim2.new(1, -42, 0, 0),
+		Size = UDim2.new(1, -38, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		LayoutOrder = 2,
 		Parent = panel,

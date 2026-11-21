@@ -1,21 +1,12 @@
 -- All in-mission and ship HUD. Call HUD.init() once after Store/Input exist.
 -- Store keys read: me, mission, objectives, squad, profile, holding, menuOpen (all optional).
--- Thin edge HUD (style kit: UI/HudStyle). Widgets:
---   top-left   UI/CallInList (UPLINK list, icons only on touch) (+ ship info on the ship)  reads me.callins, me.reinforceReadyAt
---   top-centre UI/Compass tape (+ markers) and UI/AlertBar stack (breach / notices)    reads camera, objectives, beacons, intensity
---   top-right  UI/TopRight timer + reinforce tokens + resource chips                   reads mission.endsAt / lives, objectives, kills
---   right      UI/ObjectiveList checklist (y 16 %), UI/PickupToast (y 55 %; touch: centre y 30 %) reads objectives; Notify pickup texts
---   left       UI/SquadCards (y 58-78 %), one card per other squad member              reads squad, me.reinforceReadyAt, mission.lives
---   bottom-left own card built here (weapon, mag segments, stim/grenade/mag counts, callsign + health)   reads me
---                health bar: long, ghost chunk for recent damage, red + pulsing under Config.Stims.Critical, green tint
---                while a stim heals; spare ammo amber when <= 1 magazine; "TAP [R] TO RELOAD" via UI/ContextPrompt
---                (screen-edge damage effects: client/Fx/VitalsFx)
---                + UI/SquadComms tiny radio line above it                               reads me, Fx Breach / HeavyContact / Beacon
---   bottom-right UI/EventFeed (5 lines, 8 s): DIED, streaks, objectives, call-in arrivals, chatter   reads Notify, Fx Death, objectives
---   bottom-centre UI/StaminaBar (inited by Movement)
--- On touch everything in the main gui is drawn at 0.8 x (Style.content); the event feed + resource summary sit behind a FEED button.
--- The above is the old HUD (UI STYLE D). Skins A-C (UI/HudSkin, Feel_UiStyle) build buildMainNew instead: positions from
--- UI/HudLayout, health in UI/Vitals, ammo in UI/WeaponBlock, crosshair satellites (CROSSHAIR INFO); HUD.rebuild() switches live.
+-- Unified perimeter HUD (85 %+ clear center viewport; layout in UI/HudLayout, visual tokens in UI/HudSkin):
+--   top-left      UI/CallInList (collapsed CALL-INS chip + reinforcement pill; expands on dial; primed chip when armed)
+--   top-centre    UI/Compass (slim translucent bar + bearing chip + all pips at any distance) & UI/AlertBar (breach/wave)
+--   top-right     UI/TopRight (mission timer) & UI/ObjectiveList (compact checklist + active progress bar)
+--   bottom-left   UI/Vitals + UI/WeaponBlock + UI/StaminaBar (unified self vitals/weapon/stamina) & UI/SquadCards above it
+--   bottom-right  UI/EventFeed (ephemeral kill/objective/pickup/radio lines)
+--   centre        crosshair + barrel reticle + hitmarkers + reload bar + ContextPrompt + ephemeral kill-streak + satellites
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -55,16 +46,9 @@ local HUD = {}
 local inited = false
 local touch = false
 local ui: { [string]: any } = {}
--- UI STYLE (Studio A/B, Feel_UiStyle, UI/HudSkin): true while the main HUD is built in the new layout (skins A-C).
--- Option D ("old") builds exactly the old HUD. HUD.rebuild() switches live.
-local newLayout = false
 local overlayKeys: { [string]: boolean } = {} -- ui keys of the overlay gui (HUD.rebuild keeps them)
 
--- Studio A/B "PHONE HUD" (Feel_PhoneHud): nil = phone placements that keep the crosshair-layer widgets off the touch
--- buttons and the alert bar; "old" = the previous phone placements. PC never changes.
-local function phoneNew(): boolean
-	return touch and workspace:GetAttribute("Feel_PhoneHud") ~= "old"
-end
+local MARKER_SCREEN_MAX_STUDS = 80 -- 3D screen-space markers hide past 80 studs (compass-only on the horizon)
 
 -- state caches
 local state = "Ship"
@@ -74,18 +58,11 @@ local gap = 8
 local gapShown = -1 -- last gap written to the crosshair ticks
 local segLit, segCol, segTable: any = -1, nil, nil -- last magazine-segment state written (step)
 local reloadProgress: number? = nil
-local flash = 0
 local hitKick = 0 -- crosshair ticks fly outward on a hit and spring back (px)
 local ammoLow = false -- magazine <= 25 %: the number pulses red (step)
 local ammoLastId: string? = nil
 local ammoLastMag = 0
 local ammoFill: { from: number, to: number, t0: number }? = nil -- quick count-up after a reload
-local lastHp: number? = nil
--- health bar: ghost chunk (recent damage) holds, then drains to the real value
-local hpFrac = 1
-local ghostFrac = 1
-local ghostHold = 0 -- os.clock until the ghost starts draining
-local ghostShown = -1
 local markers: { [string]: any } = {}
 local beacons: { [string]: { pos: Vector3, color: Color3, label: string } } = {}
 local resultsShown: any = nil
@@ -423,76 +400,63 @@ local function buildCrosshair()
 		Parent = prompt,
 	})
 
-	-- crosshair satellites (new layout only; Studio A/B CROSSHAIR INFO, Feel_XhairInfo: nil = on low ammo / low hp,
-	-- "always", "off"): the mag count right-below the crosshair, a health arc on its left. Raw px like the crosshair.
-	if HudSkin.isNew() then
-		local sat = HudLayout.get("satellites", touch)
-		ui.satMag = HudSkin.label({
-			Name = "SatMag",
-			Role = "number",
-			Text = "",
-			TextSize = sat.TextSize,
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.fromOffset(sat.MagOffset.X, sat.MagOffset.Y),
-			Size = UDim2.fromOffset(sat.TextSize * 3, sat.TextSize + 4),
-			Visible = false,
-			Parent = cross,
-		})
-		ui.satMag:SetAttribute("NoTextFloor", true)
-		local arc = Instance.new("Frame")
-		arc.Name = "SatArc"
-		arc.BackgroundTransparency = 1
-		arc.Size = UDim2.fromOffset(0, 0)
-		arc.Visible = false
-		arc.Parent = cross
-		ui.satArc = arc
-		ui.satDots = {}
-		local n = 12
-		for i = 1, n do
-			-- left 90 degrees, bottom (lowest health) to top
-			local a = math.rad(225 - (i - 1) / (n - 1) * 90)
-			local d = Instance.new("Frame")
-			d.BorderSizePixel = 0
-			d.AnchorPoint = Vector2.new(0.5, 0.5)
-			d.Position = UDim2.fromOffset(math.cos(a) * sat.ArcRadius, -math.sin(a) * sat.ArcRadius)
-			d.Size = UDim2.fromOffset(sat.ArcWidth, sat.ArcWidth + 1)
-			d.Rotation = -math.deg(a)
-			d.BackgroundColor3 = HudSkin.color("text")
-			d.Parent = arc
-			ui.satDots[i] = d
-		end
-		ui.satShown = ""
+	-- Crosshair satellites (baked on): mag count right-below the crosshair when low/reloading, health arc left when < 50 %.
+	local sat = HudLayout.get("satellites", touch)
+	ui.satMag = HudSkin.label({
+		Name = "SatMag",
+		Role = "number",
+		Text = "",
+		TextSize = sat.TextSize,
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromOffset(sat.MagOffset.X, sat.MagOffset.Y),
+		Size = UDim2.fromOffset(sat.TextSize * 3, sat.TextSize + 4),
+		Visible = false,
+		Parent = cross,
+	})
+	ui.satMag:SetAttribute("NoTextFloor", true)
+	local arc = Instance.new("Frame")
+	arc.Name = "SatArc"
+	arc.BackgroundTransparency = 1
+	arc.Size = UDim2.fromOffset(0, 0)
+	arc.Visible = false
+	arc.Parent = cross
+	ui.satArc = arc
+	ui.satDots = {}
+	local n = 12
+	for i = 1, n do
+		local a = math.rad(225 - (i - 1) / (n - 1) * 90)
+		local d = Instance.new("Frame")
+		d.BorderSizePixel = 0
+		d.AnchorPoint = Vector2.new(0.5, 0.5)
+		d.Position = UDim2.fromOffset(math.cos(a) * sat.ArcRadius, -math.sin(a) * sat.ArcRadius)
+		d.Size = UDim2.fromOffset(sat.ArcWidth, sat.ArcWidth + 1)
+		d.Rotation = -math.deg(a)
+		d.BackgroundColor3 = HudSkin.color("text")
+		d.Parent = arc
+		ui.satDots[i] = d
 	end
+	ui.satShown = ""
 end
 
--- Phone placement of the raw-px crosshair-layer widgets (beacon prompt, kill streak, barrel ring). Reference phone
--- 800 x 380, touch cluster at x 514-776 / y 86-364 (computed from MobileControls, not measured):
---   beacon prompt  old: 320 x 56 at y 270-326, x 240-560 (under UPLINK 514-586 and SIDE 458-506)
---                  new: 220 x 72 (hint on its own line) at y 258-330, x 290-510: under the RELOADING label (244-258),
---                       left of UPLINK; the centred text clears SIDE (458-506 from y 316); the pickup toast sits
---                       above the crosshair, so the prompt stays below it
---   kill streak    old: centre y 50, 24-76 (on the alert bar, which starts at y ~32)
---                  new: centre y 95, x0.65 -> 156 x 34 at y 78-112 (pop x1.25: 73-117)
 local function placePhone()
-	local new = phoneNew()
 	local prompt = ui.promptFrame
 	if prompt then
-		prompt.Position = UDim2.new(0.5, 0, 0.5, if new then 68 else 80)
-		prompt.Size = UDim2.fromOffset(if new then 220 else 320, if new then 72 else 56)
+		prompt.Position = UDim2.new(0.5, 0, 0.5, if touch then 68 else 80)
+		prompt.Size = UDim2.fromOffset(if touch then 220 else 320, if touch then 72 else 56)
 		if ui.promptSub then
-			ui.promptSub.Size = UDim2.new(1, 0, 0, if new then 38 else 20) -- two lines: call-in name, then the hint
+			ui.promptSub.Size = UDim2.new(1, 0, 0, if touch then 38 else 20)
 		end
 	end
 	if ui.streakFrame then
-		ui.streakFrame.Position = UDim2.new(0.5, 0, 0.5, if new then -95 else -140)
+		ui.streakFrame.Position = UDim2.new(0.5, 0, 0.5, if touch then -95 else -132)
 	end
 	if ui.barrelScale then
-		ui.barrelScale.Scale = if new then 0.7 else 1
+		ui.barrelScale.Scale = if touch then 0.7 else 1
 	end
 end
 
-local function streakK(): number -- kill streak pop size multiplier (phones, new layout)
-	return if phoneNew() then 0.65 else 1
+local function streakK(): number
+	return if touch then 0.65 else 1
 end
 
 -- Main HUD ----------------------------------------------------------------------------------------------------------
@@ -589,206 +553,17 @@ local shotKick = 0 -- 1 right after a shot, decays to 0
 local jitterRng = Random.new()
 
 local MAG_SEGS = 20
-local HP_BAR_W = 210
 
--- Bottom-left own card: weapon name + mag counter, segmented magazine bar, stim / grenade / mag counts, callsign + health bar.
-local function buildOwnCard(parent: Instance)
-	local card = Style.panel({
-		Name = "OwnCard",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, Style.MARGIN, 1, -Style.MARGIN),
-		Size = UDim2.fromOffset(HP_BAR_W + 66, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-		Parent = parent,
-	})
-	ui.ownCard = card
-	Style.applyBoost(card, touch)
-	Theme.pad(card, 8, 6, 8, 7)
-	Theme.list(card, Enum.FillDirection.Vertical, 4)
-
-	-- weapon name (left) + magazine / spare (right)
-	local top = Instance.new("Frame")
-	top.Name = "Weapon"
-	top.BackgroundTransparency = 1
-	top.Size = UDim2.new(1, 0, 0, 32)
-	top.LayoutOrder = 1
-	top.Parent = card
-	ui.ammoName = Style.label({
-		Text = "",
-		TextSize = 17,
-		Color = Style.Amber,
-		Size = UDim2.new(1, -96, 0, 18),
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Parent = top,
-	})
-	ui.ammoState = Style.label({
-		Text = "",
-		TextSize = 14,
-		Color = Style.Red,
-		Size = UDim2.new(1, -158, 0, 14),
-		Position = UDim2.fromOffset(0, 17),
-		Parent = top,
-	})
-	ui.ammoAp = Style.label({
-		Text = "",
-		TextSize = 12,
-		Color = Style.Amber,
-		XAlign = Enum.TextXAlignment.Right,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -158, 0, 18),
-		Size = UDim2.fromOffset(78, 14),
-		Parent = top,
-	})
-	ui.ammoMag = Style.label({
-		Text = "0",
-		TextSize = 32,
-		XAlign = Enum.TextXAlignment.Right,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -42, 0, -1),
-		Size = UDim2.fromOffset(54, 32),
-		Parent = top,
-	})
-	ui.ammoSpare = Style.label({
-		Text = "/ 0",
-		TextSize = 17,
-		Color = Style.Grey,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 9),
-		Size = UDim2.fromOffset(40, 18),
-		Parent = top,
-	})
-	ui.ammoMagPos = ui.ammoMag.Position
-	-- fire mode (HUD.setFireMode from WeaponController) left of the counter; a button so touch can tap it to switch
-	local fm = Instance.new("TextButton")
-	fm.Name = "FireMode"
-	fm.AutoButtonColor = false
-	fm.BackgroundTransparency = 1
-	fm.BorderSizePixel = 0
-	fm.FontFace = Style.Font
-	fm.TextSize = 13
-	fm.TextColor3 = Style.Grey
-	fm.TextStrokeColor3 = Style.Black
-	fm.TextStrokeTransparency = 0.65
-	fm.TextXAlignment = Enum.TextXAlignment.Right
-	fm.AnchorPoint = Vector2.new(1, 0)
-	-- touch: a taller hit box reaching up over the name line (text stays on the bottom line)
-	fm.Position = UDim2.new(1, -98, 0, if touch then 2 else 17)
-	fm.Size = UDim2.fromOffset(if touch then 64 else 56, if touch then 30 else 15)
-	fm.TextYAlignment = Enum.TextYAlignment.Bottom
-	fm.Text = ""
-	fm.Parent = top
-	fm.Activated:Connect(function()
-		if (HUD :: any).fireModeTap then
-			(HUD :: any).fireModeTap()
-		end
-	end)
-	ui.fireMode = fm
-
-	-- magazine segments
-	local segs = Instance.new("Frame")
-	segs.Name = "MagBar"
-	segs.BackgroundTransparency = 1
-	segs.Size = UDim2.new(1, 0, 0, 6)
-	segs.LayoutOrder = 2
-	segs.Parent = card
-	Theme.list(segs, Enum.FillDirection.Horizontal, 1)
-	ui.magSegs = {}
-	for i = 1, MAG_SEGS do
-		local s = Style.rect({
-			Color = Style.White,
-			Transparency = 0.8,
-			Size = UDim2.new(1 / MAG_SEGS, -1, 1, 0),
-			LayoutOrder = i,
-			Parent = segs,
-		})
-		ui.magSegs[i] = s
-	end
-
-	-- counts: stims / grenades / spare magazines
-	local counts = Instance.new("Frame")
-	counts.Name = "Counts"
-	counts.BackgroundTransparency = 1
-	counts.Size = UDim2.new(1, 0, 0, 20)
-	counts.LayoutOrder = 3
-	counts.Parent = card
-	Theme.list(counts, Enum.FillDirection.Horizontal, 12, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
-	local function countCell(name: string, glyph: string, order: number): TextLabel
-		local l = Style.label({
-			Name = name,
-			Text = glyph .. " 0",
-			TextSize = 16,
-			Color = Style.Amber,
-			Size = UDim2.fromOffset(0, 20),
-			AutomaticSize = Enum.AutomaticSize.X,
-			LayoutOrder = order,
-			Parent = counts,
-		})
-		return l
-	end
-	ui.cntStim = countCell("Stims", "STIM", 1)
-	ui.cntNade = countCell("Grenades", "GREN", 2)
-	ui.cntMags = countCell("Mags", "MAG", 3)
-	ui.cntStim.Visible = false -- only shown when the server publishes me.stims
-
-	-- callsign + health
-	local hpRow = Instance.new("Frame")
-	hpRow.Name = "Health"
-	hpRow.BackgroundTransparency = 1
-	hpRow.Size = UDim2.new(1, 0, 0, 22)
-	hpRow.LayoutOrder = 4
-	hpRow.Parent = card
-	ui.callsign = Style.label({
-		Text = "S1",
-		TextSize = 17,
-		Color = Style.Amber,
-		Size = UDim2.fromOffset(32, 22),
-		Parent = hpRow,
-	})
-	local track = Style.rect({
-		Name = "HpTrack",
-		Color = Style.Black,
-		Transparency = 0.4,
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 34, 0.5, 0),
-		Size = UDim2.new(1, -34, 0, 12), -- long bar: the whole row after the callsign
-		Parent = hpRow,
-	})
-	ui.hpPanel = track
-	-- ghost chunk: the health just lost, light red, drains after a short hold (step)
-	ui.hpGhost = Style.rect({ Name = "Ghost", Color = Color3.fromRGB(255, 150, 140), Transparency = 0.15, Size = UDim2.fromScale(1, 1), ZIndex = 1, Parent = track })
-	ui.hpFill = Style.rect({ Name = "Fill", Color = Style.White, Size = UDim2.fromScale(1, 1), ZIndex = 2, Parent = track })
-	local st = Instance.new("UIStroke")
-	st.Color = Style.White
-	st.Transparency = 0.7
-	st.Thickness = 1
-	st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	st.Parent = track
-	ui.hpStroke = st
-	ui.hpText = Style.label({
-		Text = "",
-		TextSize = 12,
-		Color = Style.Grey,
-		XAlign = Enum.TextXAlignment.Right,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 0),
-		Size = UDim2.fromOffset(0, 18),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Parent = hpRow,
-	})
-	ui.hpText.Visible = false -- numbers live on the bar tooltip-free; kept for updateHealth()
-end
-
--- Toasts: small flat lines low centre (the centre of the screen and the top alert stack stay clear)
+-- Toasts: small flat lines low centre (ship lobby messages; combat toasts route to EventFeed)
 local function buildToasts(root: Instance)
 	local holder = Instance.new("Frame")
 	holder.Name = "Toasts"
 	holder.BackgroundTransparency = 1
 	holder.AnchorPoint = Vector2.new(0.5, 1)
-	holder.Position = UDim2.new(0.5, 0, if HudLayout.preset() == "frame" then 0.74 else 0.8, 0)
+	holder.Position = UDim2.fromScale(0.5, 0.8)
 	holder.Size = UDim2.fromOffset(440, 0)
 	if touch then
-		-- between the left column and the touch buttons, above the SIDE chip / Frame bottom bar
-		holder.Position = UDim2.new(0.44, 0, if HudLayout.preset() == "frame" then 0.66 else 0.74, 0)
+		holder.Position = UDim2.fromScale(0.44, 0.74)
 		holder.Size = UDim2.fromOffset(380, 0)
 	end
 	holder.AutomaticSize = Enum.AutomaticSize.Y
@@ -797,11 +572,8 @@ local function buildToasts(root: Instance)
 	ui.toasts = holder
 end
 
--- New layout (UI STYLE skins A-C): no stacked panels. Health bottom-left (phone: top-left), weapon block bottom-right
--- (phone: top-left under the health), compass top centre; the information modules (goal line, mission sheet, timer,
--- call-in strip, squad strip, one event feed) place themselves from UI/HudLayout inside the same build calls the old
--- HUD makes. One scale (Theme.scaleFor("hud")), no 0.8 content frame, no boosts. The ship panel keeps the old column.
-local function buildMainNew()
+-- Unified perimeter HUD layout (85 %+ clear center viewport).
+local function buildMain()
 	local gui = Theme.gui("OrbitHUD", { DisplayOrder = 10, Insets = "CoreUISafeInsets" })
 	ui.mainGui = gui
 	local screen, screenScale = Theme.root(gui, "hud")
@@ -810,62 +582,7 @@ local function buildMainNew()
 	ui.root = screen
 	local root = screen
 
-	-- Frame preset: solid high-contrast edge bars (top bar for compass + objective + timer, bottom bar for vitals + call-ins + weapon)
-	if HudLayout.preset() == "frame" then
-		local topCfg = HudLayout.get("topBar", touch)
-		local botCfg = HudLayout.get("bottomBar", touch)
-		local topH = topCfg.Height or 67
-		local botH = botCfg.Height or 75
-		local barColor = Color3.fromHex("06090F")
-		local edgeColor = HudSkin.color("objective")
-
-		local topBar = Instance.new("Frame")
-		topBar.Name = "FrameTopBar"
-		topBar.BackgroundColor3 = barColor
-		topBar.BackgroundTransparency = 0.08
-		topBar.BorderSizePixel = 0
-		topBar.Position = UDim2.fromOffset(0, 0)
-		topBar.Size = UDim2.new(1, 0, 0, topH)
-		topBar.ZIndex = 0
-		topBar.Parent = root
-		local topLine = Instance.new("Frame")
-		topLine.Name = "Edge"
-		topLine.BorderSizePixel = 0
-		topLine.BackgroundColor3 = edgeColor
-		topLine.BackgroundTransparency = 0.25
-		topLine.AnchorPoint = Vector2.new(0, 1)
-		topLine.Position = UDim2.fromScale(0, 1)
-		topLine.Size = UDim2.new(1, 0, 0, 2)
-		topLine.Parent = topBar
-
-		local botBar = Instance.new("Frame")
-		botBar.Name = "FrameBottomBar"
-		botBar.BackgroundColor3 = barColor
-		botBar.BackgroundTransparency = 0.08
-		botBar.BorderSizePixel = 0
-		botBar.AnchorPoint = Vector2.new(0, 1)
-		botBar.Position = UDim2.fromScale(0, 1)
-		botBar.Size = if touch then UDim2.fromOffset(HudLayout.phoneBottomWidth(), botH) else UDim2.new(1, 0, 0, botH)
-		botBar.ZIndex = 0
-		botBar.Parent = root
-		if touch then
-			Theme.onScaleChanged(function()
-				if botBar.Parent then
-					botBar.Size = UDim2.fromOffset(HudLayout.phoneBottomWidth(), botH)
-				end
-			end)
-		end
-		local botLine = Instance.new("Frame")
-		botLine.Name = "Edge"
-		botLine.BorderSizePixel = 0
-		botLine.BackgroundColor3 = edgeColor
-		botLine.BackgroundTransparency = 0.25
-		botLine.Position = UDim2.fromOffset(0, 0)
-		botLine.Size = UDim2.new(1, 0, 0, 2)
-		botLine.Parent = botBar
-	end
-
-	-- ship info (lobby only): the old top-left column, unchanged
+	-- Ship info (lobby only)
 	local legacy = Style.content(screen, touch)
 	legacy.Name = "ShipContent"
 	local left = Instance.new("Frame")
@@ -880,7 +597,7 @@ local function buildMainNew()
 	ui.left = left
 	buildShipPanel(left)
 
-	-- information modules: each decides its own place in the new layout (UI/InfoLayer + UI/HudLayout)
+	-- Perimeter widgets (each positioned from UI/HudLayout)
 	AreaInfo.build(root, touch, 1)
 	ObjectiveList.build(root, touch, 2)
 	CallInList.build(root, touch, 3)
@@ -888,13 +605,15 @@ local function buildMainNew()
 	TopRight.build(root, touch)
 	ui.objReady = true
 
+	-- Bottom-left unified self vitals + weapon + hairline stamina strip
 	ui.vitals = Vitals.build(root, touch)
-	local wb = WeaponBlock.build(root, touch, function()
+	ui.callsign = Vitals.callsignLabel()
+	ui.magSegs = Vitals.magSegs()
+	local wb = WeaponBlock.build(Vitals.weaponSlot() or root, touch, function()
 		if (HUD :: any).fireModeTap then
 			(HUD :: any).fireModeTap()
 		end
 	end)
-	-- the ammo code writes the same label roles as on the old card
 	ui.weaponBlock = wb.root
 	ui.ammoName = wb.name
 	ui.ammoAp = wb.ap
@@ -912,136 +631,6 @@ local function buildMainNew()
 	PickupToast.build(root, touch)
 	SquadComms.build(ui.vitals, touch)
 	buildToasts(root)
-
-	-- visor: thin brackets at the four outer screen corners (the "visor frame"); none on elements
-	local skin = HudSkin.current()
-	if skin and skin.id == "visor" then
-		local frame = Instance.new("Frame")
-		frame.Name = "VisorFrame"
-		frame.BackgroundTransparency = 1
-		frame.AnchorPoint = Vector2.new(0.5, 0.5)
-		frame.Position = UDim2.fromScale(0.5, 0.5)
-		local m = if touch then 8 else 12
-		frame.Size = UDim2.new(1, -2 * m, 1, -2 * m)
-		frame.Parent = root
-		local col = skin.colors.dim
-		for _, c in { Vector2.new(0, 0), Vector2.new(1, 0), Vector2.new(0, 1), Vector2.new(1, 1) } do
-			for _, horiz in { true, false } do
-				local b = Instance.new("Frame")
-				b.BorderSizePixel = 0
-				b.BackgroundColor3 = col
-				b.BackgroundTransparency = 0.35
-				b.AnchorPoint = c
-				b.Position = UDim2.fromScale(c.X, c.Y)
-				b.Size = if horiz then UDim2.fromOffset(12, 1) else UDim2.fromOffset(1, 12)
-				b.Parent = frame
-			end
-		end
-	end
-end
-
-local function buildMain()
-	newLayout = HudSkin.isNew()
-	if newLayout then
-		buildMainNew()
-		return
-	end
-	local gui = Theme.gui("OrbitHUD", { DisplayOrder = 10, Insets = "CoreUISafeInsets" })
-	ui.mainGui = gui
-	local screen, screenScale = Theme.root(gui, "hud")
-	ui.screen = screen
-	ui.screenScale = screenScale
-	local root = Style.content(screen, touch) -- 0.8 x on touch
-	ui.root = root
-
-	-- top-left column: ship info (lobby), area info, uplink list (squad cards sit above the own card, bottom-left).
-	-- Touch: the right edge belongs to the touch buttons, so the objective block moves into this column and the uplink
-	-- list becomes a second narrow column beside it (LEFT_TOUCH_W + 8 + CALLIN_TOUCH_W wide).
-	local left = Instance.new("Frame")
-	left.Name = "LeftColumn"
-	left.BackgroundTransparency = 1
-	left.Position = UDim2.fromOffset(Style.MARGIN, Style.MARGIN)
-	left.Parent = root
-	Style.applyBoost(left, touch) -- bigger text / rows (viewport scale comes from Theme.root + Style.content)
-	ui.left = left
-
-	local col1 = left
-	local col2: Frame? = nil
-	if touch then
-		left.Size = UDim2.fromOffset(0, 0)
-		left.AutomaticSize = Enum.AutomaticSize.XY
-		Theme.list(left, Enum.FillDirection.Horizontal, 8)
-		col1 = Instance.new("Frame")
-		col1.Name = "Main"
-		col1.BackgroundTransparency = 1
-		col1.Size = UDim2.fromOffset(Style.LEFT_TOUCH_W, 0)
-		col1.AutomaticSize = Enum.AutomaticSize.Y
-		col1.LayoutOrder = 1
-		col1.Parent = left
-		local c2 = Instance.new("Frame")
-		c2.Name = "Uplink"
-		c2.BackgroundTransparency = 1
-		c2.Size = UDim2.fromOffset(Style.CALLIN_TOUCH_W, 0)
-		c2.AutomaticSize = Enum.AutomaticSize.Y
-		c2.LayoutOrder = 2
-		c2.Parent = left
-		Theme.list(c2, Enum.FillDirection.Vertical, 8)
-		col2 = c2
-	else
-		left.Size = UDim2.fromOffset(Style.LEFT_PC_W, 0)
-		left.AutomaticSize = Enum.AutomaticSize.Y
-	end
-	Theme.list(col1, Enum.FillDirection.Vertical, 8)
-
-	buildShipPanel(col1)
-	AreaInfo.build(col1, touch, 1)
-	if col2 then
-		ObjectiveList.build(col1, touch, 2)
-		CallInList.build(col2, touch, 1)
-	else
-		CallInList.build(col1, touch, 2)
-	end
-
-	ui.compassMarkerLayer = Compass.build(root, touch)
-	TopRight.build(root, touch)
-	if not col2 then
-		ObjectiveList.build(root, touch)
-	end
-	ui.objReady = true
-	buildOwnCard(root)
-	SquadCards.build(root, touch)
-	-- squad cards stack upward from just above the own card (+ its radio line), whatever the card's height
-	local function placeSquad()
-		local k = ui.screenScale.Scale * (if touch then 0.8 else 1)
-		if k <= 0 or not ui.ownCard then
-			return
-		end
-		local bottom = Style.MARGIN + ui.ownCard.AbsoluteSize.Y / k + 40
-		SquadCards.setBottom(bottom)
-		-- free height above the stack's bottom edge, under the objective column (A) and under the uplink column (B):
-		-- phones with a full squad go compact, then slide under the uplink column, instead of covering the objective list
-		local stackBottom = root.AbsoluteSize.Y / k - bottom
-		local function colBottom(f: Frame): number
-			return (f.AbsolutePosition.Y + f.AbsoluteSize.Y - root.AbsolutePosition.Y) / k
-		end
-		local roomB, xB = 0, 0
-		if col2 then
-			roomB = stackBottom - colBottom(col2) - 4
-			xB = (col2.AbsolutePosition.X - root.AbsolutePosition.X) / k
-		end
-		SquadCards.setRoom(stackBottom - colBottom(col1) - 4, roomB, xB)
-	end
-	ui.ownCard:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSquad)
-	col1:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSquad)
-	if col2 then
-		col2:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSquad)
-	end
-	ui.screenScale:GetPropertyChangedSignal("Scale"):Connect(placeSquad)
-	task.defer(placeSquad)
-	EventFeed.build(root, touch)
-	PickupToast.build(root, touch)
-	SquadComms.build(ui.ownCard, touch)
-	buildToasts(root)
 end
 
 -- The damage edge vignette, desaturation, heartbeat and big-hit overlay live in client/Fx/VitalsFx.luau (2026-11-14).
@@ -1051,8 +640,7 @@ function HUD.toast(text: string, color: Color3?)
 	if not ui.toasts then
 		return
 	end
-	-- new layout: one place for event text (the event feed)
-	if newLayout and COMBAT[state] then
+	if COMBAT[state] then
 		EventFeed.push(text, color or Style.White, "toast")
 		return
 	end
@@ -1335,7 +923,6 @@ local missionKills = 0
 local streakGen = 0
 local streakTweens: { Tween } = {}
 local audioMod: any = nil
-local fxMod: any = nil
 
 local function buildStreak()
 	local gui = ui.crossGui
@@ -1387,9 +974,6 @@ local function buildStreak()
 	})
 	ui.streakCount.TextStrokeTransparency = 0.2
 	placePhone()
-	if touch then
-		workspace:GetAttributeChangedSignal("Feel_PhoneHud"):Connect(placePhone)
-	end
 end
 
 -- skull parts (white / dark frames) fade together with the number
@@ -1650,12 +1234,9 @@ function HUD.ammoShot(slot: number, mag: number, maxMag: number)
 	shotKick = 1
 end
 
--- kept for callers; the damage edge effects live in client/Fx/VitalsFx.luau (this only feeds the HP bar stroke flash)
+-- kept for callers; the damage edge effects live in client/Fx/VitalsFx.luau (this only feeds the HP bar track flash)
 function HUD.flashDamage(strength: number?)
-	flash = math.max(flash, strength or 0.6)
-	if newLayout then
-		Vitals.flash(strength)
-	end
+	Vitals.flash(strength)
 end
 
 -- Beacons (for compass + world markers). Call from the call-in FX when a beacon lands / expires.
@@ -1722,14 +1303,14 @@ function HUD.refreshMarkers()
 		world.Name = d.key
 		world.BackgroundTransparency = 1
 		world.AnchorPoint = Vector2.new(0.5, 0.5)
-		world.Size = UDim2.fromOffset(120, 60)
+		world.Size = UDim2.fromOffset(110, 50)
 		local us = Theme.layoutScale(Instance.new("UIScale"))
 		us.Scale = math.max(s, 0.8)
 		us.Parent = world
 		Style.label({
 			Name = "Name",
 			Text = string.upper(d.label),
-			TextSize = 13,
+			TextSize = 12,
 			Color = d.color,
 			XAlign = Enum.TextXAlignment.Center,
 			Size = UDim2.new(1, 0, 0, 14),
@@ -1737,19 +1318,19 @@ function HUD.refreshMarkers()
 		})
 		Style.glyph(d.glyph, {
 			Name = "Glyph",
-			Size = 18,
+			Size = 16,
 			Color = d.color,
-			Box = UDim2.new(1, 0, 0, 28),
+			Box = UDim2.new(1, 0, 0, 22),
 			Position = UDim2.fromOffset(0, 14),
 			Parent = world,
 		})
 		Style.label({
 			Name = "Dist",
 			Text = "",
-			TextSize = 13,
+			TextSize = 12,
 			XAlign = Enum.TextXAlignment.Center,
-			Size = UDim2.new(1, 0, 0, 16),
-			Position = UDim2.fromOffset(0, 42),
+			Size = UDim2.new(1, 0, 0, 14),
+			Position = UDim2.fromOffset(0, 36),
 			Parent = world,
 		})
 		world.Visible = false
@@ -1924,7 +1505,7 @@ local function updateAmmo()
 	end
 	updateReloadPrompt()
 	local g = me.grenades or 0
-	ui.cntNade.Text = "GREN " .. tostring(g)
+	ui.cntNade.Text = tostring(g)
 	ui.cntNade.TextColor3 = if g <= 0 then Style.Grey else Style.Amber
 	local stims = me.stims
 	ui.cntStim.Visible = type(stims) == "number"
@@ -1932,9 +1513,7 @@ local function updateAmmo()
 		ui.cntStim.Text = string.format("STIM x%d/%d", stims, me.stimsMax or Config.Stims.Max)
 		ui.cntStim.TextColor3 = if stims <= 0 then Style.Red else Style.Amber
 	end
-	if newLayout then
-		WeaponBlock.setGrenades(g)
-	end
+	WeaponBlock.setGrenades(g)
 end
 
 -- WeaponController: its predicted magazine table (same table every call; read by reference).
@@ -1983,30 +1562,7 @@ local function updateHealth()
 	if not me then
 		return
 	end
-	local hp, maxHp = me.hp or 0, math.max(me.maxHp or Config.PlayerHealth, 1)
-	local frac = Theme.clamp(hp / maxHp, 0, 1)
-	if newLayout then
-		Vitals.set(me)
-		hpFrac = frac
-		lastHp = hp
-		return
-	end
-	tw(ui.hpFill, 0.12, { Size = UDim2.fromScale(frac, 1) })
-	-- colour (red when critical, pulsing; green tint while a stim heals) is set per frame in step()
-	ui.hpText.Text = me.alive == false and "DOWN" or string.format("%d / %d", math.ceil(hp), maxHp)
-	if lastHp and hp < lastHp - 0.5 then
-		flash = math.max(flash, math.min(1, (lastHp - hp) / maxHp * 3 + 0.3))
-	end
-	-- ghost chunk: on damage it keeps the old value for a moment, then drains (step); on heal it snaps under the fill
-	if frac < hpFrac - 0.001 then
-		ghostFrac = math.max(ghostFrac, hpFrac)
-		ghostHold = os.clock() + 0.45
-	end
-	hpFrac = frac
-	if ghostFrac < frac then
-		ghostFrac = frac
-	end
-	lastHp = hp
+	Vitals.set(me)
 end
 
 -- Ship HUD -------------------------------------------------------------------------------------------------------------------
@@ -2040,7 +1596,7 @@ local function updateTimer()
 		elseif state == "Extract" then
 			col = Style.Green
 		end
-		TopRight.setTimer((if newLayout then "" else "T-") .. Theme.formatTime(left), col)
+		TopRight.setTimer(Theme.formatTime(left), col)
 		TopRight.setLives(m.lives or 0)
 	end
 end
@@ -2058,12 +1614,8 @@ local function applyVisibility()
 	TopRight.setVisible(combat)
 	CallInList.setVisible(combat)
 	AreaInfo.setVisible(combat)
-	if newLayout then
-		Vitals.setVisible(combat)
-		WeaponBlock.setVisible(combat)
-	else
-		ui.ownCard.Visible = combat
-	end
+	Vitals.setVisible(combat)
+	WeaponBlock.setVisible(combat)
 	EventFeed.setVisible(combat)
 	PickupToast.setVisible(combat)
 	ContextPrompt.setVisible(combat and alive and not Store.get("menuOpen"))
@@ -2421,41 +1973,41 @@ local function updatePrompt()
 		ui.promptFrame.Visible = true
 		ui.promptTitle.TextColor3 = col
 		ui.promptTitle.Text = "THROW BEACON"
-		local hint = touch and "Tap FIRE to throw" or (Store.get("throwHint") or "Left-click or [Q] to throw") -- throwHint: CallInController (arm method + PC/pad)
-		-- phones (PHONE HUD A): the prompt is 220 px wide, so the hint gets its own line
-		ui.promptSub.Text = (def and string.upper(def.name) or "") .. (h.perfect and "  -  PERFECT SYNC" or "") .. (if phoneNew() then "\n" else "   ") .. hint
+		local hint = touch and "Tap FIRE to throw" or (Store.get("throwHint") or "Left-click or [Q] to throw")
+		ui.promptSub.Text = (def and string.upper(def.name) or "") .. (h.perfect and "  -  PERFECT SYNC" or "") .. (if touch then "\n" else "   ") .. hint
 	else
 		ui.promptFrame.Visible = false
 	end
 end
 
 -- Compass / world markers (per frame) ---------------------------------------------------------------------------------------------------
+-- All markers stay on the compass bar at any distance. Screen-space 3D markers hide beyond MARKER_SCREEN_MAX_STUDS (80 studs)
+-- and when off-screen so distant objectives never clutter the horizon.
 local function stepMarkers(cam: Camera)
 	local vp = cam.ViewportSize
-	local cx, cy = vp.X / 2, vp.Y / 2
-	local margin = 56
-	local camPos = cam.CFrame.Position
+	local margin = 48
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local refPos = if hrp then hrp.Position else cam.CFrame.Position
 	for _, m in markers do
+		local dist = (m.pos - refPos).Magnitude
+		if dist > MARKER_SCREEN_MAX_STUDS then
+			if m.world.Visible then
+				m.world.Visible = false
+			end
+			continue
+		end
 		local v = cam:WorldToViewportPoint(m.pos)
 		local x, y = v.X, v.Y
-		local front = v.Z > 0
-		if not front then
-			x = vp.X - x
-			y = vp.Y - y
-		end
-		local onScreen = front and x > margin and x < vp.X - margin and y > margin and y < vp.Y - margin
+		local onScreen = v.Z > 0 and x > margin and x < vp.X - margin and y > margin and y < vp.Y - margin
 		if not onScreen then
-			local dx, dy = x - cx, y - cy
-			if dx == 0 and dy == 0 then
-				dy = 1
+			if m.world.Visible then
+				m.world.Visible = false
 			end
-			local t = math.min((cx - margin) / math.max(math.abs(dx), 1e-3), (cy - margin) / math.max(math.abs(dy), 1e-3))
-			x = cx + dx * t
-			y = cy + dy * t
+			continue
 		end
 		m.world.Visible = true
 		m.world.Position = UDim2.fromOffset(x, y)
-		-- distance label: found once, rewritten only when the whole-metre value changes (a Text write re-lays out the label)
 		local dl = m.distLabel
 		if dl == nil or dl.Parent == nil then
 			dl = m.world:FindFirstChild("Dist")
@@ -2463,7 +2015,7 @@ local function stepMarkers(cam: Camera)
 			m.distShown = nil
 		end
 		if dl then
-			local metres = math.floor((m.pos - camPos).Magnitude + 0.5)
+			local metres = math.floor(dist + 0.5)
 			if metres ~= m.distShown then
 				m.distShown = metres
 				dl.Text = string.format("%d m", metres)
@@ -2472,25 +2024,21 @@ local function stepMarkers(cam: Camera)
 	end
 end
 
--- crosshair satellites, per frame (new layout; writes only when something shown changes)
+-- Crosshair satellites, per frame (baked on: low ammo <= 30 % or reloading, low health < 50 %)
 local function stepSatellites(combat: boolean)
 	local magL, arc = ui.satMag, ui.satArc
 	if not magL or not arc then
 		return
 	end
-	local mode = workspace:GetAttribute("Feel_XhairInfo")
 	local me = Store.get("me")
 	local alive = me ~= nil and me.alive ~= false
-	local on = combat and alive and mode ~= "off"
-	local always = mode == "always"
-	-- mag count: magazine at 30 % or less, or reloading
+	local on = combat and alive
 	local lowMag = ammoLastMax > 1 and ammoLastMag <= math.ceil(ammoLastMax * 0.3)
-	local showMag = on and ammoLastId ~= nil and (always or lowMag or reloadProgress ~= nil)
+	local showMag = on and ammoLastId ~= nil and (lowMag or reloadProgress ~= nil)
 	local magText = if reloadProgress ~= nil and not charging then "R" else tostring(ammoLastMag)
 	local magDanger = ammoLastMag <= math.max(1, ammoLastMax * 0.25)
-	-- health arc: under 50 %
 	local f = Vitals.frac()
-	local showArc = on and (always or f < 0.5)
+	local showArc = on and f < 0.5
 	local n = #ui.satDots
 	local lit = math.ceil(Theme.clamp(f, 0, 1) * n - 0.001)
 	local crit = f < Config.Stims.Critical
@@ -2513,10 +2061,8 @@ end
 local function step(dt: number)
 	local cam = workspace.CurrentCamera
 	local combat = COMBAT[state] == true
-	if newLayout then
-		Vitals.step(dt, now())
-		stepSatellites(combat)
-	end
+	Vitals.step(dt, now())
+	stepSatellites(combat)
 	if combat and cam then
 		local ppd = cam.ViewportSize.Y / math.max(cam.FieldOfView, 1)
 		local target = Theme.clamp(spreadDeg * ppd + 5, 5, 170)
@@ -2606,45 +2152,6 @@ local function step(dt: number)
 			end
 		end
 	end
-	-- health bar (the screen-edge damage effects live in Fx/VitalsFx): red + heartbeat pulse when critical, green tint
-	-- while a stim heals, ghost chunk drain, a white stroke flash on each hit
-	flash = math.max(0, flash - dt * 2.5)
-	local me = Store.get("me")
-	if combat and ui.hpFill then
-		local crit = Config.Stims.Critical
-		local alive = me and me.alive ~= false
-		local col = Style.White
-		local fillAlpha = 0
-		local strokeCol = Style.White
-		local strokeAlpha = 0.7 - 0.6 * math.min(flash, 1)
-		if alive and hpFrac < crit then
-			-- heartbeat: a strong "lub" then a softer "dub", faster the lower the health
-			local beat = (os.clock() * (1.1 + (crit - hpFrac) / crit * 1.2)) % 1
-			local pulse = math.max(math.exp(-((beat - 0.08) / 0.07) ^ 2), 0.65 * math.exp(-((beat - 0.32) / 0.08) ^ 2))
-			col = Style.Red:Lerp(Color3.fromRGB(255, 120, 110), pulse * 0.6)
-			fillAlpha = 0.25 * (1 - pulse)
-			strokeCol = Style.Red
-			strokeAlpha = math.min(strokeAlpha, 0.6 - 0.5 * pulse)
-		end
-		if alive and me and (me.stimEnd or 0) > now() then
-			local k = 0.55 + 0.25 * math.sin(os.clock() * 14)
-			col = col:Lerp(Style.Green, k)
-		end
-		ui.hpFill.BackgroundColor3 = col
-		ui.hpFill.BackgroundTransparency = fillAlpha
-		if ui.hpStroke then
-			ui.hpStroke.Color = strokeCol
-			ui.hpStroke.Transparency = strokeAlpha
-		end
-		-- ghost: hold, then ease down to the real value
-		if os.clock() >= ghostHold and ghostFrac > hpFrac then
-			ghostFrac = math.max(hpFrac, ghostFrac - dt * 0.9 - (ghostFrac - hpFrac) * (1 - math.exp(-6 * dt)))
-		end
-		if math.abs(ghostFrac - ghostShown) > 0.0005 and ui.hpGhost then
-			ghostShown = ghostFrac
-			ui.hpGhost.Size = UDim2.fromScale(Theme.clamp(ghostFrac, 0, 1), 1)
-		end
-	end
 end
 
 -- Init ------------------------------------------------------------------------------------------------------------------------------------------
@@ -2702,7 +2209,6 @@ function HUD.init()
 		return require(clientRoot:WaitForChild("Fx", 5))
 	end)
 	if okFx and type(fx) == "table" and fx.register then
-		fxMod = fx
 		fx.register("Death", onKill)
 		SquadComms.init(fx)
 	end
@@ -2775,19 +2281,10 @@ function HUD.init()
 	updateSquad()
 	updatePrompt()
 
-	-- UI STYLE / HUD preset switch (Studio Variants): rebuild live
-	workspace:GetAttributeChangedSignal(HudSkin.ATTR):Connect(function()
-		task.defer(HUD.rebuild)
-	end)
-	workspace:GetAttributeChangedSignal(HudLayout.ATTR):Connect(function()
-		task.defer(HUD.rebuild)
-	end)
 	HudSkin.fireRebuild({ skin = HudSkin.current(), id = HudSkin.id(), touch = touch, gui = ui.mainGui, root = ui.root, first = true })
 end
 
--- Destroys the main HUD + crosshair layer and builds them again in the current UI STYLE skin (old HUD for option D),
--- then pushes the Store values again. The overlay gui (countdown / drop / results) stays. Other guis follow through
--- AlertBar.rebuild and HudSkin.onRebuild listeners (DownedFx, StaminaBar, the information modules).
+-- Rebuilds the main HUD + crosshair layer and re-applies Store state.
 local rebuilding = false
 local function doRebuild()
 	Style.refreshSkin()
@@ -2801,10 +2298,8 @@ local function doRebuild()
 			ui[k] = nil
 		end
 	end
-	-- caches of what was written to the old widgets
 	gapShown = -1
 	segLit, segCol, segTable = -1, nil, nil
-	ghostShown = -1
 	barrelShownRing, barrelShownPos, barrelShownD, barrelShownWarn, barrelShownStroke = nil, nil, -1, -1, nil
 	table.clear(hmPool)
 	hmIndex = 1

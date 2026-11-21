@@ -93,69 +93,34 @@ local function build()
 	end
 	built = true
 	local touch = Theme.isTouch()
-	newMode = InfoLayer.isNew()
-	if newMode then
-		local E = InfoLayer.entry("prompt", touch)
-		local g = Theme.gui("OrbitPrompt", { DisplayOrder = 12, Insets = "CoreUISafeInsets" })
-		ui.gui = g
-		local r = Theme.root(g, "hud")
-		H = E.Size.Y.Offset
-		TEXT_SIZE = E.TextSize or 17
-		KEY_SIZE = E.KeySize or 22
-		local wrap = Instance.new("Frame")
-		wrap.Name = "PromptWrap"
-		wrap.BackgroundTransparency = 1
-		InfoLayer.place(wrap, "prompt", touch)
-		wrap.Size = UDim2.fromOffset(0, 0)
-		wrap.AutomaticSize = Enum.AutomaticSize.XY
-		wrap.Parent = r
-		Theme.list(wrap, Enum.FillDirection.Vertical, 3, Enum.HorizontalAlignment.Center)
-		local holder = Instance.new("Frame")
-		holder.Name = "Prompt"
-		holder.BackgroundTransparency = 1
-		holder.Size = UDim2.fromOffset(0, H)
-		holder.AutomaticSize = Enum.AutomaticSize.X
-		holder.LayoutOrder = 1
-		holder.Visible = false
-		holder.Parent = wrap
-		if InfoLayer.style() ~= "hairline" then
-			InfoLayer.backing(holder)
-		end
-		local lim = Instance.new("UISizeConstraint")
-		lim.MaxSize = Vector2.new(E.MaxWidth or 400, math.huge)
-		lim.Parent = holder
-		Theme.pad(holder, 10, 0, 10, 0)
-		Theme.list(holder, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
-		local scale = Instance.new("UIScale")
-		scale.Parent = holder
-		ui.holder = holder
-		ui.scale = scale
-		ui.parts = {}
-		local bar = HudSkin.bar({
-			Name = "PromptProgress",
-			Size = UDim2.fromOffset(math.floor((E.MaxWidth or 400) * 0.45), 4),
-			Color = InfoLayer.col("heal"),
-			LayoutOrder = 2,
-			Parent = wrap,
-		})
-		ui.progress = { back = bar.root, set = bar.set }
-		ui.progress.back.Visible = false
-		return
-	end
-	H, TEXT_SIZE, KEY_SIZE = 30, 17, 22
-	local gui = Theme.gui("OrbitPrompt", { DisplayOrder = 11, Insets = "None" })
-	ui.gui = gui
-	local root = Theme.root(gui, "hud")
-	local holder = Style.panel({
-		Name = "Prompt",
-		Brackets = false,
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, if touch then -52 else -60), -- clear of the stamina bar (UI/StaminaBar, 18-30 px up)
-		Size = UDim2.fromOffset(0, H),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Visible = false,
-		Parent = root,
-	})
+	newMode = true
+	local E = InfoLayer.entry("prompt", touch)
+	local g = Theme.gui("OrbitPrompt", { DisplayOrder = 12, Insets = "CoreUISafeInsets" })
+	ui.gui = g
+	local r = Theme.root(g, "hud")
+	H = E.Size.Y.Offset
+	TEXT_SIZE = E.TextSize or 16
+	KEY_SIZE = E.KeySize or 22
+	local wrap = Instance.new("Frame")
+	wrap.Name = "PromptWrap"
+	wrap.BackgroundTransparency = 1
+	InfoLayer.place(wrap, "prompt", touch)
+	wrap.Size = UDim2.fromOffset(0, 0)
+	wrap.AutomaticSize = Enum.AutomaticSize.XY
+	wrap.Parent = r
+	Theme.list(wrap, Enum.FillDirection.Vertical, 3, Enum.HorizontalAlignment.Center)
+	local holder = Instance.new("Frame")
+	holder.Name = "Prompt"
+	holder.BackgroundTransparency = 1
+	holder.Size = UDim2.fromOffset(0, H)
+	holder.AutomaticSize = Enum.AutomaticSize.X
+	holder.LayoutOrder = 1
+	holder.Visible = false
+	holder.Parent = wrap
+	InfoLayer.backing(holder, "plate")
+	local lim = Instance.new("UISizeConstraint")
+	lim.MaxSize = Vector2.new(E.MaxWidth or 420, math.huge)
+	lim.Parent = holder
 	Theme.pad(holder, 10, 0, 10, 0)
 	Theme.list(holder, Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
 	local scale = Instance.new("UIScale")
@@ -163,15 +128,14 @@ local function build()
 	ui.holder = holder
 	ui.scale = scale
 	ui.parts = {}
-	-- hold progress (stim hold): a fixed-width bar just under the prompt, outside the holder's list layout
-	ui.progress = Style.bar({
+	local bar = HudSkin.bar({
 		Name = "PromptProgress",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 1, (if touch then -52 else -60) + 3),
-		Size = UDim2.fromOffset(180, 5),
-		Color = Style.Green,
-		Parent = root,
+		Size = UDim2.fromOffset(math.floor((E.MaxWidth or 400) * 0.45), 4),
+		Color = InfoLayer.col("heal"),
+		LayoutOrder = 2,
+		Parent = wrap,
 	})
+	ui.progress = { back = bar.root, set = bar.set }
 	ui.progress.back.Visible = false
 end
 
@@ -231,11 +195,6 @@ local function addKeyNew(glyph: string, order: number)
 	st.Thickness = 1
 	st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	st.Parent = box
-	if InfoLayer.style() == "glass" then
-		local c = Instance.new("UICorner")
-		c.CornerRadius = UDim.new(0, 5)
-		c.Parent = box
-	end
 	if isGlyph then
 		Style.glyph(string.sub(glyph, 2), { Size = math.floor(KEY_SIZE * 0.5), Color = own, Box = UDim2.fromScale(1, 1), Parent = box })
 	else

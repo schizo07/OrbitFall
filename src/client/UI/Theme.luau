@@ -548,14 +548,15 @@ function Theme.minTextPx(): number
 	return 12 + 2 * a
 end
 
--- HUD text floor for the new HUD presets: ~18 px at 720p, scaled with screen size ((short / 720) ^ 0.6).
+-- HUD text floor: keeps compact perimeter typography sharp and readable (11 px on phones, 13 px at 1080p+).
 function Theme.hudMinTextPx(): number
-	if Theme.uiOld() or workspace:GetAttribute("Feel_UiStyle") == "old" then
-		return Theme.minTextPx()
+	if Theme.uiOld() then
+		return 0
 	end
 	local vp = viewport()
-	local short = math.max(math.min(vp.X, vp.Y), 200)
-	return Theme.clamp(18 * (short / 720) ^ 0.6, 12, 24)
+	local short = math.min(vp.X, vp.Y)
+	local a = Theme.clamp((short - 390) / (1080 - 390), 0, 1)
+	return 11 + 2 * a
 end
 
 -- One watcher for everything that changes the scale: viewport size, camera swap, the Feel_UiScale attribute.
@@ -736,53 +737,6 @@ function Theme.every(interval: number, fn: (number) -> ()): RBXScriptConnection
 			local d = acc
 			acc = 0
 			fn(d)
-		end
-	end)
-end
-
--- UI FONT A/B (Studio, Variants "UI FONT"): workspace attribute Feel_Font = a family name in rbxasset://fonts/families/
--- swaps every Oswald (HUD) / Gotham (menus) text in PlayerGui live, keeping weight, style and size. nil = the real fonts.
-if RunService:IsStudio() then
-	local FAMILY = "rbxasset://fonts/families/%s.json"
-	local SWAPPABLE = {
-		[string.format(FAMILY, "Oswald")] = true,
-		[string.format(FAMILY, "GothamSSm")] = true,
-	}
-	local ORIG = "_FontFamily0"
-	local function swapOne(o: Instance)
-		if not (o:IsA("TextLabel") or o:IsA("TextButton") or o:IsA("TextBox")) then
-			return
-		end
-		local f = (o :: TextLabel).FontFace
-		local orig = o:GetAttribute(ORIG) or f.Family
-		if not SWAPPABLE[orig] then
-			return
-		end
-		o:SetAttribute(ORIG, orig)
-		local want = workspace:GetAttribute("Feel_Font")
-		local fam = if type(want) == "string" and want ~= "" then string.format(FAMILY, want) else orig
-		if f.Family ~= fam then
-			(o :: TextLabel).FontFace = Font.new(fam, f.Weight, f.Style)
-		end
-	end
-	task.spawn(function()
-		local pg = Players.LocalPlayer and Players.LocalPlayer:WaitForChild("PlayerGui")
-		if not pg then
-			return
-		end
-		local function all()
-			for _, d in pg:GetDescendants() do
-				swapOne(d)
-			end
-		end
-		pg.DescendantAdded:Connect(function(d)
-			if workspace:GetAttribute("Feel_Font") ~= nil then
-				task.defer(swapOne, d)
-			end
-		end)
-		workspace:GetAttributeChangedSignal("Feel_Font"):Connect(all)
-		if workspace:GetAttribute("Feel_Font") ~= nil then
-			all()
 		end
 	end)
 end

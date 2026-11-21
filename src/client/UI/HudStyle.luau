@@ -15,44 +15,22 @@ Style.Grey = Color3.fromHex("A7ADB7")
 Style.White = Color3.new(1, 1, 1)
 Style.Black = Color3.new(0, 0, 0)
 
--- UI STYLE (UI/HudSkin): the colour fields above and Style.Font follow the active skin. HUD.rebuild() calls
--- Style.refreshSkin() before building again, so modules that read them at build time follow too. Old HUD = the values above.
-local OLD_COLORS = {
-	Amber = Style.Amber,
-	Cyan = Style.Cyan,
-	Red = Style.Red,
-	Green = Style.Green,
-	Orange = Style.Orange,
-	Grey = Style.Grey,
-	White = Style.White,
-}
+-- Baked perimeter HUD palette and font from UI/HudSkin.
 local SKIN_ROLE = { Amber = "own", Cyan = "objective", Red = "danger", Green = "heal", Orange = "rare", Grey = "dim", White = "text" }
 
 Style.MARGIN = 16
-Style.PANEL_ALPHA = 0.55 -- BackgroundTransparency of the black panels
-Style.BRACKET_ALPHA = 0.3 -- = 70 % opaque
+Style.PANEL_ALPHA = HudSkin.PLATE_ALPHA
+Style.BRACKET_ALPHA = 0.3
 Style.TEXT = 14
-Style.ALERT = 18
-
--- Condensed bold caps face. Oswald Bold via its font family; Gotham Bold if the family cannot be built.
-local function makeFont(): Font
-	local ok, f = pcall(function()
-		return Font.new("rbxasset://fonts/families/Oswald.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-	end)
-	if ok and f then
-		return f
-	end
-	return Font.fromEnum(Enum.Font.GothamBold)
-end
-local OLD_FONT = makeFont()
-Style.Font = OLD_FONT
+Style.ALERT = 16
+Style.Font = HudSkin.font("label")
 
 function Style.refreshSkin()
 	local s = HudSkin.current()
-	for k, c in OLD_COLORS do
-		(Style :: any)[k] = if s then s.colors[SKIN_ROLE[k]] else c
+	for k, role in SKIN_ROLE do
+		(Style :: any)[k] = s.colors[role]
 	end
-	Style.Font = if s then s.fonts.label else OLD_FONT
+	Style.Font = s.fonts.label
 end
 Style.refreshSkin()
 
@@ -60,93 +38,33 @@ function Style.up(s: any): string
 	return string.upper(tostring(s or ""))
 end
 
--- 1 px corner brackets around a frame (children of a Folder, so a UIListLayout in `frame` ignores them)
-function Style.brackets(frame: GuiObject, color: Color3?, arm: number?, alpha: number?): Folder
-	if HudSkin.current() then
-		-- the new skins draw no corner brackets on elements; an empty holder keeps callers working
-		local empty = Instance.new("Folder")
-		empty.Name = "Brackets"
-		empty.Parent = frame
-		return empty
-	end
-	local col = color or Style.White
-	local len = arm or 6
-	local tr = alpha or Style.BRACKET_ALPHA
-	local holder = Instance.new("Folder")
-	holder.Name = "Brackets"
-	local function bar(anchor: Vector2, pos: UDim2, size: UDim2)
-		local f = Instance.new("Frame")
-		f.BackgroundColor3 = col
-		f.BackgroundTransparency = tr
-		f.BorderSizePixel = 0
-		f.AnchorPoint = anchor
-		f.Position = pos
-		f.Size = size
-		f.ZIndex = frame.ZIndex + 2
-		f.Parent = holder
-	end
-	bar(Vector2.new(0, 0), UDim2.fromOffset(0, 0), UDim2.fromOffset(len, 1))
-	bar(Vector2.new(0, 0), UDim2.fromOffset(0, 0), UDim2.fromOffset(1, len))
-	bar(Vector2.new(1, 0), UDim2.fromScale(1, 0), UDim2.fromOffset(len, 1))
-	bar(Vector2.new(1, 0), UDim2.fromScale(1, 0), UDim2.fromOffset(1, len))
-	bar(Vector2.new(0, 1), UDim2.fromScale(0, 1), UDim2.fromOffset(len, 1))
-	bar(Vector2.new(0, 1), UDim2.fromScale(0, 1), UDim2.fromOffset(1, len))
-	bar(Vector2.new(1, 1), UDim2.fromScale(1, 1), UDim2.fromOffset(len, 1))
-	bar(Vector2.new(1, 1), UDim2.fromScale(1, 1), UDim2.fromOffset(1, len))
-	holder.Parent = frame
-	return holder
+-- No corner brackets on the perimeter HUD; returns an empty Folder to preserve caller compatibility.
+function Style.brackets(frame: GuiObject, _color: Color3?, _arm: number?, _alpha: number?): Folder
+	local empty = Instance.new("Folder")
+	empty.Name = "Brackets"
+	empty.Parent = frame
+	return empty
 end
 
 local PANEL_SKIP = { Color = true, Transparency = true, Brackets = true, BracketColor = true }
--- Flat panel. p: Color, Transparency (default 0.55), Brackets (default true), BracketColor, plus any Frame property.
+-- Perimeter plate panel: dark translucent backing with a thin crisp border (or coloured solid plate when Color is given).
 function Style.panel(p: { [string]: any }?): Frame
-	p = p or {}
-	local skin = HudSkin.current()
-	if skin then
-		return Style.skinPanel(p :: { [string]: any }, skin)
-	end
-	local f = Instance.new("Frame")
-	f.BackgroundColor3 = p.Color or Style.Black
-	f.BackgroundTransparency = p.Transparency or Style.PANEL_ALPHA
-	f.BorderSizePixel = 0
-	local parent = nil
-	for k, v in p do
-		if PANEL_SKIP[k] then
-			continue
-		end
-		if k == "Parent" then
-			parent = v
-		else
-			(f :: any)[k] = v
-		end
-	end
-	if p.Brackets ~= false then
-		Style.brackets(f, p.BracketColor)
-	end
-	f.Parent = parent
-	return f
-end
-
--- Style.panel with a new skin: black panels become the skin's backing (fade / glass / scan); coloured panels (red alert
--- bar, amber fills) keep their colour and alpha, rounded on glass.
-function Style.skinPanel(p: { [string]: any }, skin: any): Frame
-	local coloured = p.Color ~= nil and p.Color ~= Style.Black and p.Color ~= Color3.new(0, 0, 0)
+	local props = p or {}
+	local coloured = props.Color ~= nil and props.Color ~= Style.Black and props.Color ~= Color3.new(0, 0, 0)
 	local f: Frame
 	if coloured then
 		f = Instance.new("Frame")
 		f.BorderSizePixel = 0
-		f.BackgroundColor3 = p.Color
-		f.BackgroundTransparency = p.Transparency or Style.PANEL_ALPHA
-		if skin.id == "glass" then
-			local cr = Instance.new("UICorner")
-			cr.CornerRadius = UDim.new(0, skin.corner)
-			cr.Parent = f
-		end
+		f.BackgroundColor3 = props.Color
+		f.BackgroundTransparency = props.Transparency or Style.PANEL_ALPHA
 	else
-		f = HudSkin.panel("auto")
+		f = HudSkin.panel("plate")
+		if props.Transparency ~= nil then
+			f.BackgroundTransparency = props.Transparency
+		end
 	end
 	local parent = nil
-	for k, v in p do
+	for k, v in props do
 		if PANEL_SKIP[k] then
 			continue
 		end
@@ -163,43 +81,37 @@ end
 local LABEL_SKIP = { Color = true, XAlign = true, YAlign = true, Wrap = true, Rich = true, Shadow = true }
 -- Caps label in the HUD font. p: Text, Color, TextSize (default 14), XAlign (default Left), YAlign, Rich, Wrap + any property.
 function Style.label(p: { [string]: any }?): TextLabel
-	p = p or {}
+	local props = p or {}
 	local l = Instance.new("TextLabel")
 	l.BackgroundTransparency = 1
 	l.BorderSizePixel = 0
 	l.FontFace = Style.Font
-	l.TextColor3 = p.Color or Style.White
-	l.TextSize = p.TextSize or Style.TEXT
-	l.TextXAlignment = p.XAlign or Enum.TextXAlignment.Left
-	l.TextYAlignment = p.YAlign or Enum.TextYAlignment.Center
-	l.TextWrapped = p.Wrap == true
-	l.RichText = p.Rich == true
-	l.TextStrokeColor3 = Style.Black
-	l.TextStrokeTransparency = p.Shadow == false and 1 or 0.65
+	l.TextColor3 = props.Color or Style.White
+	l.TextSize = props.TextSize or Style.TEXT
+	l.TextXAlignment = props.XAlign or Enum.TextXAlignment.Left
+	l.TextYAlignment = props.YAlign or Enum.TextYAlignment.Center
+	l.TextWrapped = props.Wrap == true
+	l.RichText = props.Rich == true
+	l.TextStrokeTransparency = 1
 	l.Text = ""
-	local skin = HudSkin.current()
-	local caps = not skin or skin.caps
 	local parent = nil
-	for k, v in p do
+	for k, v in props do
 		if LABEL_SKIP[k] then
 			continue
 		end
 		if k == "Parent" then
 			parent = v
 		elseif k == "Text" and type(v) == "string" then
-			l.Text = if p.Rich or not caps then v else string.upper(v)
+			l.Text = if props.Rich then v else string.upper(v)
 		else
 			(l :: any)[k] = v
 		end
 	end
-	if skin then
-		-- skin font + text treatment (UIStroke instead of TextStroke); Shadow = false keeps the text bare
-		HudSkin.styleText(l, "label")
-		if p.Shadow == false then
-			local st = l:FindFirstChild("SkinStroke")
-			if st then
-				st:Destroy()
-			end
+	HudSkin.styleText(l, "label")
+	if props.Shadow == false then
+		local st = l:FindFirstChild("SkinStroke")
+		if st then
+			st:Destroy()
 		end
 	end
 	l.Parent = parent
@@ -232,7 +144,7 @@ function Style.bar(p: { [string]: any }): any
 	local back = Style.rect({
 		Name = p.Name or "Bar",
 		Color = Style.Black,
-		Transparency = 0.45,
+		Transparency = 0.48,
 		Size = p.Size or UDim2.new(1, 0, 0, 3),
 		Position = p.Position,
 		AnchorPoint = p.AnchorPoint,
@@ -246,15 +158,6 @@ function Style.bar(p: { [string]: any }): any
 		Size = UDim2.fromScale(0, 1),
 		Parent = back,
 	})
-	local skin = HudSkin.current()
-	if skin and skin.barKind == "pill" then
-		back.ClipsDescendants = false
-		for _, f in { back, fill } do
-			local cr = Instance.new("UICorner")
-			cr.CornerRadius = UDim.new(0.5, 0)
-			cr.Parent = f
-		end
-	end
 	local bar = { back = back, fill = fill }
 	function bar.set(alpha: number, color: Color3?)
 		fill.Size = UDim2.fromScale(Theme.clamp(alpha, 0, 1), 1)
