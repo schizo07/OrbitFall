@@ -211,11 +211,11 @@ local BIOMES: { [string]: Biome } = {
 		plant = { RGB(84, 74, 58), RGB(96, 84, 66) },
 		smoke = RGB(40, 35, 32),
 		mood = { -- warm golden-ochre / dusty amber low-sun haze: separates foreground dark rock from misty layered distant ridges
-			clock = 17.4, elev = 0.32, bright = 3.2, expo = -0.04, amb = RGB(62, 50, 38), out = RGB(118, 96, 74),
+			clock = 17.4, elev = 0.32, bright = 2.35, expo = -0.08, amb = RGB(62, 50, 38), out = RGB(118, 96, 74),
 			top = RGB(255, 224, 174), bottom = RGB(112, 88, 66),
-			atmDensity = 0.38, atmOffset = 0.14, haze = 2.4, glare = 0.55, atm = RGB(236, 198, 146), decay = RGB(186, 138, 86),
-			tint = RGB(255, 240, 218), sat = -0.10, contrast = 0.28, bloom = 0.65, rays = 0.22, sun = 14, stars = 0,
-			cloudCover = 0.52, cloudDensity = 0.48, cloudColor = RGB(236, 208, 168),
+			atmDensity = 0.38, atmOffset = 0.14, haze = 2.4, glare = 0.20, atm = RGB(236, 198, 146), decay = RGB(186, 138, 86),
+			tint = RGB(255, 240, 218), sat = -0.10, contrast = 0.28, bloom = 0.45, rays = 0.08, sun = 9, stars = 0,
+			cloudCover = 0.64, cloudDensity = 0.56, cloudColor = RGB(236, 208, 168),
 			envDiffuse = 0.26, shadowSoft = 0.22,
 		},
 	},
@@ -4015,7 +4015,7 @@ local function applyLighting(faction: string, biome: string)
 		atm.Density = m.atmDensity
 		atm.Offset = m.atmOffset
 		atm.Haze = m.haze
-		atm.Glare = m.glare or 0.55
+		atm.Glare = m.glare or 0.20
 		atm.Color = m.atm
 		atm.Decay = m.decay
 		Lighting.FogColor = m.atm
