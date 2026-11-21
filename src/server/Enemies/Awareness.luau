@@ -49,8 +49,10 @@ local ALERT_LOS_EVERY = 0.45 -- while alert (only refreshes lastKnown)
 local SUS_ENTER = 0.1 -- suspicion at which the unit turns "suspicious"
 local DECAY = 0.2 -- per second while nothing is seen
 local SEARCH_DECAY = 0.08
-local SPREAD_R = 35 -- non-squad allies within this many studs follow an alert ...
-local SPREAD_DELAY_MIN, SPREAD_DELAY_MAX = 0.3, 0.8 -- ... after this delay
+local SPREAD_R = 56 -- non-squad allies within this many studs follow an alert ...
+local SPREAD_DELAY_MIN, SPREAD_DELAY_MAX = 0.2, 0.6 -- ... after this natural staggered delay
+local SPREAD_COOLDOWN = 2.5 -- rate-limit re-cascading damage/sight alerts from an already-alert unit
+local SEARCH_SWEEP_DIST = 18 -- studs pushed along the target's last known movement vector during search
 local SEARCH_LOOK_MIN, SEARCH_LOOK_MAX = 6, 8 -- seconds of looking around at lastKnown
 local NOISE_EVERY = 0.25 -- per player: shots closer together than this count once
 local NOISE_ALERT_FRAC = 0.35 -- inside radius x this, a noise alerts outright
@@ -76,7 +78,7 @@ local regIndex: { [any]: number } = {}
 local squads: { [any]: { [any]: boolean } } = {}
 
 -- Player cache (refreshed at most every 0.1 s) -----------------------------------------
-type PInfo = { p: Player, root: BasePart, pos: Vector3, speed: number, stance: string? }
+type PInfo = { p: Player, root: BasePart, pos: Vector3, vel: Vector3, speed: number, stance: string? }
 local pcache: { PInfo } = {}
 local pcacheT = -1
 local lastShot: { [Player]: number } = {}
@@ -109,12 +111,14 @@ local function refreshPlayers()
 			else (p.Character and p.Character:FindFirstChild("HumanoidRootPart")) :: BasePart?
 		if root then
 			local v = root.AssemblyLinearVelocity
+			local fv = Vector3.new(v.X, 0, v.Z)
 			local c = p.Character
 			table.insert(pcache, {
 				p = p,
 				root = root,
 				pos = root.Position,
-				speed = Vector3.new(v.X, 0, v.Z).Magnitude,
+				vel = fv,
+				speed = fv.Magnitude,
 				stance = c and c:GetAttribute("Stance"),
 			})
 		end
@@ -308,6 +312,10 @@ function Awareness.register(e: any, opts: any)
 	e.awStepTo = nil
 	e.awSentAware = nil
 	e.awSentSus = nil
+	e.awSpreadAt = 0
+	e.lastKnownDir = nil
+	e.awSweepTarget = nil
+	e.awSweepAngle = 0
 
 	if posture == "hunt" then
 		e.awareState = "alert"
@@ -354,7 +362,20 @@ function Awareness.isAlert(e: any): boolean
 end
 
 -- Alert --------------------------------------------------------------------------------
-local function setAlert(e: any, player: Player?, pos: Vector3?, now: number)
+local function resolveMoveDir(player: Player?, fallback: Vector3?): Vector3?
+	if player and S.Players and S.Players.getRoot then
+		local r = S.Players.getRoot(player)
+		if r then
+			local fv = flat(r.AssemblyLinearVelocity)
+			if fv.Magnitude > 2 then
+				return fv.Unit
+			end
+		end
+	end
+	return fallback
+end
+
+local function setAlert(e: any, player: Player?, pos: Vector3?, now: number, moveDir: Vector3?)
 	e.awareState = "alert"
 	e.suspicion = 1
 	if player then
@@ -368,21 +389,33 @@ local function setAlert(e: any, player: Player?, pos: Vector3?, now: number)
 			e.lastKnown = r.Position
 		end
 	end
+	if moveDir and flat(moveDir).Magnitude > 0.1 then
+		e.lastKnownDir = flat(moveDir).Unit
+	end
 	e.awAlertT = now
 	e.awSearchUntil = nil
+	e.awSweepTarget = nil
 	e.awQuiet = nil
 	publish(e)
 end
 
-local function spread(e: any, player: Player?, pos: Vector3?, now: number, radius: boolean)
-	-- squad: instant
+local function spread(e: any, player: Player?, pos: Vector3?, now: number, radius: boolean, moveDir: Vector3?)
+	-- squad: instant (shares both last-known position and movement direction)
 	local key = e.awSquad
 	if key ~= nil then
 		local sq = squads[key]
 		if sq then
 			for o in sq do
-				if o ~= e and o.alive ~= false and o.awareState ~= "alert" then
-					setAlert(o, player, pos, now)
+				if o ~= e and o.alive ~= false then
+					if o.awareState ~= "alert" then
+						setAlert(o, player, pos, now, moveDir)
+					elseif pos then
+						-- already-alert squadmates also get refreshed target intel
+						o.lastKnown = pos
+						if moveDir then
+							o.lastKnownDir = moveDir
+						end
+					end
 				end
 			end
 		end
@@ -390,7 +423,7 @@ local function spread(e: any, player: Player?, pos: Vector3?, now: number, radiu
 	if not radius then
 		return
 	end
-	-- same faction nearby: after a short delay (they hear / see the commotion)
+	-- same faction nearby (50-60 studs): cascade with a short natural staggered delay (0.2-0.6 s)
 	local ep = e.pos
 	if not ep then
 		return
@@ -401,8 +434,8 @@ local function spread(e: any, player: Player?, pos: Vector3?, now: number, radiu
 				task.delay(rng:NextNumber(SPREAD_DELAY_MIN, SPREAD_DELAY_MAX), function()
 					if regIndex[o] and o.alive ~= false and o.awareState ~= "alert" then
 						local t = workspace:GetServerTimeNow()
-						setAlert(o, player, pos, t)
-						spread(o, player, pos, t, false) -- their own squad follows; no further radius chain
+						setAlert(o, player, pos, t, moveDir)
+						spread(o, player, pos, t, false, moveDir) -- their own squad follows; no further radius chain
 					end
 				end)
 			end
@@ -416,9 +449,15 @@ function Awareness.alert(e: any, player: Player?, pos: Vector3?, reason: string)
 	end
 	local now = workspace:GetServerTimeNow()
 	local was = e.awareState
-	setAlert(e, player, pos, now)
+	local moveDir = resolveMoveDir(player, e.lastKnownDir)
+	setAlert(e, player, pos, now, moveDir)
 	if was ~= "alert" then
-		spread(e, player, pos, now, reason ~= "ally")
+		e.awSpreadAt = now + SPREAD_COOLDOWN
+		spread(e, player, pos, now, reason ~= "ally", moveDir)
+	elseif (reason == "damage" or reason == "sight") and now >= (e.awSpreadAt or 0) then
+		-- Taking damage or spotting a target while alert still cascades to nearby unaware allies
+		e.awSpreadAt = now + SPREAD_COOLDOWN
+		spread(e, player, pos, now, true, moveDir)
 	end
 end
 
@@ -429,11 +468,29 @@ function Awareness.lost(e: any, now: number)
 	if not e.lastKnown then
 		e.lastKnown = e.pos
 	end
+	-- Assign a slight lateral fan angle so searching squadmates sweep a corridor instead of stacking on one point
+	local fan = 0
+	local key = e.awSquad
+	if key ~= nil and squads[key] then
+		local idx = 0
+		for o in squads[key] do
+			if o == e then
+				break
+			end
+			idx += 1
+		end
+		local pattern = { 0, 26, -26, 48, -48 }
+		fan = math.rad(pattern[(idx % #pattern) + 1])
+	else
+		fan = math.rad(rng:NextNumber(-24, 24))
+	end
 	e.awareState = "search"
 	e.suspicion = 0.5
 	e.awSearchPhase = "go"
 	e.awSearchUntil = nil
 	e.awSearchStart = now
+	e.awSweepTarget = nil
+	e.awSweepAngle = fan
 	e.awStepTo = nil
 	publish(e)
 end
@@ -512,6 +569,9 @@ local function senseAlert(e: any, now: number)
 		local d = flat(info.pos - e.pos).Magnitude
 		if d <= FEEL or visible(e, info, now, ALERT_LOS_EVERY) then
 			e.lastKnown = info.pos
+			if info.speed > 2 then
+				e.lastKnownDir = info.vel / info.speed
+			end
 		end
 	end
 end
@@ -586,6 +646,9 @@ function Awareness.sense(e: any, now: number)
 		rate *= noticeMult()
 		e.suspicion = math.min(1, (e.suspicion or 0) + rate * dt)
 		e.lastKnown = best.pos
+		if best.speed > 2 then
+			e.lastKnownDir = best.vel / best.speed
+		end
 		e.awareTarget = best.p
 		if e.suspicion >= 1 then
 			Awareness.alert(e, best.p, best.pos, "sight")
@@ -765,39 +828,74 @@ end
 
 local function searchIdle(e: any, now: number, dt: number): (Vector3?, number, Vector3?)
 	local lk = e.lastKnown or e.pos
-	if e.awSearchPhase ~= "look" then
+	local escDir: Vector3? = e.lastKnownDir
+	if e.awSearchPhase == "go" then
 		local d, dist = toward(e, lk)
 		if d and dist > 5 and not e.def.static then
 			e.awFaceYaw = nil
 			return d, SPEED.searchGo, nil
 		end
+		if escDir and escDir.Magnitude > 0.1 and not e.def.static then
+			-- Push along the player's escape vector (fanned per squadmate) instead of stopping cold at lastKnown
+			local sweepVec = CFrame.Angles(0, e.awSweepAngle or 0, 0) * escDir.Unit
+			e.awSweepTarget = clampMap(lk + sweepVec * (SEARCH_SWEEP_DIST + rng:NextNumber(-3, 5)))
+			e.awSweepGiveUp = now + 5
+			e.awSearchPhase = "sweep"
+			e.awFaceYaw = nil
+		else
+			e.awSearchPhase = "look"
+			e.awSearchUntil = now + rng:NextNumber(SEARCH_LOOK_MIN, SEARCH_LOOK_MAX)
+			e.awBaseYaw = e.yaw
+			e.awLookYaw = nil
+			e.awFaceYaw = e.yaw
+			e.awStepTo = nil
+			e.awStepNext = now + rng:NextNumber(1, 2)
+		end
+	end
+	if e.awSearchPhase == "sweep" then
+		local tgt = e.awSweepTarget
+		local d: Vector3?, dist = nil, 0
+		if tgt then
+			d, dist = toward(e, tgt)
+		end
+		if d and dist > 3 and now < (e.awSweepGiveUp or 0) and not e.def.static then
+			return d, SPEED.searchGo * 0.9, nil
+		end
+		-- Arrived at sweep point: transition to focused look-around anchored on the escape vector
 		e.awSearchPhase = "look"
 		e.awSearchUntil = now + rng:NextNumber(SEARCH_LOOK_MIN, SEARCH_LOOK_MAX)
-		e.awBaseYaw = e.yaw
+		e.awBaseYaw = if escDir and escDir.Magnitude > 0.1 then yawOf(escDir) else e.yaw
 		e.awLookYaw = nil
 		e.awFaceYaw = e.yaw
 		e.awStepTo = nil
 		e.awStepNext = now + rng:NextNumber(1, 2)
 	end
-	-- look phase: short hops around lastKnown with quick looks
+	-- look phase: short hops biased toward the escape hemisphere when an escape direction is known
+	local anchor = e.awSweepTarget or lk
 	if not e.def.static and not e.awStepTo and now >= (e.awStepNext or 0) then
 		e.awStepNext = now + rng:NextNumber(2, 3.5)
-		local a = rng:NextNumber(0, math.pi * 2)
 		local r = rng:NextNumber(5, 10)
-		e.awStepTo = lk + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+		local hopDir: Vector3
+		if escDir and escDir.Magnitude > 0.1 then
+			hopDir = CFrame.Angles(0, rng:NextNumber(-1.25, 1.25), 0) * escDir.Unit
+		else
+			local a = rng:NextNumber(0, math.pi * 2)
+			hopDir = Vector3.new(math.cos(a), 0, math.sin(a))
+		end
+		e.awStepTo = clampMap(anchor + hopDir * r)
 		e.awStepGiveUp = now + 3
 	end
 	if e.awStepTo then
 		local d, dist = toward(e, e.awStepTo)
 		if not d or dist < 1.5 or now > (e.awStepGiveUp or 0) then
 			e.awStepTo = nil
-			e.awBaseYaw = e.yaw
+			e.awBaseYaw = if escDir and escDir.Magnitude > 0.1 then yawOf(escDir) else e.yaw
 			e.awFaceYaw = e.yaw
 		else
 			return d, SPEED.searchLook, nil
 		end
 	end
-	return nil, 0, lookAround(e, now, dt, math.pi, 0.7, 1.4, 3)
+	return nil, 0, lookAround(e, now, dt, if escDir then 1.4 else math.pi, 0.7, 1.4, 3)
 end
 
 function Awareness.idle(e: any, now: number): (Vector3?, number, Vector3?)

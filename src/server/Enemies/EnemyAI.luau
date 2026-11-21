@@ -351,6 +351,7 @@ function EnemyAI.clear()
 	table.clear(decoyEntries)
 	table.clear(tmap)
 	table.clear(snapshot)
+	Tactician.clear()
 end
 
 function EnemyAI.interrupt(e: any)
@@ -1688,7 +1689,8 @@ local function think(e: any, now: number)
 		local hbe = if hb then tmap[hb] else nil
 		local from = if hbe then hbe.pos else e.pos
 		if e.tactician then
-			Tactician.onDamaged(e, from)
+			local dmgFrac = (hpSeen - e.hp) / math.max(e.maxHp or 1, 1)
+			Tactician.onDamaged(e, from, dmgFrac)
 		end
 		if e.aware and (now >= (e.hitAlertAt or 0) or not Awareness.isAlert(e)) then
 			e.hitAlertAt = now + 1
@@ -1743,6 +1745,23 @@ local function think(e: any, now: number)
 	if def.behavior == "flee" then
 		fleeThink(e, now)
 		return
+	end
+
+	-- danger evasion: mobile non-fodder units sprint radially away from live grenades / incoming offensive call-in beacons
+	local useTac = e.tactician and tacMode ~= "off"
+	if useTac and not def.static then
+		local escDir, escSpeed = Tactician.evadeDanger(e, now)
+		if escDir then
+			if e.aware and not Awareness.isAlert(e) then
+				Awareness.alert(e, nil, e.pos, "danger")
+			end
+			if e.act and e.act.phase == "windup" and not MELEE_KINDS[e.act.kind] then
+				EnemyAI.interrupt(e)
+			end
+			e.faceDir = escDir
+			setWish(e, escDir, escSpeed, true)
+			return
+		end
 	end
 
 	-- awareness ----------------------------------------------------------------------
@@ -1947,7 +1966,6 @@ local function think(e: any, now: number)
 	local moveDir: Vector3? = nil
 	local moveSpeed = 0
 	local fireOk = true -- false = Tactician is moving the unit between covers: no new ranged attack this think
-	local useTac = e.tactician and tacMode ~= "off"
 	local kd = def.keepDistance
 	local decided = false
 	if def.static then
@@ -2349,6 +2367,7 @@ stepBody = function(dt: number, enemies: { [number]: any })
 		lastFilter = os.clock()
 		rebuildFilter()
 	end
+	Tactician.updateHazards(now)
 
 	table.clear(snapshot)
 	for _, e in enemies do

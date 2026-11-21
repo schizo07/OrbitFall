@@ -6,7 +6,10 @@
 --   Cover.taken(pos, e) -> boolean                    another living enemy has claimed a point within CLAIM_R studs
 --   Cover.claim(e, pos) / Cover.release(e)
 --   Cover.hidden(pos, targetPos) -> boolean           one raycast: is a body standing at `pos` blocked from targetPos at chest height
+--   Cover.sees(pos, targetPos) -> boolean             one raycast: is there a clean line of fire from `pos` to `targetPos`
 --   Cover.probe(e, dir, len) -> boolean               one raycast: true = a wall / steep slope within `len` studs along `dir`
+--   Cover.crowdPenalty(pos, e, radius?) -> number     proximity penalty against already-claimed friendly cover
+--   Cover.angularPenalty(pos, targetPos, e, role?) -> number   firing-arc spacing penalty / flank angular separation
 --
 -- Cand = { pos: Vector3 (ground), peek: Vector3 (ground, 2-4 studs sideways, has a line of sight to the target) }
 --
@@ -112,6 +115,11 @@ local function sees(pos: Vector3, targetPos: Vector3): boolean
 	return workspace:Raycast(c, targetPos - c, envParams) == nil
 end
 
+function Cover.sees(pos: Vector3, targetPos: Vector3): boolean
+	refreshFilter()
+	return sees(pos, targetPos)
+end
+
 function Cover.probe(e: any, dir: Vector3, len: number): boolean
 	refreshFilter()
 	local h = math.min(e.def.size, 3) + 0.5
@@ -143,12 +151,71 @@ function Cover.taken(pos: Vector3, e: any): boolean
 	return false
 end
 
+-- Penalize clustering too close to friendly claimed cover so squads spread across distinct cover points.
+function Cover.crowdPenalty(pos: Vector3, e: any, radius: number?): number
+	local r = radius or 15
+	local pen = 0
+	for o, p in claims do
+		if o ~= e then
+			if not o.alive then
+				claims[o] = nil
+			elseif o.faction == e.faction then
+				local d = flat(p - pos).Magnitude
+				if d < r then
+					pen += (1 - d / r) * 32
+				end
+			end
+		end
+	end
+	return pen
+end
+
+-- Reward wide angular separation for flankers relative to suppressors, and lightly fan out suppressors.
+function Cover.angularPenalty(pos: Vector3, targetPos: Vector3, e: any, role: string?): number
+	local v = flat(pos - targetPos)
+	if v.Magnitude < 1 then
+		return 0
+	end
+	local u = v.Unit
+	local pen = 0
+	for o, p in claims do
+		if o ~= e and o.alive and o.faction == e.faction then
+			local ov = flat(p - targetPos)
+			if ov.Magnitude >= 1 then
+				local dot = u:Dot(ov.Unit)
+				local oRole = o.tc and o.tc.role
+				if role == "flanker" then
+					if oRole == "flanker" then
+						-- Two flankers split onto opposite sides when possible
+						if dot > 0.7 then
+							pen += (dot - 0.7) * 70
+						end
+					else
+						-- Flankers strongly prefer cover laterally separated (65-110 deg) from suppressors
+						if dot > 0.75 then
+							pen += (dot - 0.75) * 90
+						elseif dot >= -0.35 and dot <= 0.45 then
+							pen -= 10
+						end
+					end
+				elseif role == "suppress" and oRole == "suppress" then
+					-- Suppressors fan out across an arc instead of stacking on one bearing
+					if dot > 0.94 then
+						pen += (dot - 0.94) * 160
+					end
+				end
+			end
+		end
+	end
+	return pen
+end
+
 -- Scan -------------------------------------------------------------------------------------------
 type Entry = { at: number, cands: { Cand } }
 local cache: { [string]: Entry } = {}
 local cacheN = 0
 
--- A candidate at `p` (ground): needs room to stand, cover from the target, and a peek spot to one side with a line of sight.
+-- A candidate at `p` (ground): needs room to stand, cover from the target, and an unobstructed peek spot with line of fire.
 local function test(p: Vector3, targetPos: Vector3, out: { Cand })
 	if not inMap(p) or not clearAt(p) then
 		return
@@ -162,13 +229,17 @@ local function test(p: Vector3, targetPos: Vector3, out: { Cand })
 	end
 	toT = toT.Unit
 	local side = Vector3.new(-toT.Z, 0, toT.X)
+	local pc = chest(p)
 	for _, sgn in { 1, -1 } do
 		for _, d in PEEK do
 			local q = p + side * (sgn * d)
 			q = Vector3.new(q.X, groundY(q.X, q.Z, p.Y), q.Z)
-			if inMap(q) and sees(q, targetPos) then
-				table.insert(out, { pos = p, peek = q })
-				return
+			if inMap(q) and clearAt(q) and sees(q, targetPos) then
+				local qc = chest(q)
+				if workspace:Raycast(pc, qc - pc, envParams) == nil then
+					table.insert(out, { pos = p, peek = q })
+					return
+				end
 			end
 		end
 	end
